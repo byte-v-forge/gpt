@@ -1,0 +1,29 @@
+GoPay Payment Flow Notice
+=========================
+
+This repository contains a standalone GoPay payment protocol implementation
+for research and authorized testing.
+
+Allowed use:
+
+- personal learning and internal experiments;
+- CTF, protocol analysis, and defensive security research;
+- testing accounts, sessions, phone numbers, payment methods, proxies, and
+  environments that you own or are explicitly authorized to operate;
+- offline study of sanitized protocol traces and implementation details.
+
+Prohibited use:
+
+- commercial operation, resale, account farming, paid registration, or paid
+  top-up services;
+- payment evasion, fraud, charge abuse, stolen credentials, or unauthorized
+  use of third-party accounts or payment methods;
+- bypassing third-party terms, anti-abuse systems, or access controls outside
+  a clearly authorized research scope;
+- publishing real tokens, cookies, captures, payment data, phone numbers,
+  email addresses, IP addresses, or other personal data.
+
+The project is provided as-is, without any warranty of availability, accuracy,
+security, or continued compatibility with OpenAI, Stripe, Midtrans, GoPay,
+WhatsApp, or any other third-party service. All risk and responsibility belong
+to the user.

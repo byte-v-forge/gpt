@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package orchestrator;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "./;pb";
+
+service OTPService {
+  rpc SubmitOTP(SubmitOTPRequest) returns (SubmitOTPResponse);
+}
+
+message OTPWaitInput {
+  string job_id = 1;
+  string step_name = 2;
+  oneof target {
+    OTPWaitEmailTarget email = 3;
+    OTPWaitPaymentTarget payment = 4;
+    OTPWaitSMSTarget sms = 5;
+  }
+  int32 timeout_seconds = 8;
+  int64 issued_after_unix = 9;
+  string otp_param = 10;
+  string submitted_at_param = 11;
+}
+
+message OTPWaitEmailTarget {
+  string email = 1;
+}
+
+message OTPWaitPaymentTarget {
+  string source = 1;
+  string purpose = 2;
+}
+
+message OTPWaitSMSTarget {
+  string activation_id = 1;
+}
+
+message OTPWaitOutput {
+  bool found = 1;
+  string source = 2;
+  string code = 3;
+  string error_message = 4;
+  google.protobuf.Struct data = 5;
+  string activation_id = 6;
+}
+
+message ManualOTPSignal {
+  string kind = 1;
+}
+
+message SubmitOTPRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string otp = 3;
+}
+
+message SubmitOTPResponse {
+  bool success = 1;
+  string job_id = 2;
+  string error_message = 3;
+}

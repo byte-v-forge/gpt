@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package browser;
+
+option go_package = "./;pb";
+
+message RegisterRequest {
+  string job_id = 1;
+  string assigned_email = 2;
+  reserved 3;
+  string password = 4;
+  string first_name = 5;
+  string last_name = 6;
+  string birthday = 7;
+}
+
+message RegisterResponse {
+  bool success = 1;
+  string error_message = 2;
+  string session_token = 3;
+  string access_token = 4;
+  string device_id = 5;
+  bool plus_trial_eligible = 6;
+  string checkout_url = 7;
+  bool plus_trial_checked = 8;
+  reserved 9 to 11;
+}
+
+message StartRegisterResponse {
+  bool success = 1;
+  string error_message = 2;
+  string flow_id = 3;
+  bool otp_required = 4;
+  RegisterResponse result = 5;
+  int64 otp_issued_after_unix = 6;
+  string stage = 7;
+  string status_message = 8;
+  int64 otp_wait_started_at_unix = 9;
+  int64 otp_request_action_started_at_unix = 10;
+}
+
+message CompleteRegisterRequest {
+  string flow_id = 1;
+  string otp = 2;
+}
+
+message CancelRegisterRequest {
+  string flow_id = 1;
+}
+
+message CancelRegisterResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message BrowserFlowStatusRequest {
+  string flow_id = 1;
+}
+
+message BrowserFlowStatusResponse {
+  bool found = 1;
+  string flow_id = 2;
+  string mode = 3;
+  string stage = 4;
+  string status_message = 5;
+  bool otp_required = 6;
+  bool done = 7;
+  bool success = 8;
+  string error_message = 9;
+  int64 started_at_unix = 10;
+  int64 updated_at_unix = 11;
+  int64 otp_issued_after_unix = 12;
+  RegisterResponse result = 13;
+  int64 otp_wait_started_at_unix = 14;
+  int64 otp_request_action_started_at_unix = 15;
+}
+
+service BrowserRegistration {
+  rpc StartRegister(RegisterRequest) returns (StartRegisterResponse);
+  rpc GetFlowStatus(BrowserFlowStatusRequest) returns (BrowserFlowStatusResponse);
+  rpc CompleteRegister(CompleteRegisterRequest) returns (RegisterResponse);
+  rpc CancelRegister(CancelRegisterRequest) returns (CancelRegisterResponse);
+  rpc StartLogin(RegisterRequest) returns (StartRegisterResponse);
+  rpc CompleteLogin(CompleteRegisterRequest) returns (RegisterResponse);
+  rpc CancelLogin(CancelRegisterRequest) returns (CancelRegisterResponse);
+}

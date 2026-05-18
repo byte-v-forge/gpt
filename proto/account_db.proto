@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package accountdb;
+
+option go_package = "./;pb";
+
+message Account {
+  string account_id = 1;
+  string email = 2;
+  string password = 3;
+  reserved 4;
+  string status = 5;
+  string error_message = 6;
+  string session_token = 7;
+  string charge_ref = 8;
+  string first_name = 9;
+  string last_name = 10;
+  string dob = 11; // YYYY-MM-DD
+  int64 created_at = 12;
+  int64 updated_at = 13;
+  string access_token = 14;
+  optional bool plus_trial_eligible = 15;
+  optional bool plus_active = 16;
+  string tier = 17;
+  optional string activation_channel = 18;
+}
+
+message CreateAccountRequest {
+  Account account = 1;
+}
+
+message CreateAccountResponse {
+  Account account = 1;
+}
+
+message GetAccountRequest {
+  string account_id = 1;
+}
+
+message GetAccountResponse {
+  Account account = 1;
+}
+
+message UpdateAccountRequest {
+  Account account = 1;
+}
+
+message UpdateAccountResponse {
+  Account account = 1;
+}
+
+message DeleteAccountRequest {
+  string account_id = 1;
+}
+
+message DeleteAccountResponse {
+  bool ack = 1;
+}
+
+message ListAccountsRequest {
+  string status = 1;
+  int32 limit = 2;
+  string email = 3;
+}
+
+message ListAccountsResponse {
+  repeated Account accounts = 1;
+}
+
+message GPTEmailAllocation {
+  string email = 1;
+  string primary_email = 2;
+  bool is_primary = 3;
+  string status = 4;
+  bool splittable = 5;
+  string assigned_account_id = 6;
+  string last_error = 7;
+  int64 created_at = 8;
+  int64 updated_at = 9;
+}
+
+message UpsertGPTEmailAllocationRequest {
+  GPTEmailAllocation allocation = 1;
+}
+
+message UpsertGPTEmailAllocationResponse {
+  GPTEmailAllocation allocation = 1;
+}
+
+message ListGPTEmailAllocationsRequest {
+  string status = 1;
+  int32 limit = 2;
+  string primary_email = 3;
+  bool splittable_only = 4;
+}
+
+message ListGPTEmailAllocationsResponse {
+  repeated GPTEmailAllocation allocations = 1;
+}
+
+message ClaimGPTEmailAllocationRequest {
+  string email = 1;
+  string account_id = 2;
+  string expected_status = 3;
+  string status = 4;
+  bool require_primary_splittable = 5;
+  string expected_primary_status = 6;
+}
+
+message ClaimGPTEmailAllocationResponse {
+  bool claimed = 1;
+  GPTEmailAllocation allocation = 2;
+}
+
+message CreateGPTEmailAliasAllocationRequest {
+  string primary_email = 1;
+  string account_id = 2;
+}
+
+message CreateGPTEmailAliasAllocationResponse {
+  bool created = 1;
+  GPTEmailAllocation allocation = 2;
+}
+
+message MarkGPTEmailAllocationStatusRequest {
+  string email = 1;
+  string status = 2;
+  string last_error = 3;
+}
+
+message MarkGPTEmailAllocationStatusResponse {
+  GPTEmailAllocation allocation = 1;
+}
+
+service AccountDatabaseService {
+  rpc CreateAccount(CreateAccountRequest) returns (CreateAccountResponse);
+  rpc GetAccount(GetAccountRequest) returns (GetAccountResponse);
+  rpc UpdateAccount(UpdateAccountRequest) returns (UpdateAccountResponse);
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse);
+  rpc ListAccounts(ListAccountsRequest) returns (ListAccountsResponse);
+  rpc UpsertGPTEmailAllocation(UpsertGPTEmailAllocationRequest) returns (UpsertGPTEmailAllocationResponse);
+  rpc ListGPTEmailAllocations(ListGPTEmailAllocationsRequest) returns (ListGPTEmailAllocationsResponse);
+  rpc ClaimGPTEmailAllocation(ClaimGPTEmailAllocationRequest) returns (ClaimGPTEmailAllocationResponse);
+  rpc CreateGPTEmailAliasAllocation(CreateGPTEmailAliasAllocationRequest) returns (CreateGPTEmailAliasAllocationResponse);
+  rpc MarkGPTEmailAllocationStatus(MarkGPTEmailAllocationStatusRequest) returns (MarkGPTEmailAllocationStatusResponse);
+}

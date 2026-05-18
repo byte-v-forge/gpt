@@ -1,0 +1,210 @@
+syntax = "proto3";
+
+package orchestrator;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "./;pb";
+
+service PaymentWorkflowService {
+  rpc ActivateAccount(ActivateAccountRequest) returns (ActivateAccountResponse);
+  rpc AutopayAccount(ActivateAccountRequest) returns (ActivateAccountResponse);
+  rpc ProbeAccount(ProbeAccountRequest) returns (ProbeAccountResponse);
+}
+
+message PersistActivatedInput {
+  string account_id = 1;
+  string session_token = 2;
+  string access_token = 3;
+  string charge_ref = 4;
+  bool plus_trial_eligible = 5;
+  bool plus_trial_checked = 6;
+  bool plus_active = 7;
+}
+
+message ProbePlusTrialActivityInput {
+  string job_id = 1;
+  string account_id = 2;
+}
+
+message ProbeTierActivityInput {
+  string job_id = 1;
+  string account_id = 2;
+}
+
+message ProbePlusTrialActivityOutput {
+  bool success = 1;
+  bool checked = 2;
+  bool plus_trial_eligible = 3;
+  bool plus_active = 4;
+  int64 amount = 5;
+  string currency = 6;
+  string source = 7;
+  string plan_type = 8;
+  string checkout_url = 9;
+  string checkout_session_id = 10;
+  string error_message = 11;
+  google.protobuf.Struct data = 12;
+}
+
+message ProbeTierActivityOutput {
+  bool success = 1;
+  bool checked = 2;
+  string tier = 3;
+  bool plus_active = 4;
+  string source = 5;
+  string error_message = 6;
+  google.protobuf.Struct data = 7;
+}
+
+message GoPayActivityInput {
+  string job_id = 1;
+  string account_id = 2;
+  string session_token = 3;
+  string access_token = 4;
+  bool use_account_token = 5;
+  string tokenization = 6;
+  string checkout_url = 7;
+  string checkout_session_id = 8;
+  string otp_channel = 9; // sms 时 payment 触发 resend-otp；wa/空值不触发
+  string state_json = 10;
+  string prepared_flow_id = 11;
+  string gopay_phone = 12;
+  string sms_activation_id = 13;
+  string user_id = 14; // WA 接码来源；local 或 tg:<user_id>
+}
+
+message GoPayActivityOutput {
+  string charge_ref = 1;
+  string snap_token = 2;
+  bool plus_trial_eligible = 3;
+  bool plus_trial_checked = 4;
+  bool plus_active = 5;
+  google.protobuf.Struct data = 6;
+  string state_json = 7;
+}
+
+message GoPayPaymentStartOutput {
+  string flow_id = 1;
+  int64 issued_after_unix = 2;
+  int32 otp_timeout_seconds = 3;
+  bool use_account_token = 4;
+  google.protobuf.Struct data = 5;
+  bool otp_required = 6;
+  string state_json = 7;
+}
+
+message GoPayPaymentPrepareOutput {
+  string flow_id = 1;
+  string snap_token = 2;
+  string checkout_url = 3;
+  string checkout_session_id = 4;
+  bool use_account_token = 5;
+  google.protobuf.Struct data = 6;
+  string state_json = 7;
+}
+
+message GoPayPaymentCompleteInput {
+  string job_id = 1;
+  string account_id = 2;
+  string flow_id = 3;
+  string otp_param = 4;
+  string submitted_at_param = 5;
+  int64 otp_issued_after_unix = 6;
+  string otp_source = 7;
+  bool use_account_token = 8;
+  google.protobuf.Struct data = 9;
+  string state_json = 10;
+}
+
+message GoPayPaymentOTPResendInput {
+  string job_id = 1;
+  string account_id = 2;
+  string flow_id = 3;
+  google.protobuf.Struct data = 4;
+}
+
+message GoPayPaymentOTPResendOutput {
+  bool success = 1;
+  string flow_id = 2;
+  int64 issued_after_unix = 3;
+  google.protobuf.Struct data = 4;
+}
+
+message GoPayPaymentCancelInput {
+  string flow_id = 1;
+}
+
+message ActivateAccountRequest {
+  string job_id = 1;
+  reserved 2, 3, 4, 5, 6, 7, 8;
+  string account_id = 9;
+}
+
+message ActivateAccountResponse {
+  string job_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  string charge_ref = 4;
+  string snap_token = 5;
+}
+
+message ProbeAccountRequest {
+  string account_id = 1;
+}
+
+message ProbeAccountResponse {
+  string job_id = 1;
+  bool started = 2;
+  string error_message = 3;
+}
+
+message ActivateAccountWorkflowInput {
+  string job_id = 1;
+  string account_id = 2;
+  string source_job_id = 3;
+  string action = 4;
+}
+
+message ActivateAccountWorkflowResult {
+  string job_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  string charge_ref = 4;
+  string snap_token = 5;
+}
+
+message AutoPayWorkflowInput {
+  string job_id = 1;
+  string account_id = 2;
+  string source_job_id = 3;
+}
+
+message AutoPayWorkflowResult {
+  string job_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  string charge_ref = 4;
+  string snap_token = 5;
+}
+
+message ProbeAccountWorkflowInput {
+  string job_id = 1;
+  string account_id = 2;
+}
+
+message ProbeAccountWorkflowResult {
+  string job_id = 1;
+  bool success = 2;
+  bool plus_trial_checked = 3;
+  bool plus_trial_eligible = 4;
+  bool tier_checked = 5;
+  string tier = 6;
+  bool plus_active = 7;
+  int64 amount = 8;
+  string currency = 9;
+  string source = 10;
+  string plan_type = 11;
+  string checkout_url = 12;
+  string error_message = 13;
+}

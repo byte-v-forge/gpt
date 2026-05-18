@@ -1,0 +1,7 @@
+requests
+curl-cffi
+PySocks
+grpcio
+grpcio-tools
+protobuf>=6.31.1
+playwright

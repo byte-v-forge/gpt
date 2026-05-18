@@ -1,0 +1,110 @@
+syntax = "proto3";
+
+package email;
+
+option go_package = "./;pb";
+
+message EmailMailbox {
+  string email_address = 1;
+  string password = 2;
+  string refresh_token = 3;
+  string access_token = 4;
+  string status = 5;
+  reserved 6;
+  string last_error = 7;
+  bool is_primary = 8;
+  string primary_email = 9;
+  int64 created_at = 10;
+  int64 updated_at = 11;
+  string latest_otp = 12;
+  string latest_otp_subject = 13;
+  int64 latest_otp_received_at_unix = 14;
+  string auth_status = 15;
+}
+
+message MarkEmailAuthStatusRequest {
+  string email_address = 1;
+  string auth_status = 2;
+  string last_error = 3;
+}
+
+message MarkEmailAuthStatusResponse {
+  EmailMailbox mailbox = 1;
+}
+
+message UpsertEmailMailboxRequest {
+  EmailMailbox mailbox = 1;
+}
+
+message UpsertEmailMailboxResponse {
+  EmailMailbox mailbox = 1;
+}
+
+message ListEmailMailboxesRequest {
+  string status = 1;
+  int32 limit = 2;
+}
+
+message ListEmailMailboxesResponse {
+  repeated EmailMailbox mailboxes = 1;
+}
+
+message DeleteMailboxRequest {
+  string email_address = 1;
+}
+
+message DeleteMailboxResponse {
+  bool deleted = 1;
+}
+
+message WaitForEmailRequest {
+  string email_address = 1;
+  string subject_keyword = 2; // e.g., "OTP" or "验证码"
+  int32 timeout_seconds = 3;
+  int64 issued_after_unix = 4;
+}
+
+message WaitForEmailResponse {
+  bool found = 1;
+  string content_extracted = 2; // the OTP
+}
+
+message EmailInboxMessage {
+  string id = 1;
+  string mailbox_email = 2;
+  string subject = 3;
+  string from_address = 4;
+  string body_preview = 5;
+  int64 received_at_unix = 6;
+  repeated string recipients = 7;
+  string otp = 8;
+}
+
+message FetchInboxesRequest {
+  int32 limit_per_mailbox = 1;
+  int32 max_mailboxes = 2;
+  string email_address = 3;
+}
+
+message FetchMailboxInboxResult {
+  EmailMailbox mailbox = 1;
+  repeated EmailInboxMessage messages = 2;
+  string error_message = 3;
+}
+
+message FetchInboxesResponse {
+  repeated FetchMailboxInboxResult results = 1;
+  int32 mailbox_count = 2;
+  int32 fetched_count = 3;
+  int32 failed_count = 4;
+  int32 message_count = 5;
+}
+
+service EmailService {
+  rpc MarkEmailAuthStatus(MarkEmailAuthStatusRequest) returns (MarkEmailAuthStatusResponse);
+  rpc UpsertMailbox(UpsertEmailMailboxRequest) returns (UpsertEmailMailboxResponse);
+  rpc ListMailboxes(ListEmailMailboxesRequest) returns (ListEmailMailboxesResponse);
+  rpc DeleteMailbox(DeleteMailboxRequest) returns (DeleteMailboxResponse);
+  rpc WaitForEmail(WaitForEmailRequest) returns (WaitForEmailResponse);
+  rpc FetchInboxes(FetchInboxesRequest) returns (FetchInboxesResponse);
+}

@@ -100,7 +100,7 @@ private fun WhatsAppForwarderScreen() {
                     value = webhookUrl,
                     onValueChange = { webhookUrl = it },
                     label = { Text("Webhook URL") },
-                    placeholder = { Text("http://192.168.0.126:30701/local/gopay") },
+                    placeholder = { Text("http://192.168.0.115:8081/local/gopay") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )

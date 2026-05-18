@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package orchestrator;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "./;pb";
+
+service JobService {
+  rpc GetJob(GetJobRequest) returns (GetJobResponse);
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  rpc WatchJob(WatchJobRequest) returns (stream WatchJobResponse);
+  rpc WatchJobs(WatchJobsRequest) returns (stream WatchJobsResponse);
+}
+
+message CreateJobInput {
+  string job_id = 1;
+  string account_id = 2;
+  string action = 3;
+  map<string, string> params = 4;
+}
+
+message JobStepStartInput {
+  string job_id = 1;
+  string step_name = 2;
+  bool recoverable = 3;
+  bool retryable = 4;
+  google.protobuf.Struct detail = 5;
+}
+
+message JobStepCompleteInput {
+  string job_id = 1;
+  string step_name = 2;
+  bool recoverable = 3;
+  bool retryable = 4;
+  google.protobuf.Struct result = 5;
+}
+
+message ResolveAccountInput {
+  string account_id = 1;
+  string source_job_id = 2;
+}
+
+message JobFailureInput {
+  string job_id = 1;
+  string step_name = 2;
+  string status = 3;
+  bool recoverable = 4;
+  bool retryable = 5;
+  string error_message = 6;
+  google.protobuf.Struct result = 7;
+}
+
+message JobSuccessInput {
+  string job_id = 1;
+  google.protobuf.Struct result = 2;
+}
+
+message JobStep {
+  string step_name = 1;
+  string status = 2;
+  bool recoverable = 3;
+  bool retryable = 4;
+  string error_message = 5;
+  google.protobuf.Struct detail = 6;
+  int64 started_at = 7;
+  int64 completed_at = 8;
+}
+
+message Job {
+  string job_id = 1;
+  string account_id = 2;
+  string action = 3;
+  string status = 4;
+  bool recoverable = 5;
+  bool retryable = 6;
+  string last_step = 7;
+  string error_message = 8;
+  google.protobuf.Struct result = 9;
+  int64 created_at = 10;
+  int64 updated_at = 11;
+  repeated JobStep steps = 12;
+}
+
+message WorkflowProgress {
+  string job_id = 1;
+  string workflow = 2;
+  string step_name = 3;
+  string status = 4;
+  string error_message = 5;
+  int64 updated_at_unix = 6;
+}
+
+message JobSnapshot {
+  Job job = 1;
+  WorkflowProgress progress = 2;
+  int64 event_id = 3;
+}
+
+message JobEvent {
+  int64 event_id = 1;
+  string job_id = 2;
+  string event_type = 3;
+  JobSnapshot snapshot = 4;
+}
+
+message GetJobRequest {
+  string job_id = 1;
+}
+
+message GetJobResponse {
+  JobSnapshot snapshot = 1;
+  string error_message = 2;
+}
+
+message ListJobsRequest {
+  int32 limit = 1;
+  string status = 2;
+  string action = 3;
+  string account_id = 4;
+}
+
+message ListJobsResponse {
+  repeated JobSnapshot snapshots = 1;
+  string error_message = 2;
+}
+
+message WatchJobRequest {
+  string job_id = 1;
+  int64 after_event_id = 2;
+}
+
+message WatchJobResponse {
+  JobEvent event = 1;
+  string error_message = 2;
+}
+
+message WatchJobsRequest {
+  repeated string job_ids = 1;
+  string status = 2;
+  int64 after_event_id = 3;
+}
+
+message WatchJobsResponse {
+  JobEvent event = 1;
+  string error_message = 2;
+}

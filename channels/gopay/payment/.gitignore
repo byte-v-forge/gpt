@@ -1,0 +1,32 @@
+# Python runtime
+.venv/
+**/__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Sensitive runtime artifacts
+.env
+.env.*
+!.env.example
+config.json
+config.local.json
+**/config.json
+captures/
+output/
+*.log
+*.har
+*.pcap
+*.pcapng
+*.network-request
+*.network-response
+tokens/
+*.token
+*.secret
+*.pem
+*.key
+
+# OS
+.DS_Store
+._*
+Thumbs.db

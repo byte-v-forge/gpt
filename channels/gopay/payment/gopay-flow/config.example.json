@@ -1,0 +1,17 @@
+{
+  "auth": {
+    "session_token": ""
+  },
+  "gopay": {
+    "country_code": "62",
+    "phone_number": "",
+    "pin": "",
+    "tokenization": "true",
+    "browser_locale": "zh-CN",
+    "pin_locale": "id"
+  },
+  "proxies": {
+    "checkout": "",
+    "payment": ""
+  }
+}

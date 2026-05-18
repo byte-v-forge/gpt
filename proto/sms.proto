@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package sms;
+
+option go_package = "./;pb";
+
+message SmsProviderConfig {
+  string config_id = 1;
+  string provider = 2;
+  bool enabled = 3;
+  string api_base = 4;
+  string api_key = 5;
+  string proxy = 6;
+  string default_service = 7;
+  int32 default_country = 8;
+  string default_country_calling_code = 9;
+  double default_max_price = 10;
+  int64 created_at_unix = 11;
+  int64 updated_at_unix = 12;
+}
+
+message UpsertSmsProviderRequest {
+  SmsProviderConfig config = 1;
+}
+
+message UpsertSmsProviderResponse {
+  bool success = 1;
+  string error_message = 2;
+  SmsProviderConfig config = 3;
+}
+
+message GetSmsProviderRequest {
+  string config_id = 1;
+}
+
+message GetSmsProviderResponse {
+  bool success = 1;
+  string error_message = 2;
+  SmsProviderConfig config = 3;
+}
+
+message ListSmsProvidersRequest {
+  bool include_disabled = 1;
+}
+
+message ListSmsProvidersResponse {
+  bool success = 1;
+  string error_message = 2;
+  repeated SmsProviderConfig configs = 3;
+}
+
+message DeleteSmsProviderRequest {
+  string config_id = 1;
+}
+
+message DeleteSmsProviderResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message AcquireNumberRequest {
+  string config_id = 1;
+  string service = 2;
+  int32 country = 3;
+  double max_price = 4;
+}
+
+message AcquireNumberResponse {
+  bool success = 1;
+  string error_message = 2;
+  string activation_id = 3;
+  string phone = 4;
+  string provider = 5;
+}
+
+message WaitCodeRequest {
+  string config_id = 1;
+  string activation_id = 2;
+  int32 timeout_seconds = 3;
+}
+
+message WaitCodeResponse {
+  bool success = 1;
+  string error_message = 2;
+  string code = 3;
+}
+
+message MarkMessageSentRequest {
+  string config_id = 1;
+  string activation_id = 2;
+}
+
+message ProviderActionResponse {
+  bool success = 1;
+  string error_message = 2;
+  string raw_response = 3;
+}
+
+message RequestAdditionalCodeRequest {
+  string config_id = 1;
+  string activation_id = 2;
+}
+
+message FinishActivationRequest {
+  string config_id = 1;
+  string activation_id = 2;
+}
+
+message CancelActivationRequest {
+  string config_id = 1;
+  string activation_id = 2;
+}
+
+message GetProviderBalanceRequest {
+  string config_id = 1;
+}
+
+message GetProviderBalanceResponse {
+  bool success = 1;
+  string error_message = 2;
+  string balance = 3;
+}
+
+service SmsService {
+  rpc UpsertProvider(UpsertSmsProviderRequest) returns (UpsertSmsProviderResponse);
+  rpc GetProvider(GetSmsProviderRequest) returns (GetSmsProviderResponse);
+  rpc ListProviders(ListSmsProvidersRequest) returns (ListSmsProvidersResponse);
+  rpc DeleteProvider(DeleteSmsProviderRequest) returns (DeleteSmsProviderResponse);
+  rpc AcquireNumber(AcquireNumberRequest) returns (AcquireNumberResponse);
+  rpc WaitCode(WaitCodeRequest) returns (WaitCodeResponse);
+  rpc MarkMessageSent(MarkMessageSentRequest) returns (ProviderActionResponse);
+  rpc RequestAdditionalCode(RequestAdditionalCodeRequest) returns (ProviderActionResponse);
+  rpc FinishActivation(FinishActivationRequest) returns (ProviderActionResponse);
+  rpc CancelActivation(CancelActivationRequest) returns (ProviderActionResponse);
+  rpc GetProviderBalance(GetProviderBalanceRequest) returns (GetProviderBalanceResponse);
+}

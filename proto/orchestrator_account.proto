@@ -1,0 +1,214 @@
+syntax = "proto3";
+
+package orchestrator;
+
+import "google/protobuf/struct.proto";
+import "account_db.proto";
+
+option go_package = "./;pb";
+
+service AccountWorkflowService {
+  rpc CreateGPTAccount(CreateGPTAccountRequest) returns (CreateGPTAccountResponse);
+  rpc RegisterAccount(RegisterAccountRequest) returns (RegisterAccountResponse);
+  rpc LoginAccount(LoginAccountRequest) returns (LoginAccountResponse);
+  rpc RegisterAndActivateAccount(RegisterAndActivateAccountRequest) returns (RegisterAndActivateAccountResponse);
+}
+
+message AccountSpec {
+  string account_id = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message AccountRef {
+  string account_id = 1;
+  bool plus_trial_known = 2;
+  bool plus_trial_eligible = 3;
+  bool plus_active = 4;
+  string tier = 5;
+}
+
+message EnsureAccountInput {
+  AccountSpec account = 1;
+}
+
+message CreateGPTAccountRequest {
+  string email = 1;
+  string password = 2;
+  string account_id = 3;
+}
+
+message CreateGPTAccountResponse {
+  accountdb.Account account = 1;
+  string error_message = 2;
+}
+
+message PersistRegisteredInput {
+  string account_id = 1;
+  string session_token = 2;
+  string access_token = 3;
+  bool plus_trial_eligible = 4;
+  bool plus_trial_checked = 5;
+}
+
+message RegisterActivityOutput {
+  string session_token = 1;
+  string access_token = 2;
+  string device_id = 3;
+  bool plus_trial_eligible = 4;
+  bool plus_trial_checked = 5;
+  string checkout_url = 6;
+  google.protobuf.Struct data = 7;
+}
+
+message BrowserAuthStartInput {
+  string job_id = 1;
+  string account_id = 2;
+  string mode = 3;
+}
+
+message BrowserAuthStartOutput {
+  string account_id = 1;
+  string flow_id = 2;
+  string email = 3;
+  bool otp_required = 4;
+  int64 otp_issued_after_unix = 5;
+  int32 otp_timeout_seconds = 6;
+  RegisterActivityOutput result = 7;
+  google.protobuf.Struct data = 8;
+  int64 otp_wait_started_at_unix = 9;
+  int64 otp_request_action_started_at_unix = 10;
+}
+
+message BrowserAuthCompleteInput {
+  string job_id = 1;
+  string account_id = 2;
+  string flow_id = 3;
+  string mode = 4;
+  string otp_param = 5;
+  string submitted_at_param = 6;
+  int64 otp_issued_after_unix = 7;
+  string otp_source = 8;
+}
+
+message BrowserAuthWaitInput {
+  string job_id = 1;
+  string account_id = 2;
+  string flow_id = 3;
+  string mode = 4;
+  string email = 5;
+}
+
+message BrowserAuthWaitOutput {
+  string account_id = 1;
+  string flow_id = 2;
+  string email = 3;
+  bool otp_required = 4;
+  int64 otp_issued_after_unix = 5;
+  int32 otp_timeout_seconds = 6;
+  RegisterActivityOutput result = 7;
+  google.protobuf.Struct data = 8;
+  int64 otp_wait_started_at_unix = 9;
+  int64 otp_request_action_started_at_unix = 10;
+}
+
+message BrowserAuthCancelInput {
+  string flow_id = 1;
+  string mode = 2;
+}
+
+message LoginSessionActivityOutput {
+  string session_token = 1;
+  string access_token = 2;
+  string device_id = 3;
+  google.protobuf.Struct data = 4;
+}
+
+message RegisterAccountRequest {
+  string email = 1;
+  string password = 2;
+  reserved 3, 4, 5;
+  reserved "first_name", "last_name", "dob";
+  string account_id = 6;
+}
+
+message RegisterAccountResponse {
+  string job_id = 1;
+  string session_token = 2;
+  bool plus_trial_eligible = 3;
+  string error_message = 4;
+  string checkout_url = 5;
+  string access_token = 6;
+}
+
+message LoginAccountRequest {
+  string account_id = 1;
+}
+
+message LoginAccountResponse {
+  string job_id = 1;
+  bool started = 2;
+  string error_message = 3;
+}
+
+message RegisterAndActivateAccountRequest {
+  reserved 1, 2, 3, 4, 5, 8, 9, 10;
+  string email = 6;
+  string password = 7;
+  string account_id = 11;
+}
+
+message RegisterAndActivateAccountResponse {
+  string job_id = 1;
+  string session_token = 2;
+  bool plus_trial_eligible = 3;
+  string checkout_url = 4;
+  bool activation_success = 5;
+  string error_message = 6;
+  string charge_ref = 7;
+  string snap_token = 8;
+  string access_token = 9;
+}
+
+message RegisterAccountWorkflowInput {
+  string job_id = 1;
+  AccountSpec account = 2;
+}
+
+message RegisterAccountWorkflowResult {
+  string job_id = 1;
+  string session_token = 2;
+  string access_token = 3;
+  bool plus_trial_eligible = 4;
+  string checkout_url = 5;
+  string error_message = 6;
+}
+
+message LoginSessionWorkflowInput {
+  string job_id = 1;
+  string account_id = 2;
+}
+
+message LoginSessionWorkflowResult {
+  string job_id = 1;
+  string session_token = 2;
+  string access_token = 3;
+  string error_message = 4;
+}
+
+message RegisterAndActivateWorkflowInput {
+  string job_id = 1;
+  AccountSpec account = 2;
+}
+
+message RegisterAndActivateWorkflowResult {
+  string job_id = 1;
+  string session_token = 2;
+  string access_token = 3;
+  bool plus_trial_eligible = 4;
+  string checkout_url = 5;
+  bool activation_success = 6;
+  string error_message = 7;
+  string charge_ref = 8;
+  string snap_token = 9;
+}

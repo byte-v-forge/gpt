@@ -4,7 +4,7 @@ plugins {
 }
 
 val defaultWebhookUrl = providers.gradleProperty("defaultWebhookUrl")
-    .orElse("http://192.168.0.126:30701/local/gopay")
+    .orElse("http://192.168.0.115:8081/local/gopay")
     .get()
 val escapedDefaultWebhookUrl = defaultWebhookUrl
     .replace("\\", "\\\\")
@@ -18,8 +18,8 @@ android {
         applicationId = "com.nbregister.whatsappforwarder"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.0.4"
+        versionCode = 3
+        versionName = "1.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "DEFAULT_WEBHOOK_URL", "\"$escapedDefaultWebhookUrl\"")

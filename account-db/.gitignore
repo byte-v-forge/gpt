@@ -1,0 +1,33 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*_bin
+account-db
+accountdb_bin
+*.test
+*.out
+
+# Local config / secrets
+.env
+.env.*
+!.env.example
+config.json
+config.local.json
+*.log
+tokens/
+*.token
+*.secret
+*.pem
+*.key
+*.har
+*.pcap
+*.pcapng
+
+# Go workspace / OS
+go.work
+go.work.sum
+.DS_Store
+._*
+Thumbs.db

@@ -1,0 +1,25 @@
+# Binaries
+*.exe
+*.dll
+*.so
+*.dylib
+*_bin
+orchestrator
+orchestrator_bin
+*.test
+*.out
+
+# Local config / secrets
+.env
+.env.*
+!.env.example
+config.json
+config.local.json
+*.log
+
+# Go workspace / OS
+go.work
+go.work.sum
+.DS_Store
+._*
+Thumbs.db

@@ -1,0 +1,646 @@
+syntax = "proto3";
+
+package orchestrator;
+
+import "gopay_app.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "./;pb";
+
+service GoPayAppWorkflowService {
+  rpc RunGoPayApp(GoPayAppRequest) returns (GoPayAppResponse);
+  rpc RunGoPayPayment(GoPayPaymentRequest) returns (GoPayPaymentResponse);
+  rpc RetryGoPayPaymentRebind(GoPayPaymentRebindRequest) returns (GoPayPaymentResponse);
+  rpc ConfirmManualAddBalance(ConfirmManualAddBalanceRequest) returns (ConfirmManualAddBalanceResponse);
+  rpc GoPayUserStatus(GoPayUserStatusRequest) returns (GoPayUserStatusResponse);
+  rpc GoPayUserClearState(GoPayUserClearStateRequest) returns (GoPayUserClearStateResponse);
+  rpc GoPayUserSetWAPhone(GoPayUserSetWAPhoneRequest) returns (GoPayUserWAPhoneResponse);
+  rpc GoPayUserGetWAPhone(GoPayUserGetWAPhoneRequest) returns (GoPayUserWAPhoneResponse);
+  rpc GoPayUserAuthStart(GoPayUserAuthStartRequest) returns (GoPayUserAuthStartResponse);
+  rpc GoPayUserAuthComplete(GoPayUserAuthCompleteRequest) returns (GoPayUserAuthCompleteResponse);
+  rpc GoPayUserChangePhoneStart(GoPayUserChangePhoneStartRequest) returns (GoPayUserChangePhoneStartResponse);
+  rpc GoPayUserChangePhoneComplete(GoPayUserChangePhoneCompleteRequest) returns (GoPayUserChangePhoneCompleteResponse);
+  rpc GoPayUserChangePhoneRetry(GoPayUserChangePhoneRetryRequest) returns (GoPayUserChangePhoneRetryResponse);
+  rpc GoPayUserSignupStart(GoPayUserSignupStartRequest) returns (GoPayUserSignupStartResponse);
+  rpc GoPayUserSignupComplete(GoPayUserSignupCompleteRequest) returns (GoPayUserSignupCompleteResponse);
+  rpc GoPayUserCreatePinStart(GoPayUserCreatePinStartRequest) returns (GoPayUserCreatePinStartResponse);
+  rpc GoPayUserCreatePinComplete(GoPayUserCreatePinCompleteRequest) returns (GoPayUserCreatePinCompleteResponse);
+}
+
+message EnsureLogonRequest {
+  string job_id = 1;
+  string account_id = 2;
+}
+
+message EnsureLogonResponse {
+  bool ready = 1;
+  string stage = 2;
+  string phone = 3;
+  gopay_app.StatusResponse status_before = 4;
+  gopay_app.StatusResponse status_after = 5;
+  bool already_ready = 6;
+  bool change_phone_complete = 7;
+  bool deactivate_complete = 8;
+  bool logon_complete = 9;
+  bool account_token_ready = 10;
+  string error_message = 11;
+  bool signup_complete = 12;
+  bool signup_pin_complete = 13;
+}
+
+message GoPayAppRequest {
+}
+
+message GoPayAppResponse {
+  string job_id = 1;
+  bool started = 2;
+  string error_message = 3;
+}
+
+message GoPayPaymentRequest {
+  string account_id = 1;
+  string source_job_id = 2;
+  string otp_channel = 3; // sms 或 wa；默认 sms
+  string sms_activation_id = 4; // 续跑已取号流程时复用同一个短信激活号
+  GoPayAddBalance add_balance = 5;
+  int32 add_balance_confirm_timeout_seconds = 6;
+  string user_id = 7; // local 或 tg:<user_id>；WA 接码来源和 GoPay state 归属用户
+  string wa_phone = 8; // WA 支付注册手机号；为空时使用 user_id 已保存值或本地配置
+}
+
+message GoPayPaymentResponse {
+  string job_id = 1;
+  bool started = 2;
+  bool success = 3;
+  string error_message = 4;
+  string charge_ref = 5;
+  string snap_token = 6;
+  string activation_id = 7;
+  string phone = 8;
+  bool add_balance_complete = 9;
+  string add_balance_method = 10;
+  string add_balance_status = 11;
+  string wa_phone = 12;
+  string bound_phone = 13;
+  string change_phone_activation_id = 14;
+  bool change_phone_complete = 15;
+  string user_id = 16;
+}
+
+message GoPayPaymentRebindRequest {
+  string source_job_id = 1;
+  string account_id = 2;
+  string user_id = 3;
+}
+
+message GoPayAddBalance {
+  oneof method {
+    GoPayEnvelopeAddBalance envelope = 1;
+    GoPayManualTransferAddBalance manual_transfer = 2;
+    GoPayRekberinajaAddBalance rekberinaja = 3;
+  }
+}
+
+message GoPayEnvelopeAddBalance {
+  string link = 1;
+  string envelope_request_id = 2;
+}
+
+message GoPayManualTransferAddBalance {
+  string instructions = 3;
+  int64 amount = 4;
+  string currency = 5;
+}
+
+message GoPayRekberinajaAddBalance {
+  string endpoint_url = 1;
+  string bearer_token = 2;
+  string device_id = 3;
+  string store = 4;
+  string product_id = 5;
+  string service_id = 6;
+  string payment_method = 7;
+  string invoice_email = 8;
+  string promo_code = 9;
+  bool use_poin = 10;
+  string user_agent = 11;
+  string origin = 12;
+  string referer = 13;
+  string refresh_token = 14;
+  int64 fee_total = 15;
+  int32 poll_timeout_seconds = 16;
+  int32 poll_interval_seconds = 17;
+}
+
+message ManualAddBalanceSignal {
+  string kind = 1;
+  GoPayAddBalance add_balance = 2;
+}
+
+message ConfirmManualAddBalanceRequest {
+  string job_id = 1;
+  GoPayAddBalance add_balance = 2;
+}
+
+message ConfirmManualAddBalanceResponse {
+  bool success = 1;
+  string job_id = 2;
+  string error_message = 3;
+}
+
+message GoPayUserStatusRequest {
+  string user_id = 1;
+}
+
+message GoPayUserStatusResponse {
+  bool success = 1;
+  string error_message = 2;
+  gopay_app.StatusResponse status = 3;
+}
+
+message GoPayUserClearStateRequest {
+  string user_id = 1;
+}
+
+message GoPayUserClearStateResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message GoPayUserSetWAPhoneRequest {
+  string user_id = 1;
+  string wa_phone = 2;
+}
+
+message GoPayUserGetWAPhoneRequest {
+  string user_id = 1;
+}
+
+message GoPayUserWAPhoneResponse {
+  bool success = 1;
+  string error_message = 2;
+  string user_id = 3;
+  string wa_phone = 4;
+}
+
+message GoPayUserAuthStartRequest {
+  string user_id = 1;
+  string phone = 2;
+  string country_code = 3;
+  string pin = 4;
+  string otp_channel = 5; // sms 或 wa；为空时使用服务默认配置
+}
+
+message GoPayUserAuthStartResponse {
+  bool success = 1;
+  string error_message = 2;
+  string mode = 3;
+  string stage = 4;
+  bool otp_sent = 5;
+  string verification_id = 6;
+  string verification_method = 7;
+  bool ready = 8;
+  bool pin_setup_required = 9;
+}
+
+message GoPayUserAuthCompleteRequest {
+  string user_id = 1;
+  string otp = 2;
+  string pin = 3;
+}
+
+message GoPayUserAuthCompleteResponse {
+  bool success = 1;
+  string error_message = 2;
+  string mode = 3;
+  string stage = 4;
+  string phone = 5;
+  bool ready = 6;
+  bool pin_setup_required = 7;
+  bool pin_setup_complete = 8;
+}
+
+message GoPayUserChangePhoneStartRequest {
+  string user_id = 1;
+  string new_phone = 2;
+  string pin = 3;
+}
+
+message GoPayUserChangePhoneStartResponse {
+  bool success = 1;
+  string error_message = 2;
+  string new_phone = 3;
+  bool otp_sent = 4;
+}
+
+message GoPayUserChangePhoneCompleteRequest {
+  string user_id = 1;
+  string otp = 2;
+}
+
+message GoPayUserChangePhoneCompleteResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+message GoPayUserChangePhoneRetryRequest {
+  string user_id = 1;
+}
+
+message GoPayUserChangePhoneRetryResponse {
+  bool success = 1;
+  string error_message = 2;
+  bool otp_sent = 3;
+}
+
+message GoPayUserSignupStartRequest {
+  string user_id = 1;
+  string phone = 2;
+  string name = 3;
+  string email = 4;
+  string country_code = 5;
+  string otp_channel = 6; // sms 或 wa；为空默认 sms
+}
+
+message GoPayUserSignupStartResponse {
+  bool success = 1;
+  string error_message = 2;
+  bool otp_sent = 3;
+  string verification_id = 4;
+  string verification_method = 5;
+}
+
+message GoPayUserSignupCompleteRequest {
+  string user_id = 1;
+  string otp = 2;
+}
+
+message GoPayUserSignupCompleteResponse {
+  bool success = 1;
+  string error_message = 2;
+  string phone = 3;
+  bool pin_setup_required = 4;
+}
+
+message GoPayUserCreatePinStartRequest {
+  string user_id = 1;
+  string pin = 2;
+  string otp_channel = 3; // sms 或 wa；为空默认 sms
+}
+
+message GoPayUserCreatePinStartResponse {
+  bool success = 1;
+  string error_message = 2;
+  bool otp_sent = 3;
+  string verification_id = 4;
+  string verification_method = 5;
+}
+
+message GoPayUserCreatePinCompleteRequest {
+  string user_id = 1;
+  string otp = 2;
+  string pin = 3;
+}
+
+message GoPayUserCreatePinCompleteResponse {
+  bool success = 1;
+  string error_message = 2;
+  string phone = 3;
+  bool pin_setup_complete = 4;
+}
+
+message GoPayAppWorkflowInput {
+  string job_id = 1;
+}
+
+message GoPayAppWorkflowResult {
+  string job_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  string activation_id = 4;
+  bool account_token_ready = 5;
+  bool change_phone_complete = 6;
+  bool deactivate_complete = 7;
+  bool signup_complete = 8;
+  bool signup_pin_complete = 9;
+}
+
+message GoPayPaymentWorkflowInput {
+  string job_id = 1;
+  string account_id = 2;
+  string source_job_id = 3;
+  string otp_channel = 4; // sms 或 wa；默认 sms
+  string sms_activation_id = 5;
+  GoPayAddBalance add_balance = 6;
+  int32 add_balance_confirm_timeout_seconds = 7;
+  string user_id = 8;
+  string wa_phone = 9;
+}
+
+message GoPayPaymentWorkflowResult {
+  string job_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  string activation_id = 4;
+  string phone = 5;
+  bool account_token_ready = 6;
+  bool signup_complete = 7;
+  bool signup_pin_complete = 8;
+  string charge_ref = 9;
+  string snap_token = 10;
+  bool add_balance_complete = 11;
+  string add_balance_method = 12;
+  string add_balance_status = 13;
+  string wa_phone = 14;
+  string bound_phone = 15;
+  string change_phone_activation_id = 16;
+  bool change_phone_complete = 17;
+  string user_id = 18;
+}
+
+message GoPayPaymentRebindWorkflowInput {
+  string job_id = 1;
+  string source_job_id = 2;
+  string account_id = 3;
+  string user_id = 4;
+}
+
+message GoPayPaymentRebindWorkflowResult {
+  string job_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  string source_job_id = 4;
+  string account_id = 5;
+  string activation_id = 6;
+  string bound_phone = 7;
+  bool change_phone_complete = 8;
+  string user_id = 9;
+  string wa_phone = 10;
+}
+
+message GoPayAppStepInput {
+  string job_id = 1;
+  string activation_id = 2;
+  string state_json = 3;
+}
+
+message GoPayAppStepOutput {
+  string activation_id = 1;
+  bool ready = 2;
+  string stage = 3;
+  string phone = 4;
+  bool account_token_ready = 5;
+  bool change_phone_complete = 6;
+  bool deactivate_complete = 7;
+  bool signup_complete = 8;
+  bool signup_pin_complete = 9;
+  google.protobuf.Struct data = 10;
+  string state_json = 11;
+}
+
+message GoPayAppChangePhoneStartInput {
+  string job_id = 1;
+  int32 failure_count = 2;
+  string state_json = 3;
+  string activation_id = 4;
+  string phone = 5;
+}
+
+message GoPayAppChangePhoneStartOutput {
+  string activation_id = 1;
+  string phone = 2;
+  int32 failure_count = 3;
+  int32 max_failures = 4;
+  int32 otp_timeout_seconds = 5;
+  int32 otp_retry_attempts = 6;
+  google.protobuf.Struct data = 7;
+  string state_json = 8;
+  bool retryable_failure = 9;
+  string error_message = 10;
+}
+
+message GoPayAppChangePhoneGetNumberInput {
+  string job_id = 1;
+  int32 failure_count = 2;
+}
+
+message GoPayAppChangePhoneGetNumberOutput {
+  string activation_id = 1;
+  string phone = 2;
+  int32 failure_count = 3;
+  int32 max_failures = 4;
+  google.protobuf.Struct data = 5;
+}
+
+message GoPayAppAcquireSignupPhoneInput {
+  string job_id = 1;
+  int32 failure_count = 2;
+}
+
+message GoPayAppAcquireSignupPhoneOutput {
+  string activation_id = 1;
+  string phone = 2;
+  int32 failure_count = 3;
+  int32 max_failures = 4;
+  int32 otp_timeout_seconds = 5;
+  google.protobuf.Struct data = 6;
+}
+
+message GoPayResolveWAPhoneInput {
+  string job_id = 1;
+  string user_id = 2;
+  string wa_phone = 3;
+}
+
+message GoPayResolveWAPhoneOutput {
+  string user_id = 1;
+  string wa_phone = 2;
+  google.protobuf.Struct data = 3;
+}
+
+message GoPayAppStateActivityInput {
+  string job_id = 1;
+  string user_id = 2;
+  string state_json = 3;
+  string reason = 4;
+}
+
+message GoPayAppStateActivityOutput {
+  string user_id = 1;
+  string state_json = 2;
+  google.protobuf.Struct data = 3;
+}
+
+message GoPayPaymentRebindSourceInput {
+  string job_id = 1;
+  string source_job_id = 2;
+  string account_id = 3;
+  string user_id = 4;
+}
+
+message GoPayPaymentRebindSourceOutput {
+  string source_job_id = 1;
+  string account_id = 2;
+  string user_id = 3;
+  string wa_phone = 4;
+  string charge_ref = 5;
+  string snap_token = 6;
+  google.protobuf.Struct data = 7;
+}
+
+message GoPayAppAddBalanceInput {
+  string job_id = 1;
+  string state_json = 2;
+  GoPayAddBalance add_balance = 3;
+  string target_phone = 4;
+}
+
+message GoPayAppAddBalanceOutput {
+  bool success = 1;
+  string error_message = 2;
+  string method = 3;
+  string status = 4;
+  google.protobuf.Struct data = 5;
+  string state_json = 6;
+}
+
+message GoPayAppChangePhoneRetryInput {
+  string job_id = 1;
+  string activation_id = 2;
+  int32 otp_attempt = 3;
+  string state_json = 4;
+}
+
+message GoPayAppChangePhoneRetryOutput {
+  string activation_id = 1;
+  bool otp_sent = 2;
+  string error_message = 3;
+  google.protobuf.Struct data = 4;
+  string state_json = 5;
+}
+
+message GoPayAppSMSActivationInput {
+  string job_id = 1;
+  string activation_id = 2;
+  int32 failure_count = 3;
+  string reason = 4;
+}
+
+message GoPayAppSMSActivationOutput {
+  string activation_id = 1;
+  int32 failure_count = 2;
+  int32 max_failures = 3;
+  string error_message = 4;
+  google.protobuf.Struct data = 5;
+}
+
+message GoPayAppChangePhoneCompleteInput {
+  string job_id = 1;
+  string activation_id = 2;
+  string code = 3;
+  int32 failure_count = 4;
+  string state_json = 5;
+}
+
+message GoPayAppChangePhoneCompleteOutput {
+  string activation_id = 1;
+  bool change_phone_complete = 2;
+  bool retryable_failure = 3;
+  int32 failure_count = 4;
+  int32 max_failures = 5;
+  string error_message = 6;
+  string stage = 7;
+  string phone = 8;
+  google.protobuf.Struct data = 9;
+  string state_json = 10;
+}
+
+message GoPayAppDeactivateStartInput {
+  string job_id = 1;
+  string activation_id = 2;
+  string state_json = 3;
+}
+
+message GoPayAppDeactivateStartOutput {
+  string activation_id = 1;
+  bool otp_required = 2;
+  int32 timeout_seconds = 3;
+  google.protobuf.Struct data = 4;
+  string state_json = 5;
+}
+
+message GoPayAppDeactivateCompleteInput {
+  string job_id = 1;
+  string activation_id = 2;
+  string code = 3;
+  string state_json = 4;
+}
+
+message GoPayAppDeactivateCompleteOutput {
+  string activation_id = 1;
+  bool deactivate_complete = 2;
+  google.protobuf.Struct data = 3;
+  string state_json = 4;
+}
+
+message GoPayAppOTPStartInput {
+  string job_id = 1;
+  string operation = 2;
+  string step_name = 3;
+  string phone = 4;
+  string otp_channel = 5; // sms 或 wa；默认 sms
+  string sms_activation_id = 6;
+  bool reset_state = 7;
+  string state_json = 8;
+}
+
+message GoPayAppCreatePinStartInput {
+  string job_id = 1;
+  string otp_channel = 2; // sms 或 wa；默认 sms
+  string sms_activation_id = 3;
+  string state_json = 4;
+  google.protobuf.Struct data = 5;
+}
+
+message GoPayAppOTPOutput {
+  string operation = 1;
+  bool otp_required = 2;
+  int64 issued_after_unix = 3;
+  int32 timeout_seconds = 4;
+  bool ready = 5;
+  bool account_token_ready = 6;
+  bool signup_complete = 7;
+  bool signup_pin_complete = 8;
+  bool pin_setup_required = 9;
+  string stage = 10;
+  string phone = 11;
+  google.protobuf.Struct data = 12;
+  string verification_method = 13;
+  string otp_channel = 14;
+  string state_json = 15;
+}
+
+message GoPayAppCreatePinCompleteInput {
+  string job_id = 1;
+  string otp_param = 2;
+  string submitted_at_param = 3;
+  int64 issued_after_unix = 4;
+  string otp_source = 5;
+  google.protobuf.Struct data = 6;
+  string otp_channel = 7;
+  string sms_activation_id = 8;
+  string state_json = 9;
+}
+
+message GoPayAppOTPCompleteInput {
+  string job_id = 1;
+  string operation = 2;
+  string otp_param = 3;
+  string submitted_at_param = 4;
+  int64 issued_after_unix = 5;
+  string otp_source = 6;
+  google.protobuf.Struct data = 7;
+  string otp_channel = 8;
+  string sms_activation_id = 9;
+  string state_json = 10;
+}

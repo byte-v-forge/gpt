@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package orchestrator;
+
+import "email.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "./;pb";
+
+service MailboxWorkflowService {
+  rpc RegisterMailbox(RegisterMailboxRequest) returns (RegisterMailboxResponse);
+  rpc RunMailboxOAuth(StartMailboxOAuthRequest) returns (StartMailboxOAuthResponse);
+  rpc FetchMailboxInboxes(FetchMailboxInboxesRequest) returns (FetchMailboxInboxesResponse);
+}
+
+message RegisteredMailboxResult {
+  string email_address = 1;
+  string status = 2;
+}
+
+message MailboxRegistrationActivityInput {
+  string job_id = 1;
+  bool enabled = 2;
+  bool import_only = 3;
+}
+
+message MailboxRegistrationActivityOutput {
+  bool success = 1;
+  int32 exit_code = 2;
+  string error_message = 3;
+  repeated RegisteredMailboxResult mailboxes = 4;
+  google.protobuf.Struct data = 5;
+}
+
+message MailboxOAuthActivityInput {
+  string job_id = 1;
+  string email_address = 2;
+  bool only_missing = 3;
+  int32 limit = 4;
+}
+
+message MailboxOAuthActivityOutput {
+  bool success = 1;
+  int32 processed = 2;
+  int32 succeeded = 3;
+  int32 failed = 4;
+  string error_message = 5;
+  google.protobuf.Struct data = 6;
+}
+
+message RegisterMailboxRequest {
+  bool import_only = 1;
+}
+
+message RegisterMailboxResponse {
+  string job_id = 1;
+  bool success = 2;
+  int32 exit_code = 3;
+  string error_message = 4;
+  repeated RegisteredMailbox mailboxes = 5;
+}
+
+message RegisteredMailbox {
+  string email_address = 1;
+  string password = 2;
+  string refresh_token = 3;
+  string access_token = 4;
+  string status = 5;
+}
+
+message StartMailboxOAuthRequest {
+  string email_address = 1;
+  bool only_missing = 2;
+  int32 limit = 3;
+}
+
+message StartMailboxOAuthResponse {
+  string job_id = 1;
+  bool started = 2;
+  string error_message = 3;
+}
+
+message FetchMailboxInboxesRequest {
+  int32 limit_per_mailbox = 1;
+  int32 max_mailboxes = 2;
+  string email_address = 3;
+}
+
+message MailboxBanDetection {
+  string account_id = 1;
+  string email_address = 2;
+  string mailbox_email = 3;
+  string from_address = 4;
+  string subject = 5;
+  int64 received_at_unix = 6;
+  bool account_updated = 7;
+  string error_message = 8;
+}
+
+message FetchMailboxInboxesResponse {
+  repeated email.FetchMailboxInboxResult results = 1;
+  int32 mailbox_count = 2;
+  int32 fetched_count = 3;
+  int32 failed_count = 4;
+  int32 message_count = 5;
+  repeated MailboxBanDetection bans = 6;
+  int32 ban_count = 7;
+}
+
+message RegisterMailboxWorkflowInput {
+  string job_id = 1;
+  bool import_only = 2;
+  bool auto_oauth = 3;
+}
+
+message RegisterMailboxWorkflowResult {
+  string job_id = 1;
+  bool success = 2;
+  int32 exit_code = 3;
+  string error_message = 4;
+  repeated RegisteredMailboxResult mailboxes = 5;
+}
+
+message MailboxOAuthWorkflowInput {
+  string job_id = 1;
+  string email_address = 2;
+  bool only_missing = 3;
+  int32 limit = 4;
+}
+
+message MailboxOAuthWorkflowResult {
+  string job_id = 1;
+  bool success = 2;
+  int32 processed = 3;
+  int32 succeeded = 4;
+  int32 failed = 5;
+  string error_message = 6;
+}

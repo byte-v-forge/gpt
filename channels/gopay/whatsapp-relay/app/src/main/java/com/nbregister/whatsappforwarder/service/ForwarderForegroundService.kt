@@ -8,9 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
-import android.os.Handler
 import android.os.IBinder
-import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -18,43 +16,17 @@ import com.nbregister.whatsappforwarder.MainActivity
 import com.nbregister.whatsappforwarder.R
 
 class ForwarderForegroundService : Service() {
-    private val rebindHandler = Handler(Looper.getMainLooper())
-    private var rebindLoopStarted = false
-    private val rebindRunnable = object : Runnable {
-        override fun run() {
-            NotificationListenerRebinder.request(this@ForwarderForegroundService)
-            rebindHandler.postDelayed(this, REBIND_INTERVAL_MS)
-        }
-    }
-
     override fun onCreate() {
         super.onCreate()
         startInForeground()
-        startRebindLoop()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startInForeground()
-        startRebindLoop()
         return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onDestroy() {
-        rebindHandler.removeCallbacks(rebindRunnable)
-        rebindLoopStarted = false
-        super.onDestroy()
-    }
-
-    private fun startRebindLoop() {
-        if (rebindLoopStarted) {
-            return
-        }
-        rebindLoopStarted = true
-        NotificationListenerRebinder.request(this, force = true)
-        rebindHandler.postDelayed(rebindRunnable, REBIND_INTERVAL_MS)
-    }
 
     private fun startInForeground() {
         createNotificationChannel()
@@ -113,7 +85,6 @@ class ForwarderForegroundService : Service() {
         private const val TAG = "WhatsAppForwarder"
         private const val CHANNEL_ID = "whatsapp_forwarder_keep_alive"
         private const val NOTIFICATION_ID = 1001
-        private const val REBIND_INTERVAL_MS = 60_000L
 
         fun start(context: Context) {
             val appContext = context.applicationContext

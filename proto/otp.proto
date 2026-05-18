@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package otp;
+
+option go_package = "./;pb";
+
+message WaitForOtpRequest {
+  string purpose = 1;
+  int32 timeout_seconds = 2;
+  int64 issued_after_unix = 3;
+}
+
+message WaitForOtpResponse {
+  bool found = 1;
+  string otp = 2;
+  string source = 3;
+  string error_message = 4;
+}
+
+service OtpService {
+  rpc WaitForOtp(WaitForOtpRequest) returns (WaitForOtpResponse);
+}

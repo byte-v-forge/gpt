@@ -14,7 +14,6 @@ class WhatsAppNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerConnected() {
         super.onListenerConnected()
-        Log.i(TAG, "Notification listener connected")
         ForwarderForegroundService.start(applicationContext)
         activeNotifications.orEmpty().forEach { item ->
             handleNotification(item, "active")
@@ -23,10 +22,6 @@ class WhatsAppNotificationListenerService : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         val item = sbn ?: return
-        if (item.packageName !in SettingsStore.WATCHED_PACKAGES) {
-            Log.d(TAG, "Ignored notification event=posted package=${item.packageName}")
-            return
-        }
         ForwarderForegroundService.start(applicationContext)
         handleNotification(item, "posted")
     }
@@ -74,7 +69,6 @@ class WhatsAppNotificationListenerService : NotificationListenerService() {
 
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
-        Log.w(TAG, "Notification listener disconnected; requesting rebind")
         NotificationListenerRebinder.request(applicationContext)
     }
 

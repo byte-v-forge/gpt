@@ -422,57 +422,6 @@ func (s *Server) RegisterAndActivateAccount(ctx context.Context, req *pb.Registe
 	}, nil
 }
 
-func (s *Server) RegisterMailbox(ctx context.Context, req *pb.RegisterMailboxRequest) (*pb.RegisterMailboxResponse, error) {
-	jobID := uuid.NewString()
-	var result workflows.RegisterMailboxWorkflowResult
-	run, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionRegisterMailbox, jobID)), workflows.RegisterMailboxWorkflow, workflows.RegisterMailboxWorkflowInput{
-		JobId:      jobID,
-		ImportOnly: req.GetImportOnly(),
-	})
-	if err != nil {
-		return nil, err
-	}
-	if err := run.Get(ctx, &result); err != nil {
-		return &pb.RegisterMailboxResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	mailboxes := make([]*pb.RegisteredMailbox, 0, len(result.GetMailboxes()))
-	for _, mailbox := range result.GetMailboxes() {
-		mailboxes = append(mailboxes, &pb.RegisteredMailbox{
-			EmailAddress: mailbox.GetEmailAddress(),
-			Status:       mailbox.GetStatus(),
-		})
-	}
-	return &pb.RegisterMailboxResponse{
-		JobId:        result.GetJobId(),
-		Success:      result.GetSuccess(),
-		ExitCode:     result.GetExitCode(),
-		ErrorMessage: result.GetErrorMessage(),
-		Mailboxes:    mailboxes,
-	}, nil
-}
-
-func (s *Server) RunMailboxOAuth(ctx context.Context, req *pb.StartMailboxOAuthRequest) (*pb.StartMailboxOAuthResponse, error) {
-	jobID := uuid.NewString()
-	limit := req.GetLimit()
-	if limit <= 0 {
-		limit = 100
-	}
-	onlyMissing := req.GetOnlyMissing()
-	if strings.TrimSpace(req.GetEmailAddress()) == "" {
-		onlyMissing = true
-	}
-	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionMailboxOAuth, jobID)), workflows.MailboxOAuthWorkflow, workflows.MailboxOAuthWorkflowInput{
-		JobId:        jobID,
-		EmailAddress: strings.TrimSpace(req.GetEmailAddress()),
-		OnlyMissing:  onlyMissing,
-		Limit:        limit,
-	})
-	if err != nil {
-		return &pb.StartMailboxOAuthResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.StartMailboxOAuthResponse{JobId: jobID, Started: true}, nil
-}
-
 func workflowIDForAction(action string, jobID string) string {
 	workflowID, ok := contracts.WorkflowID(action, jobID)
 	if !ok {

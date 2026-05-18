@@ -75,12 +75,6 @@ type JobFailureInput = pb.JobFailureInput
 type JobSuccessInput = pb.JobSuccessInput
 type WorkflowProgress = pb.WorkflowProgress
 
-type MailboxRegistrationActivityInput = pb.MailboxRegistrationActivityInput
-type MailboxRegistrationActivityOutput = pb.MailboxRegistrationActivityOutput
-type RegisteredMailboxResult = pb.RegisteredMailboxResult
-type MailboxOAuthActivityInput = pb.MailboxOAuthActivityInput
-type MailboxOAuthActivityOutput = pb.MailboxOAuthActivityOutput
-
 type RegisterAccountWorkflowInput = pb.RegisterAccountWorkflowInput
 type RegisterAccountWorkflowResult = pb.RegisterAccountWorkflowResult
 type ActivateAccountWorkflowInput = pb.ActivateAccountWorkflowInput
@@ -99,7 +93,3 @@ type LoginSessionWorkflowResult = pb.LoginSessionWorkflowResult
 type ProbeAccountWorkflowResult = pb.ProbeAccountWorkflowResult
 type RegisterAndActivateWorkflowInput = pb.RegisterAndActivateWorkflowInput
 type RegisterAndActivateWorkflowResult = pb.RegisterAndActivateWorkflowResult
-type RegisterMailboxWorkflowInput = pb.RegisterMailboxWorkflowInput
-type RegisterMailboxWorkflowResult = pb.RegisterMailboxWorkflowResult
-type MailboxOAuthWorkflowInput = pb.MailboxOAuthWorkflowInput
-type MailboxOAuthWorkflowResult = pb.MailboxOAuthWorkflowResult

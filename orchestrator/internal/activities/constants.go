@@ -15,8 +15,6 @@ const (
 	actionProbeAccount        = contracts.ActionProbeAccount
 	actionLoginSession        = contracts.ActionLoginSession
 	actionRegisterAndActivate = contracts.ActionRegisterAndActivate
-	actionRegisterMailbox     = contracts.ActionRegisterMailbox
-	actionMailboxOAuth        = contracts.ActionMailboxOAuth
 
 	statusCreated           = jobstatus.Created
 	statusRunning           = jobstatus.Running
@@ -84,8 +82,6 @@ const (
 	stepLoginSessionOTPRequest       = "login_session_otp_request"
 	stepLoginSessionOTPWait          = "login_session_otp_wait"
 	stepLoginSessionComplete         = "login_session_complete"
-	stepRegisterMailbox              = "register_mailbox"
-	stepMailboxOAuth                 = "mailbox_oauth"
 
 	registrationOTPParam            = "registration_otp"
 	registrationOTPSubmittedAtParam = "registration_otp_submitted_at_unix"

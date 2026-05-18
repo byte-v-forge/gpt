@@ -18,7 +18,6 @@ type Config struct {
 	SmsClient                         pb.SmsServiceClient
 	EmailClient                       pb.EmailServiceClient
 	EmailAllocator                    AccountEmailAllocator
-	MailboxRegisterClient             pb.MailboxRegistrationServiceClient
 	OTPAddr                           string
 	OTPTimeout                        int32
 	RegistrationOTPTimeout            int32
@@ -43,7 +42,6 @@ type Server struct {
 	smsClient                         pb.SmsServiceClient
 	emailClient                       pb.EmailServiceClient
 	emailAllocator                    AccountEmailAllocator
-	mailboxRegisterClient             pb.MailboxRegistrationServiceClient
 	otpAddr                           string
 	otpTimeout                        int32
 	regOTPTimeout                     int32
@@ -69,7 +67,6 @@ func NewServer(cfg Config) *Server {
 		smsClient:                         cfg.SmsClient,
 		emailClient:                       cfg.EmailClient,
 		emailAllocator:                    defaultAccountEmailAllocator(cfg.EmailAllocator, cfg.AccountClient),
-		mailboxRegisterClient:             cfg.MailboxRegisterClient,
 		otpAddr:                           cfg.OTPAddr,
 		otpTimeout:                        cfg.OTPTimeout,
 		regOTPTimeout:                     cfg.RegistrationOTPTimeout,

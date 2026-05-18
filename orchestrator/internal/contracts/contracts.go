@@ -12,8 +12,6 @@ const (
 	ActionProbeAccount        = "PROBE_ACCOUNT"
 	ActionLoginSession        = "LOGIN_SESSION"
 	ActionRegisterAndActivate = "REGISTER_AND_ACTIVATE"
-	ActionRegisterMailbox     = "REGISTER_MAILBOX"
-	ActionMailboxOAuth        = "MAILBOX_OAUTH"
 )
 
 const (
@@ -62,8 +60,6 @@ const (
 	GoPayAppSMSRequestAdditionalCodeActivityName = "GoPayAppSMSRequestAdditionalCodeActivity"
 	ProbePlusTrialActivityName                   = "ProbePlusTrialAtomicActivity"
 	ProbeTierActivityName                        = "ProbeTierAtomicActivity"
-	RegisterMailboxActivityName                  = "RegisterMailboxAtomicActivity"
-	MailboxOAuthActivityName                     = "MailboxOAuthAtomicActivity"
 	PersistRegisteredActivityName                = "PersistRegisteredActivity"
 	PersistActivatedActivityName                 = "PersistActivatedActivity"
 	MarkJobFailedActivityName                    = "MarkJobFailedActivity"
@@ -99,10 +95,6 @@ func WorkflowID(action string, jobID string) (string, bool) {
 		return "login-session-" + jobID, true
 	case ActionRegisterAndActivate:
 		return "register-activate-" + jobID, true
-	case ActionRegisterMailbox:
-		return "register-mailbox-" + jobID, true
-	case ActionMailboxOAuth:
-		return "mailbox-oauth-" + jobID, true
 	default:
 		return "", false
 	}

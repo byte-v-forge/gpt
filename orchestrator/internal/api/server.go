@@ -33,7 +33,6 @@ type Server struct {
 	pb.UnimplementedAccountWorkflowServiceServer
 	pb.UnimplementedPaymentWorkflowServiceServer
 	pb.UnimplementedGoPayAppWorkflowServiceServer
-	pb.UnimplementedMailboxWorkflowServiceServer
 	pb.UnimplementedOTPServiceServer
 	pb.UnimplementedJobServiceServer
 
@@ -63,8 +62,6 @@ const (
 	actionProbeAccount        = contracts.ActionProbeAccount
 	actionLoginSession        = contracts.ActionLoginSession
 	actionRegisterAndActivate = contracts.ActionRegisterAndActivate
-	actionRegisterMailbox     = contracts.ActionRegisterMailbox
-	actionMailboxOAuth        = contracts.ActionMailboxOAuth
 
 	statusRunning   = jobstatus.Running
 	statusSucceeded = jobstatus.Succeeded

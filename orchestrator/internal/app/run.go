@@ -55,7 +55,6 @@ func Run() {
 	pb.RegisterAccountWorkflowServiceServer(grpcServer, apiServer)
 	pb.RegisterPaymentWorkflowServiceServer(grpcServer, apiServer)
 	pb.RegisterGoPayAppWorkflowServiceServer(grpcServer, apiServer)
-	pb.RegisterMailboxWorkflowServiceServer(grpcServer, apiServer)
 	pb.RegisterOTPServiceServer(grpcServer, apiServer)
 	pb.RegisterJobServiceServer(grpcServer, apiServer)
 

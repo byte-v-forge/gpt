@@ -49,16 +49,6 @@ func failRegisterAndActivateWorkflow(ctx workflow.Context, activityCtx workflow.
 	markWorkflowFailure(ctx, activityCtx, jobID, stepName, status, recoverable, retryable, err, data)
 	return result
 }
-func failRegisterMailboxWorkflow(ctx workflow.Context, activityCtx workflow.Context, result RegisterMailboxWorkflowResult, jobID, stepName, status string, recoverable, retryable bool, err error, data map[string]any) RegisterMailboxWorkflowResult {
-	result.ErrorMessage = err.Error()
-	markWorkflowFailure(ctx, activityCtx, jobID, stepName, status, recoverable, retryable, err, data)
-	return result
-}
-func failMailboxOAuthWorkflow(ctx workflow.Context, activityCtx workflow.Context, result MailboxOAuthWorkflowResult, jobID, stepName, status string, recoverable, retryable bool, err error, data map[string]any) MailboxOAuthWorkflowResult {
-	result.ErrorMessage = err.Error()
-	markWorkflowFailure(ctx, activityCtx, jobID, stepName, status, recoverable, retryable, err, data)
-	return result
-}
 func markWorkflowFailure(ctx workflow.Context, activityCtx workflow.Context, jobID, stepName, status string, recoverable, retryable bool, err error, data map[string]any) {
 	_ = workflow.ExecuteActivity(activityCtx, markJobFailedActivityName, JobFailureInput{
 		JobId:        jobID,

@@ -18,8 +18,6 @@ func registerTemporalWorker(w worker.Worker, s *activities.Server) {
 	w.RegisterWorkflow(workflows.ProbeAccountWorkflow)
 	w.RegisterWorkflow(workflows.LoginSessionWorkflow)
 	w.RegisterWorkflow(workflows.RegisterAndActivateWorkflow)
-	w.RegisterWorkflow(workflows.RegisterMailboxWorkflow)
-	w.RegisterWorkflow(workflows.MailboxOAuthWorkflow)
 
 	w.RegisterActivityWithOptions(s.CreateJobActivity, activity.RegisterOptions{Name: createJobActivityName})
 	w.RegisterActivityWithOptions(s.StartJobStepActivity, activity.RegisterOptions{Name: startJobStepActivityName})
@@ -64,8 +62,6 @@ func registerTemporalWorker(w worker.Worker, s *activities.Server) {
 	w.RegisterActivityWithOptions(s.GoPayAppDeactivateCompleteActivity, activity.RegisterOptions{Name: goPayAppDeactivateCompleteActivityName})
 	w.RegisterActivityWithOptions(s.ProbePlusTrialAtomicActivity, activity.RegisterOptions{Name: probePlusTrialActivityName})
 	w.RegisterActivityWithOptions(s.ProbeTierAtomicActivity, activity.RegisterOptions{Name: probeTierActivityName})
-	w.RegisterActivityWithOptions(s.RegisterMailboxAtomicActivity, activity.RegisterOptions{Name: registerMailboxActivityName})
-	w.RegisterActivityWithOptions(s.MailboxOAuthAtomicActivity, activity.RegisterOptions{Name: mailboxOAuthActivityName})
 	w.RegisterActivityWithOptions(s.PersistRegisteredActivity, activity.RegisterOptions{Name: persistRegisteredActivityName})
 	w.RegisterActivityWithOptions(s.PersistActivatedActivity, activity.RegisterOptions{Name: persistActivatedActivityName})
 	w.RegisterActivityWithOptions(s.MarkJobFailedActivity, activity.RegisterOptions{Name: markJobFailedActivityName})

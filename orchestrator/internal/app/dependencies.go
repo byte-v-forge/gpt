@@ -22,13 +22,12 @@ type orchestratorDependencies struct {
 	jobEvents *jobevents.Store
 	temporal  temporalclient.Client
 
-	accountClient         pb.AccountDatabaseServiceClient
-	browserClient         pb.BrowserRegistrationClient
-	paymentClient         pb.PaymentServiceClient
-	gopayClient           pb.GopayAppServiceClient
-	smsClient             pb.SmsServiceClient
-	emailClient           pb.EmailServiceClient
-	mailboxRegisterClient pb.MailboxRegistrationServiceClient
+	accountClient pb.AccountDatabaseServiceClient
+	browserClient pb.BrowserRegistrationClient
+	paymentClient pb.PaymentServiceClient
+	gopayClient   pb.GopayAppServiceClient
+	smsClient     pb.SmsServiceClient
+	emailClient   pb.EmailServiceClient
 
 	closers []func() error
 }
@@ -81,13 +80,6 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 	}
 	deps.addCloser(emailConn.Close)
 
-	mailboxRegisterConn, err := newGRPCClientConn("mailbox registration service", cfg.MailboxRegisterAddr)
-	if err != nil {
-		deps.Close()
-		return nil, err
-	}
-	deps.addCloser(mailboxRegisterConn.Close)
-
 	temporalClient, closeTemporal, err := newTemporalClient(cfg)
 	if err != nil {
 		deps.Close()
@@ -110,7 +102,6 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 	deps.gopayClient = pb.NewGopayAppServiceClient(gopayConn)
 	deps.smsClient = pb.NewSmsServiceClient(smsConn)
 	deps.emailClient = pb.NewEmailServiceClient(emailConn)
-	deps.mailboxRegisterClient = pb.NewMailboxRegistrationServiceClient(mailboxRegisterConn)
 
 	return deps, nil
 }

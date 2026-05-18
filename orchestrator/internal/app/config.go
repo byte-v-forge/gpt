@@ -5,13 +5,12 @@ import "time"
 type orchestratorConfig struct {
 	ListenAddr string
 
-	BrowserAddr         string
-	PaymentAddr         string
-	GoPayAppAddr        string
-	SmsAddr             string
-	AccountDBAddr       string
-	EmailAddr           string
-	MailboxRegisterAddr string
+	BrowserAddr   string
+	PaymentAddr   string
+	GoPayAppAddr  string
+	SmsAddr       string
+	AccountDBAddr string
+	EmailAddr     string
 
 	GoPayOTPServiceAddr                    string
 	GoPayOTPTimeout                        int32
@@ -68,13 +67,12 @@ func loadOrchestratorConfig() orchestratorConfig {
 	return orchestratorConfig{
 		ListenAddr: envDefault("LISTEN_ADDR", ":50051"),
 
-		BrowserAddr:         envDefault("BROWSER_ADDR", "browser-reg:50051"),
-		PaymentAddr:         envDefault("PAYMENT_ADDR", "host.docker.internal:50051"),
-		GoPayAppAddr:        envDefault("GOPAY_APP_ADDR", "gopay-app:50051"),
-		SmsAddr:             envDefault("SMS_ADDR", "herosms-sms-service:50051"),
-		AccountDBAddr:       envDefault("ACCOUNT_DB_ADDR", "account-db:50051"),
-		EmailAddr:           envDefault("EMAIL_ADDR", "outlook-imap-service:50051"),
-		MailboxRegisterAddr: envDefault("MAILBOX_REGISTER_ADDR", "outlook-register-service:50051"),
+		BrowserAddr:   envDefault("BROWSER_ADDR", "browser-reg:50051"),
+		PaymentAddr:   envDefault("PAYMENT_ADDR", "host.docker.internal:50051"),
+		GoPayAppAddr:  envDefault("GOPAY_APP_ADDR", "gopay-app:50051"),
+		SmsAddr:       envDefault("SMS_ADDR", "herosms-sms-service:50051"),
+		AccountDBAddr: envDefault("ACCOUNT_DB_ADDR", "account-db:50051"),
+		EmailAddr:     envDefault("EMAIL_ADDR", "outlook-imap-service:50051"),
 
 		GoPayOTPServiceAddr:                    otpServiceAddr,
 		GoPayOTPTimeout:                        envInt32("GOPAY_OTP_TIMEOUT_SECONDS", 180),

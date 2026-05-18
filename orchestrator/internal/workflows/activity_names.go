@@ -48,8 +48,6 @@ const (
 	goPayAppDeactivateCompleteActivityName       = contracts.GoPayAppDeactivateCompleteActivityName
 	probePlusTrialActivityName                   = contracts.ProbePlusTrialActivityName
 	probeTierActivityName                        = contracts.ProbeTierActivityName
-	registerMailboxActivityName                  = contracts.RegisterMailboxActivityName
-	mailboxOAuthActivityName                     = contracts.MailboxOAuthActivityName
 	persistRegisteredActivityName                = contracts.PersistRegisteredActivityName
 	persistActivatedActivityName                 = contracts.PersistActivatedActivityName
 	markJobFailedActivityName                    = contracts.MarkJobFailedActivityName

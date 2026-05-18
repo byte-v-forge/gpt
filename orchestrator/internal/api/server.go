@@ -27,7 +27,6 @@ type Config struct {
 	DefaultGoPayAddBalance               *pb.GoPayAddBalance
 	DefaultGoPayAddBalances              map[string]*pb.GoPayAddBalance
 	GoPayAddBalanceConfirmTimeoutSeconds int32
-	OutlookRegisterEnableOAuth2          bool
 }
 
 type Server struct {
@@ -49,7 +48,6 @@ type Server struct {
 	defaultGoPayAddBalance               *pb.GoPayAddBalance
 	defaultGoPayAddBalances              map[string]*pb.GoPayAddBalance
 	goPayAddBalanceConfirmTimeoutSeconds int32
-	outlookRegisterEnableOAuth2          bool
 }
 
 type ManualOTPSignal = pb.ManualOTPSignal
@@ -101,7 +99,6 @@ func NewServer(cfg Config) *Server {
 		defaultGoPayAddBalance:               cfg.DefaultGoPayAddBalance,
 		defaultGoPayAddBalances:              cloneGoPayAddBalanceMap(cfg.DefaultGoPayAddBalances),
 		goPayAddBalanceConfirmTimeoutSeconds: cfg.GoPayAddBalanceConfirmTimeoutSeconds,
-		outlookRegisterEnableOAuth2:          cfg.OutlookRegisterEnableOAuth2,
 	}
 }
 

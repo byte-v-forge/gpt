@@ -110,7 +110,8 @@ message FetchMailboxInboxesResponse {
 message RegisterMailboxWorkflowInput {
   string job_id = 1;
   bool import_only = 2;
-  bool auto_oauth = 3;
+  reserved 3;
+  reserved "auto_oauth";
 }
 
 message RegisterMailboxWorkflowResult {

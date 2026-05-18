@@ -428,7 +428,6 @@ func (s *Server) RegisterMailbox(ctx context.Context, req *pb.RegisterMailboxReq
 	run, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionRegisterMailbox, jobID)), workflows.RegisterMailboxWorkflow, workflows.RegisterMailboxWorkflowInput{
 		JobId:      jobID,
 		ImportOnly: req.GetImportOnly(),
-		AutoOauth:  !req.GetImportOnly() && s.outlookRegisterEnableOAuth2,
 	})
 	if err != nil {
 		return nil, err

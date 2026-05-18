@@ -1,10 +1,8 @@
 package workflows
 
 import (
-	"strconv"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -48,9 +46,6 @@ func RegisterMailboxWorkflow(ctx workflow.Context, input RegisterMailboxWorkflow
 		JobId:  input.GetJobId(),
 		Result: registration.GetData(),
 	}).Get(ctx, nil)
-	if input.GetAutoOauth() {
-		startMailboxOAuthSideEffects(ctx, input.GetJobId(), registration.GetMailboxes())
-	}
 
 	result.Success = registration.GetSuccess()
 	result.ExitCode = registration.GetExitCode()
@@ -58,28 +53,7 @@ func RegisterMailboxWorkflow(ctx workflow.Context, input RegisterMailboxWorkflow
 	setWorkflowProgressSucceeded(ctx, progress)
 	return result, nil
 }
-func startMailboxOAuthSideEffects(ctx workflow.Context, sourceJobID string, mailboxes []*RegisteredMailboxResult) {
-	logger := workflow.GetLogger(ctx)
-	for index, mailbox := range mailboxes {
-		if mailbox.GetEmailAddress() == "" {
-			continue
-		}
-		jobID := sourceJobID + "-oauth-" + strconv.Itoa(index+1)
-		childCtx := workflow.WithChildOptions(ctx, workflow.ChildWorkflowOptions{
-			WorkflowID:        "mailbox-oauth-" + jobID,
-			ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
-		})
-		future := workflow.ExecuteChildWorkflow(childCtx, MailboxOAuthWorkflow, MailboxOAuthWorkflowInput{
-			JobId:        jobID,
-			EmailAddress: mailbox.GetEmailAddress(),
-			OnlyMissing:  true,
-			Limit:        1,
-		})
-		if err := future.GetChildWorkflowExecution().Get(ctx, nil); err != nil {
-			logger.Warn("failed to start mailbox OAuth side effect", "email", mailbox.GetEmailAddress(), "error", err)
-		}
-	}
-}
+
 func MailboxOAuthWorkflow(ctx workflow.Context, input MailboxOAuthWorkflowInput) (MailboxOAuthWorkflowResult, error) {
 	progress := newWorkflowProgress(ctx, "MailboxOAuthWorkflow", input.GetJobId())
 	result := MailboxOAuthWorkflowResult{JobId: input.GetJobId()}

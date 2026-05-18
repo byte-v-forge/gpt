@@ -41,7 +41,6 @@ func Run() {
 		DefaultGoPayAddBalance:               defaultGoPayAddBalance(cfg),
 		DefaultGoPayAddBalances:              defaultGoPayAddBalances(cfg),
 		GoPayAddBalanceConfirmTimeoutSeconds: cfg.GoPayAddBalanceConfirmTimeoutSeconds,
-		OutlookRegisterEnableOAuth2:          cfg.OutlookRegisterEnableOAuth2,
 	})
 
 	temporalWorker := temporalworker.New(deps.temporal, cfg.TemporalTaskQueue, temporalworker.Options{})

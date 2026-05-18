@@ -42,7 +42,6 @@ type orchestratorConfig struct {
 	GoPayAddBalanceRekberinajaPollTimeout  int32
 	GoPayAddBalanceRekberinajaPollInterval int32
 	GoPayAddBalanceConfirmTimeoutSeconds   int32
-	OutlookRegisterEnableOAuth2            bool
 
 	ChangePhoneMaxFailures            int
 	ChangePhoneDisabled               bool
@@ -106,7 +105,6 @@ func loadOrchestratorConfig() orchestratorConfig {
 		GoPayAddBalanceRekberinajaPollTimeout:  envInt32("GOPAY_ADD_BALANCE_REKBERINAJA_POLL_TIMEOUT_SECONDS", 180),
 		GoPayAddBalanceRekberinajaPollInterval: envInt32("GOPAY_ADD_BALANCE_REKBERINAJA_POLL_INTERVAL_SECONDS", 5),
 		GoPayAddBalanceConfirmTimeoutSeconds:   envInt32("GOPAY_ADD_BALANCE_CONFIRM_TIMEOUT_SECONDS", 1800),
-		OutlookRegisterEnableOAuth2:            envBool("OUTLOOK_REGISTER_ENABLE_OAUTH2", true),
 
 		ChangePhoneMaxFailures:            envInt("GOPAY_CHANGE_PHONE_MAX_FAILURES", defaultChangePhoneMaxFailures),
 		ChangePhoneDisabled:               envBool("GOPAY_CHANGE_PHONE_DISABLED", false),

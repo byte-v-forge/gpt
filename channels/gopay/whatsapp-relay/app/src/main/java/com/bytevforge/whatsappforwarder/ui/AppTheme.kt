@@ -1,4 +1,4 @@
-package com.nbregister.whatsappforwarder.ui
+package com.bytevforge.whatsappforwarder.ui
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography

@@ -1,9 +1,9 @@
-package com.nbregister.whatsappforwarder.settings
+package com.bytevforge.whatsappforwarder.settings
 
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.core.content.edit
-import com.nbregister.whatsappforwarder.BuildConfig
+import com.bytevforge.whatsappforwarder.BuildConfig
 
 data class AppSettings(
     val webhookUrl: String,

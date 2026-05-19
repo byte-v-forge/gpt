@@ -1,4 +1,4 @@
-package com.nbregister.whatsappforwarder.worker
+package com.bytevforge.whatsappforwarder.worker
 
 import android.content.Context
 import androidx.work.BackoffPolicy
@@ -10,8 +10,8 @@ import androidx.work.Worker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import android.util.Log
-import com.nbregister.whatsappforwarder.network.OtpWebhookClient
-import com.nbregister.whatsappforwarder.settings.SettingsStore
+import com.bytevforge.whatsappforwarder.network.OtpWebhookClient
+import com.bytevforge.whatsappforwarder.settings.SettingsStore
 import java.util.concurrent.TimeUnit
 
 class OtpForwardWorker(

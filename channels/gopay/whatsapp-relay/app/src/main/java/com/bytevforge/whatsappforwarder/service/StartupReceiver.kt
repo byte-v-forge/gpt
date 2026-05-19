@@ -1,4 +1,4 @@
-package com.nbregister.whatsappforwarder.service
+package com.bytevforge.whatsappforwarder.service
 
 import android.content.BroadcastReceiver
 import android.content.Context

@@ -16,7 +16,7 @@ const (
 )
 
 const (
-	TaskQueueDefault = "nb-register-orchestrator"
+	TaskQueueDefault = "byte-v-forge-gpt-service"
 
 	CreateJobActivityName                        = "CreateJobActivity"
 	StartJobStepActivityName                     = "StartJobStepActivity"

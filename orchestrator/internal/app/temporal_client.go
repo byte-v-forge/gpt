@@ -6,7 +6,7 @@ import (
 )
 
 func newTemporalClient(cfg orchestratorConfig) (temporalclient.Client, func(), error) {
-	client, err := workflowruntime.Dial(cfg.Temporal)
+	client, err := workflowruntime.Dial(cfg.WorkflowRuntime)
 	if err != nil {
 		return nil, nil, err
 	}

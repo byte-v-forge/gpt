@@ -1,4 +1,4 @@
-package com.nbregister.whatsappforwarder.service
+package com.bytevforge.whatsappforwarder.service
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -12,8 +12,8 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.nbregister.whatsappforwarder.MainActivity
-import com.nbregister.whatsappforwarder.R
+import com.bytevforge.whatsappforwarder.MainActivity
+import com.bytevforge.whatsappforwarder.R
 
 class ForwarderForegroundService : Service() {
     override fun onCreate() {

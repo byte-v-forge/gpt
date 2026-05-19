@@ -1,4 +1,4 @@
-package com.nbregister.whatsappforwarder
+package com.bytevforge.whatsappforwarder
 
 import android.Manifest
 import android.content.ComponentName
@@ -43,12 +43,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.nbregister.whatsappforwarder.network.OtpWebhookClient
-import com.nbregister.whatsappforwarder.service.ForwarderForegroundService
-import com.nbregister.whatsappforwarder.service.NotificationListenerRebinder
-import com.nbregister.whatsappforwarder.service.WhatsAppNotificationListenerService
-import com.nbregister.whatsappforwarder.settings.SettingsStore
-import com.nbregister.whatsappforwarder.ui.AppTheme
+import com.bytevforge.whatsappforwarder.network.OtpWebhookClient
+import com.bytevforge.whatsappforwarder.service.ForwarderForegroundService
+import com.bytevforge.whatsappforwarder.service.NotificationListenerRebinder
+import com.bytevforge.whatsappforwarder.service.WhatsAppNotificationListenerService
+import com.bytevforge.whatsappforwarder.settings.SettingsStore
+import com.bytevforge.whatsappforwarder.ui.AppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

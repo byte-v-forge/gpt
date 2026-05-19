@@ -70,7 +70,7 @@ type orchestratorConfig struct {
 	ChangePhoneSMSCancelTimeout       time.Duration
 	ChangePhoneSMSCancelRetryInterval time.Duration
 
-	Temporal workflowruntime.Config
+	WorkflowRuntime workflowruntime.Config
 }
 
 func loadOrchestratorConfig() orchestratorConfig {
@@ -78,11 +78,11 @@ func loadOrchestratorConfig() orchestratorConfig {
 		ListenAddr: envDefault("LISTEN_ADDR", ":50051"),
 
 		BrowserAutomationAddr: envDefault("BROWSER_AUTOMATION_ADDR", "browser-automation:50051"),
-		PaymentAddr:           envDefault("PAYMENT_ADDR", "host.docker.internal:50051"),
-		GoPayAppAddr:          envDefault("GOPAY_APP_ADDR", "gopay-app:50051"),
+		PaymentAddr:           envDefault("GPT_GOPAY_PAYMENT_ADDR", "127.0.0.1:50054"),
+		GoPayAppAddr:          envDefault("GPT_GOPAY_APP_ADDR", "127.0.0.1:50060"),
 		SmsAddr:               envDefault("SMS_ADDR", "sms-service:50051"),
-		AccountDBAddr:         envDefault("ACCOUNT_DB_ADDR", "account-db:50051"),
-		MailboxAddr:           envDefault("MAILBOX_ADDR", "mailbox-api:50051"),
+		AccountDBAddr:         envDefault("GPT_ACCOUNT_ADDR", "127.0.0.1:50052"),
+		MailboxAddr:           envDefault("MAILBOX_ADDR", "mailbox:50051"),
 
 		BrowserAuthProxyRef:       envDefault("BROWSER_AUTH_PROXY_REF", "register"),
 		BrowserAuthLocale:         envDefault("BROWSER_AUTH_LOCALE", "en-US"),
@@ -136,14 +136,14 @@ func loadOrchestratorConfig() orchestratorConfig {
 		ChangePhoneSMSCancelTimeout:       envPositiveDurationSeconds("GOPAY_CHANGE_PHONE_SMS_CANCEL_TIMEOUT_SECONDS", defaultChangePhoneSMSCancelTimeout),
 		ChangePhoneSMSCancelRetryInterval: envPositiveDurationSeconds("GOPAY_CHANGE_PHONE_SMS_CANCEL_RETRY_SECONDS", defaultChangePhoneSMSCancelRetryInterval),
 
-		Temporal: loadTemporalConfig(),
+		WorkflowRuntime: loadWorkflowRuntimeConfig(),
 	}
 }
 
-func loadTemporalConfig() workflowruntime.Config {
+func loadWorkflowRuntimeConfig() workflowruntime.Config {
 	config, err := workflowruntime.LoadConfigFromEnv(os.Getenv)
 	if err != nil {
-		log.Fatalf("load Temporal config: %v", err)
+		log.Fatalf("load workflow runtime config: %v", err)
 	}
 	return config
 }

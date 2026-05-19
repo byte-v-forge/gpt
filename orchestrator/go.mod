@@ -5,7 +5,7 @@ go 1.26.2
 require (
 	github.com/byte-v-forge/browser-automation v0.1.1-0.20260519042351-f4009fb5babf
 	github.com/byte-v-forge/sms v0.1.1-0.20260519030925-f4bb83fb3695
-	github.com/byte-v-forge/workflow-runtime v0.3.0
+	github.com/byte-v-forge/workflow-runtime v0.3.1-0.20260519081429-c1beebeabff0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
 	go.temporal.io/api v1.62.11
@@ -17,7 +17,6 @@ require (
 )
 
 require (
-	github.com/byte-v-forge/contracts-go v0.6.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect

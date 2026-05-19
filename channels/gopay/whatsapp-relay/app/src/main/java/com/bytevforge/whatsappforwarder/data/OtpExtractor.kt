@@ -1,4 +1,4 @@
-package com.nbregister.whatsappforwarder.data
+package com.bytevforge.whatsappforwarder.data
 
 object OtpExtractor {
     private val otpRegex = Regex("""(?:^|\D)(\d{4,8})(?!\d)""")

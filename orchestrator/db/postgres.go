@@ -80,12 +80,9 @@ func (RuntimeSecret) TableName() string {
 }
 
 func DSN() string {
-	dsn := strings.TrimSpace(os.Getenv("ORCHESTRATOR_PG_DSN"))
+	dsn := strings.TrimSpace(os.Getenv("GPT_SERVICE_PG_DSN"))
 	if dsn == "" {
-		dsn = strings.TrimSpace(os.Getenv("PG_DSN"))
-	}
-	if dsn == "" {
-		log.Fatal("ORCHESTRATOR_PG_DSN or PG_DSN is required")
+		log.Fatal("GPT_SERVICE_PG_DSN is required")
 	}
 	return dsn
 }

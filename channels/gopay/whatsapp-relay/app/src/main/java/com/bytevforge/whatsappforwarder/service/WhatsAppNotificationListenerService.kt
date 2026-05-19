@@ -1,13 +1,13 @@
-package com.nbregister.whatsappforwarder.service
+package com.bytevforge.whatsappforwarder.service
 
 import android.app.Notification
 import android.os.Build
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
-import com.nbregister.whatsappforwarder.data.OtpExtractor
-import com.nbregister.whatsappforwarder.settings.SettingsStore
-import com.nbregister.whatsappforwarder.worker.OtpForwardWorker
+import com.bytevforge.whatsappforwarder.data.OtpExtractor
+import com.bytevforge.whatsappforwarder.settings.SettingsStore
+import com.bytevforge.whatsappforwarder.worker.OtpForwardWorker
 
 class WhatsAppNotificationListenerService : NotificationListenerService() {
     private val forwardedFingerprints = LinkedHashSet<String>()

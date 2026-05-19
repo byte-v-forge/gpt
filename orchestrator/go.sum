@@ -1,11 +1,9 @@
 github.com/byte-v-forge/browser-automation v0.1.1-0.20260519042351-f4009fb5babf h1:Pspbx6k2oT7d74WYQubk8xbpEQStwS5zDHQZr2tAajw=
 github.com/byte-v-forge/browser-automation v0.1.1-0.20260519042351-f4009fb5babf/go.mod h1:AVmSiSAgZy1VvDnlg42BBYbeaJqOKQyt5RBP7fg74o4=
-github.com/byte-v-forge/contracts-go v0.6.0 h1:fEP20ivA7F6f4wenyjwBv0rdgRJ3A7cyU2Tw7ec8xCU=
-github.com/byte-v-forge/contracts-go v0.6.0/go.mod h1:y2YP2d0SuI66CWYxdkJx9FUmIJYXnAJXtGJiJGSip8E=
 github.com/byte-v-forge/sms v0.1.1-0.20260519030925-f4bb83fb3695 h1:vJ9sTAxEP8bgh37AM96+MupDeql4YuQvOGVnrMbE098=
 github.com/byte-v-forge/sms v0.1.1-0.20260519030925-f4bb83fb3695/go.mod h1:pjAWwMT+w8+Go28RTx2b0DVhsBe5wTx6DDZpejxSIvs=
-github.com/byte-v-forge/workflow-runtime v0.3.0 h1:Vf8qZpiTBkaKbNsteJyeT/+HHfcY+F7xrge9DM8hGJc=
-github.com/byte-v-forge/workflow-runtime v0.3.0/go.mod h1:TrSfqw2rw8eYM09pnvmUwbDWeGxegc3+mrGouN7jw5A=
+github.com/byte-v-forge/workflow-runtime v0.3.1-0.20260519081429-c1beebeabff0 h1:D2Kw47Y2lQsaMXNqVjwhsxEPgy+leU3+Fd9ecHIM2tk=
+github.com/byte-v-forge/workflow-runtime v0.3.1-0.20260519081429-c1beebeabff0/go.mod h1:UMag4r7wCgWEN82m/nktvww+Nc8zHvkYUI1yalN+e9Y=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

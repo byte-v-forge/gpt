@@ -55,7 +55,7 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 	deps.addCloser(paymentConn.Close)
 
 	gopayConn, err := newGRPCClientConn(
-		"gopay-app service",
+		"GoPay app channel",
 		cfg.GoPayAppAddr,
 		grpc.WithDefaultServiceConfig(gopayAppGRPCRetryServiceConfig()),
 	)
@@ -72,7 +72,7 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 	}
 	deps.addCloser(smsConn.Close)
 
-	accountDBConn, err := newGRPCClientConn("account-db service", cfg.AccountDBAddr)
+	accountDBConn, err := newGRPCClientConn("GPT account service", cfg.AccountDBAddr)
 	if err != nil {
 		deps.Close()
 		return nil, err
@@ -89,7 +89,7 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 	temporalClient, closeTemporal, err := newTemporalClient(cfg)
 	if err != nil {
 		deps.Close()
-		return nil, fmt.Errorf("connect to Temporal: %w", err)
+		return nil, fmt.Errorf("connect to workflow runtime: %w", err)
 	}
 	deps.temporal = temporalClient
 	deps.addCloser(func() error {

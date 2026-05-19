@@ -1,4 +1,4 @@
-package com.nbregister.whatsappforwarder.network
+package com.bytevforge.whatsappforwarder.network
 
 import com.google.gson.Gson
 import okhttp3.MediaType.Companion.toMediaType

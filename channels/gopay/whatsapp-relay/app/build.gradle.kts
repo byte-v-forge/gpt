@@ -11,11 +11,11 @@ val escapedDefaultWebhookUrl = defaultWebhookUrl
     .replace("\"", "\\\"")
 
 android {
-    namespace = "com.nbregister.whatsappforwarder"
+    namespace = "com.bytevforge.whatsappforwarder"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.nbregister.whatsappforwarder"
+        applicationId = "com.bytevforge.whatsappforwarder"
         minSdk = 26
         targetSdk = 36
         versionCode = 3

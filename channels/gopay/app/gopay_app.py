@@ -16,7 +16,7 @@ GoPay 一号一Plus 步骤脚本
 
 环境变量：
   GOPAY_PROXY_POOL - GoPay 代理池，429 时按转轮轮换
-  ORCHESTRATOR_URL - orchestrator gRPC 地址 (默认 127.0.0.1:50051)
+  GPT_SERVICE_URL - GPT service HTTP 地址 (默认 127.0.0.1:8080)
 """
 
 import argparse
@@ -44,7 +44,7 @@ GOPAY_CUSTOMER = GOPAY_API
 GOJEK_API = "https://api.gojekapi.com"
 GOTO_AUTH = "https://accounts.goto-products.com"
 
-ORCHESTRATOR_URL = os.environ.get("ORCHESTRATOR_URL", "http://127.0.0.1:8080")
+GPT_SERVICE_URL = os.environ.get("GPT_SERVICE_URL", "http://127.0.0.1:8080")
 GOPAY_PIN = os.environ.get("GOPAY_PIN", "")
 GOPAY_COUNTRY_CODE = os.environ.get("GOPAY_COUNTRY_CODE", "62")
 GOPAY_LOGIN_OTP_METHOD = os.environ.get("GOPAY_LOGIN_OTP_METHOD", "otp_wa")
@@ -186,7 +186,7 @@ def gopay_proxy_for_state(state: dict) -> str:
 
 
 def wait_otp(prompt: str = "Enter OTP: ") -> str:
-    """等待 OTP：CLI 只支持手动输入；自动接码由 orchestrator 调用 sms-service。"""
+    """等待 OTP：CLI 只支持手动输入；自动接码由 GPT service 调用 sms-service。"""
     return input(prompt).strip()
 
 
@@ -1492,12 +1492,12 @@ def get_client(state) -> GopayClient:
 # === 改手机号 ===
 
 def change_phone(state, new_phone: str, pin: str):
-    """改手机号：3步。自动取号由 orchestrator + sms-service 负责。"""
+    """改手机号：3步。自动取号由 GPT service + sms-service 负责。"""
     c = get_client(state)
     email = state.get("email", "")
     name = state.get("name", "")
     if not new_phone:
-        raise RuntimeError("new_phone required; acquire temporary numbers through orchestrator sms-service")
+        raise RuntimeError("new_phone required; acquire temporary numbers through GPT service sms-service")
 
     body = {"email": email, "name": name, "phone": f"+62{new_phone}", "profile_image_url": None}
 
@@ -1627,9 +1627,9 @@ def unlink(state):
 # === 状态 ===
 
 def trigger_payment(session_token: str) -> bool:
-    """通过 orchestrator API 触发支付"""
+    """通过 GPT service API 触发支付"""
     import urllib.request, urllib.error
-    url = f"{ORCHESTRATOR_URL}/api/accounts/activate"
+    url = f"{GPT_SERVICE_URL}/api/accounts/activate"
     data = json.dumps({"session_token": session_token}).encode()
     req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
     try:

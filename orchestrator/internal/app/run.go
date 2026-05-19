@@ -11,12 +11,12 @@ import (
 )
 
 func Run() {
-	log.Println("Initializing Orchestrator API...")
+	log.Println("Initializing GPT service API...")
 
 	cfg := loadOrchestratorConfig()
 	deps, err := newOrchestratorDependencies(cfg)
 	if err != nil {
-		log.Fatalf("Failed to initialize orchestrator dependencies: %v", err)
+		log.Fatalf("Failed to initialize GPT service dependencies: %v", err)
 	}
 	defer deps.Close()
 	otpWebhookServer, err := startGoPayOTPWebhookServer(cfg.GoPayOTPWebhookListenAddr, deps.otpRelay)
@@ -38,7 +38,7 @@ func Run() {
 		JobStore:                             deps.jobStore,
 		JobEvents:                            deps.jobEvents,
 		Temporal:                             deps.temporal,
-		TaskQueue:                            cfg.Temporal.TaskQueue,
+		TaskQueue:                            cfg.WorkflowRuntime.TaskQueue,
 		AccountClient:                        deps.accountClient,
 		GoPayClient:                          deps.gopayClient,
 		DefaultGoPayAddBalance:               defaultGoPayAddBalance(cfg),
@@ -46,12 +46,12 @@ func Run() {
 		GoPayAddBalanceConfirmTimeoutSeconds: cfg.GoPayAddBalanceConfirmTimeoutSeconds,
 	})
 
-	temporalWorker, err := workflowruntime.NewWorker(deps.temporal, temporalWorkerSpec(cfg.Temporal.TaskQueue, activityServer))
+	temporalWorker, err := workflowruntime.NewWorker(deps.temporal, temporalWorkerSpec(cfg.WorkflowRuntime.TaskQueue, activityServer))
 	if err != nil {
-		log.Fatalf("Failed to create Temporal worker: %v", err)
+		log.Fatalf("Failed to create workflow worker: %v", err)
 	}
 	if err := temporalWorker.Start(); err != nil {
-		log.Fatalf("Temporal worker failed: %v", err)
+		log.Fatalf("workflow worker failed: %v", err)
 	}
 	defer temporalWorker.Stop()
 
@@ -62,7 +62,7 @@ func Run() {
 	pb.RegisterOTPServiceServer(grpcServer, apiServer)
 	pb.RegisterJobServiceServer(grpcServer, apiServer)
 
-	log.Printf("Orchestrator gRPC API listening on %s", cfg.ListenAddr)
+	log.Printf("GPT service gRPC API listening on %s", cfg.ListenAddr)
 	if err := grpcServer.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}

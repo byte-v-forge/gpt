@@ -23,6 +23,7 @@ from gopay import (
     OTPCancelled,
     _build_chatgpt_session,
     _load_cfg,
+    probe_tier_access_token,
     probe_plus_active_session_token,
     probe_plus_trial_checkout,
     resolve_gopay_cfg,
@@ -76,6 +77,18 @@ def _looks_access_token(value: str) -> bool:
     return value.count(".") == 2
 
 
+def _request_credential(request) -> tuple[str, str]:
+    credential = getattr(request, "credential", None)
+    if credential is None:
+        return "", ""
+    which = credential.WhichOneof("token")
+    if which == "session_token":
+        return (getattr(credential, "session_token", "") or "").strip(), ""
+    if which == "access_token":
+        return "", (getattr(credential, "access_token", "") or "").strip()
+    return "", ""
+
+
 def _requires_manual_payment_confirmation(flow: "PendingFlow") -> bool:
     tokenization = str(getattr(flow.charger, "midtrans_tokenization", "true") or "true").strip().lower()
     return tokenization == "false"
@@ -127,19 +140,22 @@ class PaymentService(payment_pb2_grpc.PaymentServiceServicer):
         self._flows.close()
 
     def ProbeTier(self, request, context):
-        session_token = (request.session_token or "").strip()
-        if not session_token:
+        session_token, access_token = _request_credential(request)
+        if not (session_token or access_token):
             return payment_pb2.ProbeTierPaymentResponse(
                 success=False,
-                error_message="session_token is required",
+                error_message="credential is required",
             )
         try:
             proxy = resolve_checkout_proxy(self._cfg)
-            result = probe_plus_active_session_token(
-                session_token,
-                proxy=proxy,
-                log=logger.info,
-            )
+            if access_token:
+                result = probe_tier_access_token(access_token, proxy=proxy, log=logger.info)
+            else:
+                result = probe_plus_active_session_token(
+                    session_token,
+                    proxy=proxy,
+                    log=logger.info,
+                )
             return payment_pb2.ProbeTierPaymentResponse(
                 success=not bool(result.get("error_message")),
                 error_message=str(result.get("error_message") or "")[:500],
@@ -153,11 +169,7 @@ class PaymentService(payment_pb2_grpc.PaymentServiceServicer):
             return payment_pb2.ProbeTierPaymentResponse(success=False, error_message=str(exc)[:500])
 
     def ProbePlusTrial(self, request, context):
-        session_token = (request.session_token or "").strip()
-        access_token = (getattr(request, "access_token", "") or "").strip()
-        if session_token and not access_token and _looks_access_token(session_token):
-            access_token = session_token
-            session_token = ""
+        session_token, access_token = _request_credential(request)
 
         if not (session_token or access_token):
             return payment_pb2.ProbePlusTrialPaymentResponse(
@@ -258,13 +270,7 @@ class PaymentService(payment_pb2_grpc.PaymentServiceServicer):
                 _close_session(cs_session)
 
     def CreateCheckoutLink(self, request, context):
-        session_token = (request.session_token or "").strip()
-        access_token = (getattr(request, "access_token", "") or "").strip()
-        if session_token and not access_token and _looks_access_token(session_token):
-            access_token = session_token
-            session_token = ""
-        if access_token:
-            session_token = ""
+        session_token, access_token = _request_credential(request)
 
         if not (session_token or access_token):
             return payment_pb2.CreateCheckoutLinkResponse(
@@ -325,19 +331,13 @@ class PaymentService(payment_pb2_grpc.PaymentServiceServicer):
                 _close_session(cs_session)
 
     def StartGoPay(self, request, context):
-        session_token = (request.session_token or "").strip()
-        access_token = (getattr(request, "access_token", "") or "").strip()
+        session_token, access_token = _request_credential(request)
         use_account_token = bool(getattr(request, "use_account_token", False))
         tokenization = (getattr(request, "tokenization", "") or "").strip()
         checkout_url = (getattr(request, "checkout_url", "") or "").strip()
         checkout_session_id = (getattr(request, "checkout_session_id", "") or "").strip()
         gopay_phone = (getattr(request, "gopay_phone", "") or "").strip()
         otp_channel = (getattr(request, "otp_channel", "") or "").strip().lower()
-        if session_token and not access_token and _looks_access_token(session_token):
-            access_token = session_token
-            session_token = ""
-        if access_token:
-            session_token = ""
         if use_account_token and not access_token:
             return payment_pb2.StartGoPayResponse(
                 success=False,
@@ -443,17 +443,11 @@ class PaymentService(payment_pb2_grpc.PaymentServiceServicer):
                 _close_session(cs_session)
 
     def PrepareGoPay(self, request, context):
-        session_token = (request.session_token or "").strip()
-        access_token = (getattr(request, "access_token", "") or "").strip()
+        session_token, access_token = _request_credential(request)
         tokenization = (getattr(request, "tokenization", "") or "").strip()
         checkout_url = (getattr(request, "checkout_url", "") or "").strip()
         checkout_session_id = (getattr(request, "checkout_session_id", "") or "").strip()
         gopay_phone = (getattr(request, "gopay_phone", "") or "").strip()
-        if session_token and not access_token and _looks_access_token(session_token):
-            access_token = session_token
-            session_token = ""
-        if access_token:
-            session_token = ""
         if not (session_token or access_token):
             return payment_pb2.PrepareGoPayResponse(
                 success=False,

@@ -5,6 +5,8 @@
 ## 目录
 
 - `account-db/`：GPT 账号库存和邮箱分配数据服务。
+- `gopay/`：GoPay App 和钱包侧支付调用的 Go 协议实现。
+- `stripe/`：ChatGPT checkout、Stripe payment pages 和 Midtrans Snap 支付链路的 Go 协议实现。
 - `orchestrator/`：GPT 注册、登录、激活、GoPay 支付和任务状态 workflow，并通过 `browser-automation` 执行浏览器注册和登录步骤。
 - `channels/gopay/app/`：GoPay App 通道能力。
 - `channels/gopay/payment/`：GoPay 支付通道能力。
@@ -22,10 +24,11 @@
 
 ```bash
 ./scripts/generate-proto.sh
-go build ./...
+(cd account-db && go build ./...)
+(cd gopay && go build ./...)
+(cd stripe && go build ./...)
+(cd orchestrator && go build ./...)
 ```
-
-Go 检查需要分别在 `account-db/` 和 `orchestrator/` 下执行。
 
 ## 运行配置
 

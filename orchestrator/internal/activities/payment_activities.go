@@ -225,8 +225,7 @@ func (s *Server) prepareGoPayPayment(ctx context.Context, step activityStep, inp
 		"gopay_phone_present":  gopayPhone != "",
 	})
 	prepared, err := s.paymentClient.PrepareGoPay(ctx, &pb.PrepareGoPayRequest{
-		SessionToken:      sessionToken,
-		AccessToken:       accessToken,
+		Credential:        paymentCredential(sessionToken, accessToken),
 		Tokenization:      tokenization,
 		CheckoutUrl:       checkoutURL,
 		CheckoutSessionId: checkoutSessionID,
@@ -399,8 +398,7 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 	var started *pb.StartGoPayResponse
 	startFresh := func() (*pb.StartGoPayResponse, error) {
 		return s.paymentClient.StartGoPay(ctx, &pb.StartGoPayRequest{
-			SessionToken:      sessionToken,
-			AccessToken:       accessToken,
+			Credential:        paymentCredential(sessionToken, accessToken),
 			UseAccountToken:   useAccountToken,
 			Tokenization:      tokenization,
 			CheckoutUrl:       checkoutURL,

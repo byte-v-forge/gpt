@@ -88,8 +88,7 @@ func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input ProbePl
 		}
 
 		resp, callErr := s.paymentClient.ProbePlusTrial(ctx, &pb.ProbePlusTrialPaymentRequest{
-			SessionToken: sessionToken,
-			AccessToken:  accessToken,
+			Credential: paymentCredential(sessionToken, accessToken),
 		})
 		data["payment_probe"] = plusTrialProbeData(resp)
 		if resp != nil {
@@ -187,7 +186,7 @@ func (s *Server) ProbeTierAtomicActivity(ctx context.Context, input ProbeTierAct
 			return data, fmt.Errorf("session_token is required")
 		}
 		resp, callErr := s.paymentClient.ProbeTier(ctx, &pb.ProbeTierPaymentRequest{
-			SessionToken: sessionToken,
+			Credential: paymentCredential(sessionToken, ""),
 		})
 		data["tier_probe"] = tierProbeData(resp)
 		if resp != nil {

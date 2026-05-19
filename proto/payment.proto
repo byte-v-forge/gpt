@@ -4,25 +4,29 @@ package payment;
 
 option go_package = "./;pb";
 
-message StartGoPayRequest {
-  string session_token = 1;
-  reserved 2, 3, 4, 5;
-  string access_token = 6;
-  bool use_account_token = 7;
-  string tokenization = 8;
-  string checkout_url = 9;
-  string checkout_session_id = 10;
-  string gopay_phone = 11;
-  string otp_channel = 12; // sms 时调用 resend-otp；wa/空值只走 user-consent
+message ChatGPTCredential {
+  oneof token {
+    string session_token = 1;
+    string access_token = 2;
+  }
 }
 
-message PrepareGoPayRequest {
-  string session_token = 1;
-  string access_token = 2;
+message StartGoPayRequest {
+  ChatGPTCredential credential = 1;
+  bool use_account_token = 2;
   string tokenization = 3;
   string checkout_url = 4;
   string checkout_session_id = 5;
   string gopay_phone = 6;
+  string otp_channel = 7; // sms 时调用 resend-otp；wa/空值只走 user-consent
+}
+
+message PrepareGoPayRequest {
+  ChatGPTCredential credential = 1;
+  string tokenization = 2;
+  string checkout_url = 3;
+  string checkout_session_id = 4;
+  string gopay_phone = 5;
 }
 
 message PrepareGoPayResponse {
@@ -53,8 +57,7 @@ message StartGoPayResponse {
 }
 
 message ProbePlusTrialPaymentRequest {
-  string session_token = 1;
-  string access_token = 2;
+  ChatGPTCredential credential = 1;
 }
 
 message ProbePlusTrialPaymentResponse {
@@ -72,8 +75,7 @@ message ProbePlusTrialPaymentResponse {
 }
 
 message CreateCheckoutLinkRequest {
-  string session_token = 1;
-  string access_token = 2;
+  ChatGPTCredential credential = 1;
 }
 
 message CreateCheckoutLinkResponse {
@@ -84,7 +86,7 @@ message CreateCheckoutLinkResponse {
 }
 
 message ProbeTierPaymentRequest {
-  string session_token = 1;
+  ChatGPTCredential credential = 1;
 }
 
 message ProbeTierPaymentResponse {

@@ -3,6 +3,7 @@ package activities
 import (
 	"time"
 
+	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
 	smsv1 "github.com/byte-v-forge/sms/gen/go/byte/v/forge/contracts/sms/v1"
 	"gorm.io/gorm"
 	"orchestrator/internal/gopayotp"
@@ -14,7 +15,8 @@ type Config struct {
 	DB                                *gorm.DB
 	JobStore                          *jobprojection.Store
 	AccountClient                     pb.AccountDatabaseServiceClient
-	BrowserClient                     pb.BrowserRegistrationClient
+	BrowserAutomationClient           browserautomationv1.BrowserAutomationServiceClient
+	BrowserAuth                       BrowserAuthConfig
 	PaymentClient                     pb.PaymentServiceClient
 	OTPRelay                          *gopayotp.Relay
 	GoPayClient                       pb.GopayAppServiceClient
@@ -39,7 +41,9 @@ type Server struct {
 	db                                *gorm.DB
 	jobStore                          *jobprojection.Store
 	accountClient                     pb.AccountDatabaseServiceClient
-	browserClient                     pb.BrowserRegistrationClient
+	browserAutomationClient           browserautomationv1.BrowserAutomationServiceClient
+	browserAuthConfig                 BrowserAuthConfig
+	browserAuthFlows                  *browserAuthFlowStore
 	paymentClient                     pb.PaymentServiceClient
 	otpRelay                          *gopayotp.Relay
 	gopayClient                       pb.GopayAppServiceClient
@@ -65,7 +69,9 @@ func NewServer(cfg Config) *Server {
 		db:                                cfg.DB,
 		jobStore:                          cfg.JobStore,
 		accountClient:                     cfg.AccountClient,
-		browserClient:                     cfg.BrowserClient,
+		browserAutomationClient:           cfg.BrowserAutomationClient,
+		browserAuthConfig:                 cfg.BrowserAuth.withDefaults(),
+		browserAuthFlows:                  newBrowserAuthFlowStore(),
 		paymentClient:                     cfg.PaymentClient,
 		otpRelay:                          cfg.OTPRelay,
 		gopayClient:                       cfg.GoPayClient,

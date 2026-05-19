@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
 	smsv1 "github.com/byte-v-forge/sms/gen/go/byte/v/forge/contracts/sms/v1"
 	temporalclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
@@ -24,13 +25,13 @@ type orchestratorDependencies struct {
 	jobEvents *jobevents.Store
 	temporal  temporalclient.Client
 
-	accountClient pb.AccountDatabaseServiceClient
-	browserClient pb.BrowserRegistrationClient
-	paymentClient pb.PaymentServiceClient
-	gopayClient   pb.GopayAppServiceClient
-	smsClient     smsv1.SmsActivationServiceClient
-	mailboxClient pb.MailboxServiceClient
-	otpRelay      *gopayotp.Relay
+	accountClient           pb.AccountDatabaseServiceClient
+	browserAutomationClient browserautomationv1.BrowserAutomationServiceClient
+	paymentClient           pb.PaymentServiceClient
+	gopayClient             pb.GopayAppServiceClient
+	smsClient               smsv1.SmsActivationServiceClient
+	mailboxClient           pb.MailboxServiceClient
+	otpRelay                *gopayotp.Relay
 
 	closers []func() error
 }
@@ -40,11 +41,11 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 		otpRelay: gopayotp.NewRelay(cfg.GoPayOTPWebhookTTL, cfg.GoPayOTPWebhookMaxItems),
 	}
 
-	browserConn, err := newGRPCClientConn("browser service", cfg.BrowserAddr)
+	browserAutomationConn, err := newGRPCClientConn("browser-automation service", cfg.BrowserAutomationAddr)
 	if err != nil {
 		return nil, err
 	}
-	deps.addCloser(browserConn.Close)
+	deps.addCloser(browserAutomationConn.Close)
 
 	paymentConn, err := newGRPCClientConn("payment service", cfg.PaymentAddr)
 	if err != nil {
@@ -102,7 +103,7 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 	deps.addCloser(deps.jobEvents.Close)
 	deps.jobStore = jobprojection.NewStore(database).WithPublisher(deps.jobEvents)
 	deps.accountClient = pb.NewAccountDatabaseServiceClient(accountDBConn)
-	deps.browserClient = pb.NewBrowserRegistrationClient(browserConn)
+	deps.browserAutomationClient = browserautomationv1.NewBrowserAutomationServiceClient(browserAutomationConn)
 	deps.paymentClient = pb.NewPaymentServiceClient(paymentConn)
 	deps.gopayClient = pb.NewGopayAppServiceClient(gopayConn)
 	deps.smsClient = smsv1.NewSmsActivationServiceClient(smsConn)

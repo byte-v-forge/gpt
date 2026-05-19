@@ -345,41 +345,6 @@ func (s *Server) consumeStoredOTP(ctx context.Context, jobID, otpParam, submitte
 	return code, nil
 }
 
-func (s *Server) browserAuthStart(ctx context.Context, mode, jobID string, account *pb.Account) (*pb.StartRegisterResponse, error) {
-	req := &pb.RegisterRequest{
-		JobId:         jobID,
-		AssignedEmail: account.GetEmail(),
-		Password:      account.GetPassword(),
-		FirstName:     account.GetFirstName(),
-		LastName:      account.GetLastName(),
-		Birthday:      account.GetDob(),
-	}
-	if mode == browserAuthModeLogin {
-		return s.browserClient.StartLogin(ctx, req)
-	}
-	return s.browserClient.StartRegister(ctx, req)
-}
-
-func (s *Server) browserAuthComplete(ctx context.Context, mode, flowID, otp string) (*pb.RegisterResponse, error) {
-	req := &pb.CompleteRegisterRequest{FlowId: flowID, Otp: otp}
-	if mode == browserAuthModeLogin {
-		return s.browserClient.CompleteLogin(ctx, req)
-	}
-	return s.browserClient.CompleteRegister(ctx, req)
-}
-
-func (s *Server) browserAuthStatus(ctx context.Context, flowID string) (*pb.BrowserFlowStatusResponse, error) {
-	return s.browserClient.GetFlowStatus(ctx, &pb.BrowserFlowStatusRequest{FlowId: flowID})
-}
-
-func (s *Server) browserAuthCancel(ctx context.Context, mode, flowID string) (*pb.CancelRegisterResponse, error) {
-	req := &pb.CancelRegisterRequest{FlowId: flowID}
-	if mode == browserAuthModeLogin {
-		return s.browserClient.CancelLogin(ctx, req)
-	}
-	return s.browserClient.CancelRegister(ctx, req)
-}
-
 func (s *Server) completeBrowserAuthStep(ctx context.Context, jobID, stepName, accountID string, data map[string]any, err error) error {
 	if isAccountAlreadyExistsError(err) {
 		if data != nil {

@@ -11,12 +11,25 @@ import (
 type orchestratorConfig struct {
 	ListenAddr string
 
-	BrowserAddr   string
-	PaymentAddr   string
-	GoPayAppAddr  string
-	SmsAddr       string
-	AccountDBAddr string
-	MailboxAddr   string
+	BrowserAutomationAddr string
+	PaymentAddr           string
+	GoPayAppAddr          string
+	SmsAddr               string
+	AccountDBAddr         string
+	MailboxAddr           string
+
+	BrowserAuthProxyRef       string
+	BrowserAuthLocale         string
+	BrowserAuthAcceptLanguage string
+	BrowserAuthTimezone       string
+	BrowserAuthUserAgent      string
+	BrowserAuthWindowWidth    int
+	BrowserAuthWindowHeight   int
+	BrowserAuthSessionTTL     time.Duration
+	BrowserAuthCommandTimeout time.Duration
+	BrowserAuthBlockImages    bool
+	BrowserAuthGeoIP          bool
+	BrowserAuthHumanize       string
 
 	SMSApplicationKey     string
 	SMSCountryISO2        string
@@ -72,12 +85,25 @@ func loadOrchestratorConfig() orchestratorConfig {
 	return orchestratorConfig{
 		ListenAddr: envDefault("LISTEN_ADDR", ":50051"),
 
-		BrowserAddr:   envDefault("BROWSER_ADDR", "browser-reg:50051"),
-		PaymentAddr:   envDefault("PAYMENT_ADDR", "host.docker.internal:50051"),
-		GoPayAppAddr:  envDefault("GOPAY_APP_ADDR", "gopay-app:50051"),
-		SmsAddr:       envDefault("SMS_ADDR", "sms-service:50051"),
-		AccountDBAddr: envDefault("ACCOUNT_DB_ADDR", "account-db:50051"),
-		MailboxAddr:   envDefault("MAILBOX_ADDR", "mailbox-api:50051"),
+		BrowserAutomationAddr: envDefault("BROWSER_AUTOMATION_ADDR", "browser-automation:50051"),
+		PaymentAddr:           envDefault("PAYMENT_ADDR", "host.docker.internal:50051"),
+		GoPayAppAddr:          envDefault("GOPAY_APP_ADDR", "gopay-app:50051"),
+		SmsAddr:               envDefault("SMS_ADDR", "sms-service:50051"),
+		AccountDBAddr:         envDefault("ACCOUNT_DB_ADDR", "account-db:50051"),
+		MailboxAddr:           envDefault("MAILBOX_ADDR", "mailbox-api:50051"),
+
+		BrowserAuthProxyRef:       envDefault("BROWSER_AUTH_PROXY_REF", "register"),
+		BrowserAuthLocale:         envDefault("BROWSER_AUTH_LOCALE", "en-US"),
+		BrowserAuthAcceptLanguage: envDefault("BROWSER_AUTH_ACCEPT_LANGUAGE", "en-US,en;q=0.9"),
+		BrowserAuthTimezone:       envDefault("BROWSER_AUTH_TIMEZONE", ""),
+		BrowserAuthUserAgent:      envDefault("BROWSER_AUTH_USER_AGENT", ""),
+		BrowserAuthWindowWidth:    envInt("BROWSER_AUTH_WINDOW_WIDTH", 1365),
+		BrowserAuthWindowHeight:   envInt("BROWSER_AUTH_WINDOW_HEIGHT", 768),
+		BrowserAuthSessionTTL:     envPositiveDurationSeconds("BROWSER_AUTH_SESSION_TTL_SECONDS", 30*time.Minute),
+		BrowserAuthCommandTimeout: envPositiveDurationSeconds("BROWSER_AUTH_COMMAND_TIMEOUT_SECONDS", 120*time.Second),
+		BrowserAuthBlockImages:    envBool("BROWSER_AUTH_BLOCK_IMAGES", false),
+		BrowserAuthGeoIP:          envBool("BROWSER_AUTH_GEOIP", true),
+		BrowserAuthHumanize:       envDefault("BROWSER_AUTH_HUMANIZE", "true"),
 
 		SMSApplicationKey:     envDefault("SMS_APPLICATION_KEY", "gopay"),
 		SMSCountryISO2:        envDefault("SMS_COUNTRY_ISO2", "ID"),

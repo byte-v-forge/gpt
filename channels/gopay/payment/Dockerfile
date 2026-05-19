@@ -6,7 +6,6 @@ ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 ENV PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium
 
 WORKDIR /app
 
@@ -22,7 +21,7 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         /etc/apt/sources.list; \
     fi \
     && apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates chromium \
+    && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY channels/gopay/payment/gopay-flow/requirements.txt /tmp/requirements.txt

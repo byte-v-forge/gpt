@@ -32,7 +32,6 @@ orchestrator_protos=("${ROOT}"/proto/*.proto)
 gen_go account-db "$(root_proto account_db.proto)"
 gen_go orchestrator "${orchestrator_protos[@]}"
 
-gen_py registration/browser-reg "$(root_proto browser.proto)"
 gen_py channels/gopay/app "$(root_proto gopay_app.proto)"
 python3 -m grpc_tools.protoc \
   -I "${ROOT}/proto" \

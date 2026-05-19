@@ -1,1 +1,0 @@
-"""Browser registration service package."""

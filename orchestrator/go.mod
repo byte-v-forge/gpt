@@ -3,10 +3,11 @@ module orchestrator
 go 1.26.2
 
 require (
+	github.com/byte-v-forge/browser-automation v0.1.1-0.20260519042351-f4009fb5babf
 	github.com/byte-v-forge/sms v0.1.1-0.20260519030925-f4bb83fb3695
 	github.com/byte-v-forge/workflow-runtime v0.3.0
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.6.0
+	github.com/jackc/pgx/v5 v5.9.2
 	go.temporal.io/api v1.62.11
 	go.temporal.io/sdk v1.43.0
 	google.golang.org/grpc v1.81.1
@@ -32,8 +33,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
+	github.com/stretchr/testify v1.11.1 // indirect
 	golang.org/x/net v0.53.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect

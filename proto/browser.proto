@@ -4,16 +4,6 @@ package browser;
 
 option go_package = "./;pb";
 
-message RegisterRequest {
-  string job_id = 1;
-  string assigned_email = 2;
-  reserved 3;
-  string password = 4;
-  string first_name = 5;
-  string last_name = 6;
-  string birthday = 7;
-}
-
 message RegisterResponse {
   bool success = 1;
   string error_message = 2;
@@ -39,22 +29,9 @@ message StartRegisterResponse {
   int64 otp_request_action_started_at_unix = 10;
 }
 
-message CompleteRegisterRequest {
-  string flow_id = 1;
-  string otp = 2;
-}
-
-message CancelRegisterRequest {
-  string flow_id = 1;
-}
-
 message CancelRegisterResponse {
   bool success = 1;
   string error_message = 2;
-}
-
-message BrowserFlowStatusRequest {
-  string flow_id = 1;
 }
 
 message BrowserFlowStatusResponse {
@@ -73,14 +50,4 @@ message BrowserFlowStatusResponse {
   RegisterResponse result = 13;
   int64 otp_wait_started_at_unix = 14;
   int64 otp_request_action_started_at_unix = 15;
-}
-
-service BrowserRegistration {
-  rpc StartRegister(RegisterRequest) returns (StartRegisterResponse);
-  rpc GetFlowStatus(BrowserFlowStatusRequest) returns (BrowserFlowStatusResponse);
-  rpc CompleteRegister(CompleteRegisterRequest) returns (RegisterResponse);
-  rpc CancelRegister(CancelRegisterRequest) returns (CancelRegisterResponse);
-  rpc StartLogin(RegisterRequest) returns (StartRegisterResponse);
-  rpc CompleteLogin(CompleteRegisterRequest) returns (RegisterResponse);
-  rpc CancelLogin(CancelRegisterRequest) returns (CancelRegisterResponse);
 }

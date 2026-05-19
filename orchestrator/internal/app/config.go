@@ -1,6 +1,12 @@
 package app
 
-import "time"
+import (
+	"log"
+	"os"
+	"time"
+
+	workflowruntime "github.com/byte-v-forge/workflow-runtime"
+)
 
 type orchestratorConfig struct {
 	ListenAddr string
@@ -49,16 +55,7 @@ type orchestratorConfig struct {
 	ChangePhoneSMSCancelTimeout       time.Duration
 	ChangePhoneSMSCancelRetryInterval time.Duration
 
-	TemporalAddr             string
-	TemporalNamespace        string
-	TemporalTaskQueue        string
-	TemporalDevServer        bool
-	TemporalDevServerVersion string
-	TemporalDevServerCache   string
-	TemporalDevServerDB      string
-	TemporalDevServerUI      bool
-	TemporalDevServerUIPort  string
-	TemporalDevServerLog     string
+	Temporal workflowruntime.Config
 }
 
 func loadOrchestratorConfig() orchestratorConfig {
@@ -111,15 +108,14 @@ func loadOrchestratorConfig() orchestratorConfig {
 		ChangePhoneSMSCancelTimeout:       envPositiveDurationSeconds("GOPAY_CHANGE_PHONE_SMS_CANCEL_TIMEOUT_SECONDS", defaultChangePhoneSMSCancelTimeout),
 		ChangePhoneSMSCancelRetryInterval: envPositiveDurationSeconds("GOPAY_CHANGE_PHONE_SMS_CANCEL_RETRY_SECONDS", defaultChangePhoneSMSCancelRetryInterval),
 
-		TemporalAddr:             envDefault("TEMPORAL_ADDR", "host.docker.internal:7233"),
-		TemporalNamespace:        envDefault("TEMPORAL_NAMESPACE", "default"),
-		TemporalTaskQueue:        envDefault("TEMPORAL_TASK_QUEUE", taskQueueDefault),
-		TemporalDevServer:        envBool("TEMPORAL_DEV_SERVER", false),
-		TemporalDevServerVersion: envDefault("TEMPORAL_DEV_SERVER_VERSION", "default"),
-		TemporalDevServerCache:   envDefault("TEMPORAL_DEV_SERVER_CACHE_DIR", ""),
-		TemporalDevServerDB:      envDefault("TEMPORAL_DEV_SERVER_DB", ""),
-		TemporalDevServerUI:      envBool("TEMPORAL_DEV_SERVER_UI", false),
-		TemporalDevServerUIPort:  envDefault("TEMPORAL_DEV_SERVER_UI_PORT", ""),
-		TemporalDevServerLog:     envDefault("TEMPORAL_DEV_SERVER_LOG_LEVEL", "warn"),
+		Temporal: loadTemporalConfig(),
 	}
+}
+
+func loadTemporalConfig() workflowruntime.Config {
+	config, err := workflowruntime.LoadConfigFromEnv(os.Getenv)
+	if err != nil {
+		log.Fatalf("load Temporal config: %v", err)
+	}
+	return config
 }

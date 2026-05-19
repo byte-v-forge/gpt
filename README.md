@@ -28,3 +28,7 @@ go build ./...
 ```
 
 Go 检查需要分别在 `account-db/` 和 `orchestrator/` 下执行。
+
+## 运行配置
+
+`orchestrator/` 通过 `TEMPORAL_ADDRESS`、`TEMPORAL_NAMESPACE`、`TEMPORAL_TASK_QUEUE` 和 `TEMPORAL_IDENTITY` 连接组织内 workflow runtime。

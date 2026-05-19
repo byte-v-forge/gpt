@@ -4,7 +4,7 @@ import (
 	"log"
 	"net"
 
-	temporalworker "go.temporal.io/sdk/worker"
+	workflowruntime "github.com/byte-v-forge/workflow-runtime"
 	"google.golang.org/grpc"
 	"orchestrator/internal/api"
 	"orchestrator/pb"
@@ -34,7 +34,7 @@ func Run() {
 		JobStore:                             deps.jobStore,
 		JobEvents:                            deps.jobEvents,
 		Temporal:                             deps.temporal,
-		TaskQueue:                            cfg.TemporalTaskQueue,
+		TaskQueue:                            cfg.Temporal.TaskQueue,
 		AccountClient:                        deps.accountClient,
 		EmailClient:                          deps.emailClient,
 		GoPayClient:                          deps.gopayClient,
@@ -43,13 +43,14 @@ func Run() {
 		GoPayAddBalanceConfirmTimeoutSeconds: cfg.GoPayAddBalanceConfirmTimeoutSeconds,
 	})
 
-	temporalWorker := temporalworker.New(deps.temporal, cfg.TemporalTaskQueue, temporalworker.Options{})
-	registerTemporalWorker(temporalWorker, activityServer)
-	go func() {
-		if err := temporalWorker.Run(temporalworker.InterruptCh()); err != nil {
-			log.Fatalf("Temporal worker failed: %v", err)
-		}
-	}()
+	temporalWorker, err := workflowruntime.NewWorker(deps.temporal, temporalWorkerSpec(cfg.Temporal.TaskQueue, activityServer))
+	if err != nil {
+		log.Fatalf("Failed to create Temporal worker: %v", err)
+	}
+	if err := temporalWorker.Start(); err != nil {
+		log.Fatalf("Temporal worker failed: %v", err)
+	}
+	defer temporalWorker.Stop()
 
 	grpcServer := grpc.NewServer()
 	pb.RegisterAccountWorkflowServiceServer(grpcServer, apiServer)

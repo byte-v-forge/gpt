@@ -4,66 +4,71 @@ import (
 	"orchestrator/internal/activities"
 	"orchestrator/internal/workflows"
 
-	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/worker"
+	workflowruntime "github.com/byte-v-forge/workflow-runtime"
 )
 
-func registerTemporalWorker(w worker.Worker, s *activities.Server) {
-	w.RegisterWorkflow(workflows.RegisterAccountWorkflow)
-	w.RegisterWorkflow(workflows.ActivateAccountWorkflow)
-	w.RegisterWorkflow(workflows.AutoPayWorkflow)
-	w.RegisterWorkflow(workflows.GoPayAppWorkflow)
-	w.RegisterWorkflow(workflows.GoPayPaymentWorkflow)
-	w.RegisterWorkflow(workflows.GoPayPaymentRebindWorkflow)
-	w.RegisterWorkflow(workflows.ProbeAccountWorkflow)
-	w.RegisterWorkflow(workflows.LoginSessionWorkflow)
-	w.RegisterWorkflow(workflows.RegisterAndActivateWorkflow)
-
-	w.RegisterActivityWithOptions(s.CreateJobActivity, activity.RegisterOptions{Name: createJobActivityName})
-	w.RegisterActivityWithOptions(s.StartJobStepActivity, activity.RegisterOptions{Name: startJobStepActivityName})
-	w.RegisterActivityWithOptions(s.CompleteJobStepActivity, activity.RegisterOptions{Name: completeJobStepActivityName})
-	w.RegisterActivityWithOptions(s.EnsureAccountActivity, activity.RegisterOptions{Name: ensureAccountActivityName})
-	w.RegisterActivityWithOptions(s.ResolveAccountFromJobActivity, activity.RegisterOptions{Name: resolveAccountActivityName})
-	w.RegisterActivityWithOptions(s.BrowserAuthStartActivity, activity.RegisterOptions{Name: browserAuthStartActivityName})
-	w.RegisterActivityWithOptions(s.BrowserAuthWaitActivity, activity.RegisterOptions{Name: browserAuthWaitActivityName})
-	w.RegisterActivityWithOptions(s.BrowserAuthCompleteActivity, activity.RegisterOptions{Name: browserAuthCompleteActivityName})
-	w.RegisterActivityWithOptions(s.BrowserAuthCancelActivity, activity.RegisterOptions{Name: browserAuthCancelActivityName})
-	w.RegisterActivityWithOptions(s.OTPWaitActivity, activity.RegisterOptions{Name: waitOTPActivityName})
-	w.RegisterActivityWithOptions(s.FetchManualOTPActivity, activity.RegisterOptions{Name: fetchManualOTPActivityName})
-	w.RegisterActivityWithOptions(s.EnsureLogonActivity, activity.RegisterOptions{Name: ensureLogonActivityName})
-	w.RegisterActivityWithOptions(s.GoPayPaymentPrepareActivity, activity.RegisterOptions{Name: goPayPaymentPrepareActivityName})
-	w.RegisterActivityWithOptions(s.GoPayPaymentStartActivity, activity.RegisterOptions{Name: goPayPaymentStartActivityName})
-	w.RegisterActivityWithOptions(s.GoPayPaymentOTPResendActivity, activity.RegisterOptions{Name: goPayPaymentOTPResendActivityName})
-	w.RegisterActivityWithOptions(s.GoPayPaymentCompleteActivity, activity.RegisterOptions{Name: goPayPaymentCompleteActivityName})
-	w.RegisterActivityWithOptions(s.GoPayPaymentCancelActivity, activity.RegisterOptions{Name: goPayPaymentCancelActivityName})
-	w.RegisterActivityWithOptions(s.GoPayResolveWAPhoneActivity, activity.RegisterOptions{Name: goPayResolveWAPhoneActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppLoadStateActivity, activity.RegisterOptions{Name: goPayAppLoadStateActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppSaveStateActivity, activity.RegisterOptions{Name: goPayAppSaveStateActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppDeleteStateActivity, activity.RegisterOptions{Name: goPayAppDeleteStateActivityName})
-	w.RegisterActivityWithOptions(s.GoPayPaymentRebindSourceActivity, activity.RegisterOptions{Name: goPayPaymentRebindSourceActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppOTPStartActivity, activity.RegisterOptions{Name: goPayAppOTPStartActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppOTPCompleteActivity, activity.RegisterOptions{Name: goPayAppOTPCompleteActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppOTPRetryActivity, activity.RegisterOptions{Name: goPayAppOTPRetryActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppStatusActivity, activity.RegisterOptions{Name: goPayAppStatusActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppCreatePinStartActivity, activity.RegisterOptions{Name: goPayAppCreatePinStartActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppCreatePinRetryActivity, activity.RegisterOptions{Name: goPayAppCreatePinRetryActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppCreatePinCompleteActivity, activity.RegisterOptions{Name: goPayAppCreatePinCompleteActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppAcquireSignupPhoneActivity, activity.RegisterOptions{Name: goPayAppAcquireSignupPhoneActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppDiscardSignupPhoneActivity, activity.RegisterOptions{Name: goPayAppDiscardSignupPhoneActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppAddBalanceActivity, activity.RegisterOptions{Name: goPayAppAddBalanceActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppChangePhoneGetNumberActivity, activity.RegisterOptions{Name: goPayAppChangePhoneGetNumberActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppChangePhoneStartActivity, activity.RegisterOptions{Name: goPayAppChangePhoneStartActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppChangePhoneRetryActivity, activity.RegisterOptions{Name: goPayAppChangePhoneRetryActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppSMSCancelBeforeRotationActivity, activity.RegisterOptions{Name: goPayAppSMSCancelBeforeRotationActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppSMSFinishActivity, activity.RegisterOptions{Name: goPayAppSMSFinishActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppSMSRequestAdditionalCodeActivity, activity.RegisterOptions{Name: goPayAppSMSRequestAdditionalCodeActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppChangePhoneCompleteActivity, activity.RegisterOptions{Name: goPayAppChangePhoneCompleteActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppDeactivateStartActivity, activity.RegisterOptions{Name: goPayAppDeactivateStartActivityName})
-	w.RegisterActivityWithOptions(s.GoPayAppDeactivateCompleteActivity, activity.RegisterOptions{Name: goPayAppDeactivateCompleteActivityName})
-	w.RegisterActivityWithOptions(s.ProbePlusTrialAtomicActivity, activity.RegisterOptions{Name: probePlusTrialActivityName})
-	w.RegisterActivityWithOptions(s.ProbeTierAtomicActivity, activity.RegisterOptions{Name: probeTierActivityName})
-	w.RegisterActivityWithOptions(s.PersistRegisteredActivity, activity.RegisterOptions{Name: persistRegisteredActivityName})
-	w.RegisterActivityWithOptions(s.PersistActivatedActivity, activity.RegisterOptions{Name: persistActivatedActivityName})
-	w.RegisterActivityWithOptions(s.MarkJobFailedActivity, activity.RegisterOptions{Name: markJobFailedActivityName})
-	w.RegisterActivityWithOptions(s.MarkJobSucceededActivity, activity.RegisterOptions{Name: markJobSucceededActivityName})
+func temporalWorkerSpec(taskQueue string, s *activities.Server) workflowruntime.WorkerSpec {
+	return workflowruntime.WorkerSpec{
+		TaskQueue: taskQueue,
+		Workflows: []workflowruntime.WorkflowDefinition{
+			{Name: "RegisterAccountWorkflow", Definition: workflows.RegisterAccountWorkflow},
+			{Name: "ActivateAccountWorkflow", Definition: workflows.ActivateAccountWorkflow},
+			{Name: "AutoPayWorkflow", Definition: workflows.AutoPayWorkflow},
+			{Name: "GoPayAppWorkflow", Definition: workflows.GoPayAppWorkflow},
+			{Name: "GoPayPaymentWorkflow", Definition: workflows.GoPayPaymentWorkflow},
+			{Name: "GoPayPaymentRebindWorkflow", Definition: workflows.GoPayPaymentRebindWorkflow},
+			{Name: "ProbeAccountWorkflow", Definition: workflows.ProbeAccountWorkflow},
+			{Name: "LoginSessionWorkflow", Definition: workflows.LoginSessionWorkflow},
+			{Name: "RegisterAndActivateWorkflow", Definition: workflows.RegisterAndActivateWorkflow},
+		},
+		Activities: []workflowruntime.ActivityDefinition{
+			{Name: createJobActivityName, Definition: s.CreateJobActivity},
+			{Name: startJobStepActivityName, Definition: s.StartJobStepActivity},
+			{Name: completeJobStepActivityName, Definition: s.CompleteJobStepActivity},
+			{Name: ensureAccountActivityName, Definition: s.EnsureAccountActivity},
+			{Name: resolveAccountActivityName, Definition: s.ResolveAccountFromJobActivity},
+			{Name: browserAuthStartActivityName, Definition: s.BrowserAuthStartActivity},
+			{Name: browserAuthWaitActivityName, Definition: s.BrowserAuthWaitActivity},
+			{Name: browserAuthCompleteActivityName, Definition: s.BrowserAuthCompleteActivity},
+			{Name: browserAuthCancelActivityName, Definition: s.BrowserAuthCancelActivity},
+			{Name: waitOTPActivityName, Definition: s.OTPWaitActivity},
+			{Name: fetchManualOTPActivityName, Definition: s.FetchManualOTPActivity},
+			{Name: ensureLogonActivityName, Definition: s.EnsureLogonActivity},
+			{Name: goPayPaymentPrepareActivityName, Definition: s.GoPayPaymentPrepareActivity},
+			{Name: goPayPaymentStartActivityName, Definition: s.GoPayPaymentStartActivity},
+			{Name: goPayPaymentOTPResendActivityName, Definition: s.GoPayPaymentOTPResendActivity},
+			{Name: goPayPaymentCompleteActivityName, Definition: s.GoPayPaymentCompleteActivity},
+			{Name: goPayPaymentCancelActivityName, Definition: s.GoPayPaymentCancelActivity},
+			{Name: goPayResolveWAPhoneActivityName, Definition: s.GoPayResolveWAPhoneActivity},
+			{Name: goPayAppLoadStateActivityName, Definition: s.GoPayAppLoadStateActivity},
+			{Name: goPayAppSaveStateActivityName, Definition: s.GoPayAppSaveStateActivity},
+			{Name: goPayAppDeleteStateActivityName, Definition: s.GoPayAppDeleteStateActivity},
+			{Name: goPayPaymentRebindSourceActivityName, Definition: s.GoPayPaymentRebindSourceActivity},
+			{Name: goPayAppOTPStartActivityName, Definition: s.GoPayAppOTPStartActivity},
+			{Name: goPayAppOTPCompleteActivityName, Definition: s.GoPayAppOTPCompleteActivity},
+			{Name: goPayAppOTPRetryActivityName, Definition: s.GoPayAppOTPRetryActivity},
+			{Name: goPayAppStatusActivityName, Definition: s.GoPayAppStatusActivity},
+			{Name: goPayAppCreatePinStartActivityName, Definition: s.GoPayAppCreatePinStartActivity},
+			{Name: goPayAppCreatePinRetryActivityName, Definition: s.GoPayAppCreatePinRetryActivity},
+			{Name: goPayAppCreatePinCompleteActivityName, Definition: s.GoPayAppCreatePinCompleteActivity},
+			{Name: goPayAppAcquireSignupPhoneActivityName, Definition: s.GoPayAppAcquireSignupPhoneActivity},
+			{Name: goPayAppDiscardSignupPhoneActivityName, Definition: s.GoPayAppDiscardSignupPhoneActivity},
+			{Name: goPayAppAddBalanceActivityName, Definition: s.GoPayAppAddBalanceActivity},
+			{Name: goPayAppChangePhoneGetNumberActivityName, Definition: s.GoPayAppChangePhoneGetNumberActivity},
+			{Name: goPayAppChangePhoneStartActivityName, Definition: s.GoPayAppChangePhoneStartActivity},
+			{Name: goPayAppChangePhoneRetryActivityName, Definition: s.GoPayAppChangePhoneRetryActivity},
+			{Name: goPayAppSMSCancelBeforeRotationActivityName, Definition: s.GoPayAppSMSCancelBeforeRotationActivity},
+			{Name: goPayAppSMSFinishActivityName, Definition: s.GoPayAppSMSFinishActivity},
+			{Name: goPayAppSMSRequestAdditionalCodeActivityName, Definition: s.GoPayAppSMSRequestAdditionalCodeActivity},
+			{Name: goPayAppChangePhoneCompleteActivityName, Definition: s.GoPayAppChangePhoneCompleteActivity},
+			{Name: goPayAppDeactivateStartActivityName, Definition: s.GoPayAppDeactivateStartActivity},
+			{Name: goPayAppDeactivateCompleteActivityName, Definition: s.GoPayAppDeactivateCompleteActivity},
+			{Name: probePlusTrialActivityName, Definition: s.ProbePlusTrialAtomicActivity},
+			{Name: probeTierActivityName, Definition: s.ProbeTierAtomicActivity},
+			{Name: persistRegisteredActivityName, Definition: s.PersistRegisteredActivity},
+			{Name: persistActivatedActivityName, Definition: s.PersistActivatedActivity},
+			{Name: markJobFailedActivityName, Definition: s.MarkJobFailedActivity},
+			{Name: markJobSucceededActivityName, Definition: s.MarkJobSucceededActivity},
+		},
+	}
 }

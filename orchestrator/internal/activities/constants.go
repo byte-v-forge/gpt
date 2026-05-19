@@ -17,7 +17,6 @@ const (
 	actionLoginSession        = contracts.ActionLoginSession
 	actionRegisterAndActivate = contracts.ActionRegisterAndActivate
 
-	statusCreated           = jobstatus.Created
 	statusRunning           = jobstatus.Running
 	statusSucceeded         = jobstatus.Succeeded
 	statusFailedRecoverable = jobstatus.FailedRecoverable
@@ -25,6 +24,7 @@ const (
 	statusFailedFinal       = jobstatus.FailedFinal
 
 	accountStatusRegistered        = "REGISTERED"
+	accountStatusUnregistered      = "UNREGISTERED"
 	accountStatusActivated         = "ACTIVATED"
 	accountStatusUserAlreadyExists = "USER_ALREADY_EXISTS"
 

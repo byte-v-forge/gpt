@@ -34,7 +34,7 @@ func (s *Server) GoPayAppChangePhoneGetNumberActivity(ctx context.Context, input
 				"failures":     failures,
 				"max_failures": maxFailures,
 			})
-			activationID, phone, err := s.acquireSMSNumber(ctx, input.GetJobId(), map[string]string{
+			activationID, phone, err := s.acquireSMSNumber(ctx, input.GetJobId(), goPaySMSTarget(), map[string]string{
 				"workflow": "gopay_change_phone",
 				"job_id":   input.GetJobId(),
 			})

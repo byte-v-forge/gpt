@@ -19,7 +19,7 @@ func (s *Server) CreateGPTAccount(ctx context.Context, req *pb.CreateGPTAccountR
 	}
 	email := strings.TrimSpace(req.GetEmail())
 	if email == "" {
-		allocated, err := activities.NewAccountEmailAllocator(s.accountClient).Allocate(ctx, accountID, nil)
+		allocated, err := activities.NewAccountEmailAllocator(s.accountClient).Allocate(ctx, accountID, nil, requestUsesSplitStrategy(req.UseSplitStrategy, req.GetUseSplitStrategy()))
 		if err != nil {
 			return &pb.CreateGPTAccountResponse{ErrorMessage: err.Error()}, nil
 		}
@@ -46,30 +46,19 @@ func (s *Server) RegisterAccount(ctx context.Context, req *pb.RegisterAccountReq
 	if accountID == "" {
 		accountID = uuid.NewString()
 	}
-	var result workflows.RegisterAccountWorkflowResult
-	run, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionRegister, jobID)), workflows.RegisterAccountWorkflow, workflows.RegisterAccountWorkflowInput{
+	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionRegister, jobID)), workflows.RegisterAccountWorkflow, workflows.RegisterAccountWorkflowInput{
 		JobId: jobID,
 		Account: &workflows.AccountSpec{
-			AccountId: accountID,
-			Email:     req.GetEmail(),
-			Password:  req.GetPassword(),
+			AccountId:        accountID,
+			Email:            req.GetEmail(),
+			Password:         req.GetPassword(),
+			UseSplitStrategy: req.UseSplitStrategy,
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
-	if err := run.Get(ctx, &result); err != nil {
-		return &pb.RegisterAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-
-	return &pb.RegisterAccountResponse{
-		JobId:             result.GetJobId(),
-		SessionToken:      result.GetSessionToken(),
-		AccessToken:       result.GetAccessToken(),
-		PlusTrialEligible: result.GetPlusTrialEligible(),
-		ErrorMessage:      result.GetErrorMessage(),
-		CheckoutUrl:       result.GetCheckoutUrl(),
-	}, nil
+	return &pb.RegisterAccountResponse{JobId: jobID, Started: true}, nil
 }
 
 func (s *Server) ActivateAccount(ctx context.Context, req *pb.ActivateAccountRequest) (*pb.ActivateAccountResponse, error) {
@@ -413,33 +402,19 @@ func (s *Server) RegisterAndActivateAccount(ctx context.Context, req *pb.Registe
 	if accountID == "" {
 		accountID = uuid.NewString()
 	}
-	var result workflows.RegisterAndActivateWorkflowResult
-	run, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionRegisterAndActivate, jobID)), workflows.RegisterAndActivateWorkflow, workflows.RegisterAndActivateWorkflowInput{
+	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionRegisterAndActivate, jobID)), workflows.RegisterAndActivateWorkflow, workflows.RegisterAndActivateWorkflowInput{
 		JobId: jobID,
 		Account: &workflows.AccountSpec{
-			AccountId: accountID,
-			Email:     req.GetEmail(),
-			Password:  req.GetPassword(),
+			AccountId:        accountID,
+			Email:            req.GetEmail(),
+			Password:         req.GetPassword(),
+			UseSplitStrategy: req.UseSplitStrategy,
 		},
 	})
 	if err != nil {
 		return nil, err
 	}
-	if err := run.Get(ctx, &result); err != nil {
-		return &pb.RegisterAndActivateAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-
-	return &pb.RegisterAndActivateAccountResponse{
-		JobId:             result.GetJobId(),
-		SessionToken:      result.GetSessionToken(),
-		AccessToken:       result.GetAccessToken(),
-		PlusTrialEligible: result.GetPlusTrialEligible(),
-		CheckoutUrl:       result.GetCheckoutUrl(),
-		ActivationSuccess: result.GetActivationSuccess(),
-		ErrorMessage:      result.GetErrorMessage(),
-		ChargeRef:         result.GetChargeRef(),
-		SnapToken:         result.GetSnapToken(),
-	}, nil
+	return &pb.RegisterAndActivateAccountResponse{JobId: jobID, Started: true}, nil
 }
 
 func workflowIDForAction(action string, jobID string) string {
@@ -448,4 +423,11 @@ func workflowIDForAction(action string, jobID string) string {
 		return jobID
 	}
 	return workflowID
+}
+
+func requestUsesSplitStrategy(value *bool, effective bool) bool {
+	if value == nil {
+		return true
+	}
+	return effective
 }

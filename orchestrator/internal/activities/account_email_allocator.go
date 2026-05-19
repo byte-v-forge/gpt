@@ -11,7 +11,7 @@ import (
 const accountEmailAllocatorLimit int32 = 500
 
 type AccountEmailAllocator interface {
-	Allocate(ctx context.Context, accountID string, excludes []string) (string, error)
+	Allocate(ctx context.Context, accountID string, excludes []string, useSplitStrategy bool) (string, error)
 }
 
 type accountDBEmailAllocator struct {
@@ -32,7 +32,7 @@ func NewAccountEmailAllocator(accountClient pb.AccountDatabaseServiceClient) Acc
 	return defaultAccountEmailAllocator(nil, accountClient)
 }
 
-func (a *accountDBEmailAllocator) Allocate(ctx context.Context, accountID string, excludes []string) (string, error) {
+func (a *accountDBEmailAllocator) Allocate(ctx context.Context, accountID string, excludes []string, useSplitStrategy bool) (string, error) {
 	if a == nil || a.accountClient == nil {
 		return "", fmt.Errorf("email allocator is not configured")
 	}
@@ -61,35 +61,37 @@ func (a *accountDBEmailAllocator) Allocate(ctx context.Context, accountID string
 		}
 	}
 
-	for _, allocation := range available {
-		if !eligibleAvailableAliasAllocation(allocation, excludeSet) {
-			continue
+	if useSplitStrategy {
+		for _, allocation := range available {
+			if !eligibleAvailableAliasAllocation(allocation, excludeSet) {
+				continue
+			}
+			email, claimed, err := a.claim(ctx, allocation.GetEmail(), accountID, true)
+			if err != nil {
+				return "", err
+			}
+			if claimed {
+				return email, nil
+			}
 		}
-		email, claimed, err := a.claim(ctx, allocation.GetEmail(), accountID, true)
+
+		registered, err := a.listAllocations(ctx, emailStatusRegistered, true)
 		if err != nil {
 			return "", err
 		}
-		if claimed {
-			return email, nil
-		}
-	}
+		sortAllocationsOldestFirst(registered)
 
-	registered, err := a.listAllocations(ctx, emailStatusRegistered, true)
-	if err != nil {
-		return "", err
-	}
-	sortAllocationsOldestFirst(registered)
-
-	for _, allocation := range registered {
-		if !eligibleRegisteredPrimaryAllocation(allocation, excludeSet) {
-			continue
-		}
-		email, created, err := a.createAlias(ctx, allocation.GetEmail(), accountID)
-		if err != nil {
-			return "", err
-		}
-		if created {
-			return email, nil
+		for _, allocation := range registered {
+			if !eligibleRegisteredPrimaryAllocation(allocation, excludeSet) {
+				continue
+			}
+			email, created, err := a.createAlias(ctx, allocation.GetEmail(), accountID)
+			if err != nil {
+				return "", err
+			}
+			if created {
+				return email, nil
+			}
 		}
 	}
 

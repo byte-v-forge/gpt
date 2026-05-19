@@ -18,6 +18,7 @@ message AccountSpec {
   string account_id = 1;
   string email = 2;
   string password = 3;
+  optional bool use_split_strategy = 4;
 }
 
 message AccountRef {
@@ -36,6 +37,7 @@ message CreateGPTAccountRequest {
   string email = 1;
   string password = 2;
   string account_id = 3;
+  optional bool use_split_strategy = 4;
 }
 
 message CreateGPTAccountResponse {
@@ -130,6 +132,7 @@ message RegisterAccountRequest {
   reserved 3, 4, 5;
   reserved "first_name", "last_name", "dob";
   string account_id = 6;
+  optional bool use_split_strategy = 7;
 }
 
 message RegisterAccountResponse {
@@ -139,6 +142,7 @@ message RegisterAccountResponse {
   string error_message = 4;
   string checkout_url = 5;
   string access_token = 6;
+  bool started = 7;
 }
 
 message LoginAccountRequest {
@@ -156,6 +160,7 @@ message RegisterAndActivateAccountRequest {
   string email = 6;
   string password = 7;
   string account_id = 11;
+  optional bool use_split_strategy = 12;
 }
 
 message RegisterAndActivateAccountResponse {
@@ -168,6 +173,7 @@ message RegisterAndActivateAccountResponse {
   string charge_ref = 7;
   string snap_token = 8;
   string access_token = 9;
+  bool started = 10;
 }
 
 message RegisterAccountWorkflowInput {

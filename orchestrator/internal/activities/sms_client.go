@@ -20,27 +20,36 @@ type SMSTargetConfig struct {
 	PollInterval       time.Duration
 }
 
+const (
+	defaultSMSLeaseDuration = 20 * time.Minute
+	defaultSMSPollInterval  = 5 * time.Second
+)
+
+func goPaySMSTarget() SMSTargetConfig {
+	return SMSTargetConfig{
+		ApplicationKey:     "gopay",
+		CountryISO2:        "ID",
+		CountryCallingCode: "62",
+		LeaseDuration:      defaultSMSLeaseDuration,
+		PollInterval:       defaultSMSPollInterval,
+	}
+}
+
 func (c SMSTargetConfig) withDefaults() SMSTargetConfig {
-	if strings.TrimSpace(c.ApplicationKey) == "" {
-		c.ApplicationKey = "gopay"
-	}
-	if strings.TrimSpace(c.CountryISO2) == "" {
-		c.CountryISO2 = "ID"
-	}
-	if strings.TrimSpace(c.CountryCallingCode) == "" {
-		c.CountryCallingCode = "62"
+	if c.LeaseDuration <= 0 {
+		c.LeaseDuration = defaultSMSLeaseDuration
 	}
 	if c.PollInterval <= 0 {
-		c.PollInterval = 5 * time.Second
+		c.PollInterval = defaultSMSPollInterval
 	}
 	return c
 }
 
-func (s *Server) acquireSMSNumber(ctx context.Context, requestID string, labels map[string]string) (activationID string, phone string, err error) {
+func (s *Server) acquireSMSNumber(ctx context.Context, requestID string, target SMSTargetConfig, labels map[string]string) (activationID string, phone string, err error) {
 	if s.smsClient == nil {
 		return "", "", fmt.Errorf("sms client not configured")
 	}
-	target := s.smsTarget.withDefaults()
+	target = target.withDefaults()
 	resp, err := s.smsClient.AcquireNumber(ctx, &smsv1.AcquireNumberRequest{
 		RequestId: requestID,
 		Target: &smsv1.SmsTarget{
@@ -83,7 +92,7 @@ func (s *Server) waitSMSCode(ctx context.Context, activationID string, timeoutSe
 	resp, err := s.smsClient.WaitForCode(ctx, &smsv1.WaitForCodeRequest{
 		ActivationId: activationID,
 		Timeout:      durationOrNil(timeout),
-		PollInterval: durationOrNil(s.smsTarget.withDefaults().PollInterval),
+		PollInterval: durationOrNil(defaultSMSPollInterval),
 	})
 	if err != nil {
 		return "", fmt.Errorf("WaitForCode: %w", err)

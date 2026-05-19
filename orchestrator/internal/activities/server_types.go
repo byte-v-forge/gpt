@@ -23,7 +23,6 @@ type Config struct {
 	SmsClient                         smsv1.SmsActivationServiceClient
 	MailboxClient                     pb.MailboxServiceClient
 	EmailAllocator                    AccountEmailAllocator
-	SMSTarget                         SMSTargetConfig
 	OTPTimeout                        int32
 	RegistrationOTPTimeout            int32
 	GoPayAppStepBodyLimit             int32
@@ -50,7 +49,6 @@ type Server struct {
 	smsClient                         smsv1.SmsActivationServiceClient
 	mailboxClient                     pb.MailboxServiceClient
 	emailAllocator                    AccountEmailAllocator
-	smsTarget                         SMSTargetConfig
 	otpTimeout                        int32
 	regOTPTimeout                     int32
 	gopayAppStepBodyLimit             int32
@@ -78,7 +76,6 @@ func NewServer(cfg Config) *Server {
 		smsClient:                         cfg.SmsClient,
 		mailboxClient:                     cfg.MailboxClient,
 		emailAllocator:                    defaultAccountEmailAllocator(cfg.EmailAllocator, cfg.AccountClient),
-		smsTarget:                         cfg.SMSTarget.withDefaults(),
 		otpTimeout:                        cfg.OTPTimeout,
 		regOTPTimeout:                     cfg.RegistrationOTPTimeout,
 		gopayAppStepBodyLimit:             cfg.GoPayAppStepBodyLimit,

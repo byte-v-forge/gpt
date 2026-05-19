@@ -31,14 +31,6 @@ type orchestratorConfig struct {
 	BrowserAuthGeoIP          bool
 	BrowserAuthHumanize       string
 
-	SMSApplicationKey     string
-	SMSCountryISO2        string
-	SMSCountryCallingCode string
-	SMSMaxPriceDecimal    string
-	SMSMaxPriceCurrency   string
-	SMSLeaseDuration      time.Duration
-	SMSPollInterval       time.Duration
-
 	GoPayOTPWebhookListenAddr              string
 	GoPayOTPWebhookTTL                     time.Duration
 	GoPayOTPWebhookMaxItems                int
@@ -104,14 +96,6 @@ func loadOrchestratorConfig() orchestratorConfig {
 		BrowserAuthBlockImages:    envBool("BROWSER_AUTH_BLOCK_IMAGES", false),
 		BrowserAuthGeoIP:          envBool("BROWSER_AUTH_GEOIP", true),
 		BrowserAuthHumanize:       envDefault("BROWSER_AUTH_HUMANIZE", "true"),
-
-		SMSApplicationKey:     envDefault("SMS_APPLICATION_KEY", "gopay"),
-		SMSCountryISO2:        envDefault("SMS_COUNTRY_ISO2", "ID"),
-		SMSCountryCallingCode: envDefault("SMS_COUNTRY_CALLING_CODE", "62"),
-		SMSMaxPriceDecimal:    envDefault("SMS_MAX_PRICE_DECIMAL", ""),
-		SMSMaxPriceCurrency:   envDefault("SMS_MAX_PRICE_CURRENCY", ""),
-		SMSLeaseDuration:      envNonNegativeDurationSeconds("SMS_LEASE_SECONDS", 20*time.Minute),
-		SMSPollInterval:       envPositiveDurationSeconds("SMS_POLL_INTERVAL_SECONDS", 5*time.Second),
 
 		GoPayOTPWebhookListenAddr:              envDefault("GOPAY_OTP_WEBHOOK_LISTEN_ADDR", ":8081"),
 		GoPayOTPWebhookTTL:                     envPositiveDurationSeconds("GOPAY_OTP_WEBHOOK_TTL_SECONDS", 10*time.Minute),

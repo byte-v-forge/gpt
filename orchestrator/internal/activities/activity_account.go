@@ -86,7 +86,7 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 	email := spec.Email
 	if strings.TrimSpace(email) == "" {
 		var err error
-		email, err = s.acquireEmail(ctx, spec.GetAccountId(), nil)
+		email, err = s.acquireEmail(ctx, spec.GetAccountId(), nil, accountUsesSplitStrategy(spec))
 		if err != nil {
 			return AccountRef{}, err
 		}
@@ -96,7 +96,7 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 		AccountId: spec.GetAccountId(),
 		Email:     email,
 		Password:  spec.GetPassword(),
-		Status:    statusCreated,
+		Status:    accountStatusUnregistered,
 	}})
 	if err != nil {
 		if account, getErr := s.getAccount(ctx, spec.GetAccountId()); getErr == nil {
@@ -113,12 +113,12 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 	return accountRef(resp.GetAccount()), nil
 }
 
-func (s *Server) acquireEmail(ctx context.Context, accountID string, excludes []string) (string, error) {
+func (s *Server) acquireEmail(ctx context.Context, accountID string, excludes []string, useSplitStrategy bool) (string, error) {
 	allocator := s.emailAllocator
 	if allocator == nil {
 		allocator = defaultAccountEmailAllocator(nil, s.accountClient)
 	}
-	email, err := allocator.Allocate(ctx, accountID, excludes)
+	email, err := allocator.Allocate(ctx, accountID, excludes, useSplitStrategy)
 	if err != nil {
 		return "", err
 	}
@@ -127,6 +127,13 @@ func (s *Server) acquireEmail(ctx context.Context, accountID string, excludes []
 		return "", fmt.Errorf("email allocator returned empty email")
 	}
 	return email, nil
+}
+
+func accountUsesSplitStrategy(spec *pb.AccountSpec) bool {
+	if spec == nil || spec.UseSplitStrategy == nil {
+		return true
+	}
+	return spec.GetUseSplitStrategy()
 }
 
 func (s *Server) ResolveAccountFromJobActivity(ctx context.Context, input ResolveAccountInput) (AccountRef, error) {

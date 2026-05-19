@@ -36,4 +36,4 @@
 浏览器注册和登录通过 `BROWSER_AUTOMATION_ADDR` 连接 `browser-automation`，并使用 `BROWSER_AUTH_PROXY_REF`、`BROWSER_AUTH_LOCALE`、`BROWSER_AUTH_TIMEZONE` 和 `BROWSER_AUTH_WINDOW_WIDTH` / `BROWSER_AUTH_WINDOW_HEIGHT` 描述浏览器 profile。
 邮箱验证码和邮箱池读取通过 `MAILBOX_ADDR` 连接 `mailbox-api`。
 GoPay webhook OTP 由 orchestrator 进程内 HTTP 入口接收，`GOPAY_OTP_WEBHOOK_LISTEN_ADDR` 控制监听地址，`GOPAY_OTP_WEBHOOK_TTL_SECONDS` 和 `GOPAY_OTP_WEBHOOK_MAX_ITEMS` 控制内存队列生命周期。
-接码生命周期通过 `SMS_ADDR` 连接 `sms-service`，并使用 `SMS_APPLICATION_KEY`、`SMS_COUNTRY_ISO2`、`SMS_COUNTRY_CALLING_CODE`、`SMS_MAX_PRICE_DECIMAL` 和 `SMS_POLL_INTERVAL_SECONDS` 描述 GPT/GoPay 所需目标。
+GoPay 接码生命周期通过 `SMS_ADDR` 连接 `sms-service`，目标固定为 GoPay 使用的印度尼西亚号码策略。

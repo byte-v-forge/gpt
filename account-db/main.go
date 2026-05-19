@@ -469,7 +469,7 @@ func (s *accountDatabaseServer) buildAccount(input *pb.Account) (*db.Account, er
 		account.DOB = randomDOB(now)
 	}
 	if account.Status == "" {
-		account.Status = "CREATED"
+		account.Status = "UNREGISTERED"
 	}
 
 	return account, nil

@@ -25,6 +25,8 @@ message PersistActivatedInput {
 message ProbePlusTrialActivityInput {
   string job_id = 1;
   string account_id = 2;
+  string access_token = 3;
+  string session_token = 4;
 }
 
 message ProbeTierActivityInput {
@@ -72,6 +74,7 @@ message GoPayActivityInput {
   string gopay_phone = 12;
   string sms_activation_id = 13;
   string user_id = 14; // WA 接码来源；local 或 tg:<user_id>
+  bool skip_account_balance_check = 15; // 已有 GoPay state 直接支付时跳过余额等待
 }
 
 message GoPayActivityOutput {

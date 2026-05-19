@@ -10,6 +10,7 @@ option go_package = "./;pb";
 service GoPayAppWorkflowService {
   rpc RunGoPayApp(GoPayAppRequest) returns (GoPayAppResponse);
   rpc RunGoPayPayment(GoPayPaymentRequest) returns (GoPayPaymentResponse);
+  rpc RunGoPayWAPayment(GoPayWAPaymentRequest) returns (GoPayPaymentResponse);
   rpc RetryGoPayPaymentRebind(GoPayPaymentRebindRequest) returns (GoPayPaymentResponse);
   rpc ConfirmManualAddBalance(ConfirmManualAddBalanceRequest) returns (ConfirmManualAddBalanceResponse);
   rpc GoPayUserStatus(GoPayUserStatusRequest) returns (GoPayUserStatusResponse);
@@ -66,6 +67,16 @@ message GoPayPaymentRequest {
   int32 add_balance_confirm_timeout_seconds = 6;
   string user_id = 7; // local 或 tg:<user_id>；WA 接码来源和 GoPay state 归属用户
   string wa_phone = 8; // WA 支付注册手机号；为空时使用 user_id 已保存值或本地配置
+}
+
+message GoPayWAPaymentRequest {
+  oneof payer {
+    string account_id = 1;
+    string access_token = 5;
+  }
+  string source_job_id = 2;
+  string user_id = 3; // local 或 tg:<user_id>；WA state 归属用户
+  string wa_phone = 4; // WA 支付手机号；为空时使用 user_id 已保存值或本地配置
 }
 
 message GoPayPaymentResponse {
@@ -325,6 +336,27 @@ message GoPayAppWorkflowResult {
   bool signup_pin_complete = 9;
 }
 
+message GoPayAppOTPWorkflowInput {
+  string job_id = 1;
+  string phone = 2;
+  string otp_channel = 3;
+  string sms_activation_id = 4;
+  string source = 5;
+  bool reset_state = 6;
+  string state_json = 7;
+}
+
+message GoPayAppChangePhoneWorkflowInput {
+  string job_id = 1;
+  string state_json = 2;
+}
+
+message GoPayAppDeactivateWorkflowInput {
+  string job_id = 1;
+  string activation_id = 2;
+  string state_json = 3;
+}
+
 message GoPayPaymentWorkflowInput {
   string job_id = 1;
   string account_id = 2;
@@ -335,6 +367,17 @@ message GoPayPaymentWorkflowInput {
   int32 add_balance_confirm_timeout_seconds = 7;
   string user_id = 8;
   string wa_phone = 9;
+}
+
+message GoPayWAPaymentWorkflowInput {
+  string job_id = 1;
+  oneof payer {
+    string account_id = 2;
+    string access_token = 6;
+  }
+  string source_job_id = 3;
+  string user_id = 4;
+  string wa_phone = 5;
 }
 
 message GoPayPaymentWorkflowResult {

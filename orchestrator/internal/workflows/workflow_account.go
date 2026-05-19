@@ -367,7 +367,7 @@ func RegisterAndActivateWorkflow(ctx workflow.Context, input RegisterAndActivate
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
-	logon, err := runGoPayAppAuth(ctx, atomicCtx, retryCtx, input.GetJobId(), goPayAppOTPOptions{})
+	logon, err := runGoPayAppAuthChild(ctx, input.GetJobId(), goPayAppOTPOptions{})
 	if err != nil {
 		combined := map[string]any{"register_account": registerData(), "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, combined), nil

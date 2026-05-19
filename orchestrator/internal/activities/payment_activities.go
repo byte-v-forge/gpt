@@ -12,16 +12,18 @@ import (
 
 func (s *Server) GoPayPaymentPrepareActivity(ctx context.Context, input GoPayActivityInput) (GoPayPaymentPrepareOutput, error) {
 	output := GoPayPaymentPrepareOutput{}
-	account, err := s.getAccount(ctx, input.GetAccountId())
-	if err != nil {
-		return output, err
-	}
-	if err := accountEligibleForActivation(account); err != nil {
-		return output, err
-	}
 	step, err := s.startActivityStep(ctx, input.GetJobId(), stepGoPayPaymentPrepare, false, true)
 	if err != nil {
 		return output, err
+	}
+	account, err := s.paymentActivityAccount(ctx, &input)
+	if err != nil {
+		return output, step.complete(map[string]any{"error_message": err.Error()}, err)
+	}
+	if account != nil && strings.TrimSpace(input.GetSessionToken()) == "" && strings.TrimSpace(input.GetAccessToken()) == "" {
+		if err := accountEligibleForActivation(account); err != nil {
+			return output, step.complete(map[string]any{"account_id": account.GetAccountId(), "error_message": err.Error()}, err)
+		}
 	}
 
 	output, err = s.prepareGoPayPayment(ctx, step, input, account)
@@ -33,16 +35,18 @@ func (s *Server) GoPayPaymentPrepareActivity(ctx context.Context, input GoPayAct
 
 func (s *Server) GoPayPaymentStartActivity(ctx context.Context, input GoPayActivityInput) (GoPayPaymentStartOutput, error) {
 	output := GoPayPaymentStartOutput{}
-	account, err := s.getAccount(ctx, input.GetAccountId())
-	if err != nil {
-		return output, err
-	}
-	if err := accountEligibleForActivation(account); err != nil {
-		return output, err
-	}
 	step, err := s.startActivityStep(ctx, input.GetJobId(), stepGoPayPayment, false, true)
 	if err != nil {
 		return output, err
+	}
+	account, err := s.paymentActivityAccount(ctx, &input)
+	if err != nil {
+		return output, s.completeGoPayPaymentStep(ctx, input.GetJobId(), input.GetAccountId(), map[string]any{"error_message": err.Error()}, err)
+	}
+	if account != nil && strings.TrimSpace(input.GetSessionToken()) == "" && strings.TrimSpace(input.GetAccessToken()) == "" {
+		if err := accountEligibleForActivation(account); err != nil {
+			return output, s.completeGoPayPaymentStep(ctx, input.GetJobId(), input.GetAccountId(), map[string]any{"account_id": account.GetAccountId(), "error_message": err.Error()}, err)
+		}
 	}
 
 	output, err = s.startGoPayPayment(ctx, step, input, account)
@@ -97,6 +101,22 @@ func (s *Server) GoPayPaymentCompleteActivity(ctx context.Context, input GoPayPa
 		StateJson:         stateJSON,
 	}
 	return output, step.complete(data, nil)
+}
+
+func (s *Server) paymentActivityAccount(ctx context.Context, input *GoPayActivityInput) (*pb.Account, error) {
+	accountID := strings.TrimSpace(input.GetAccountId())
+	if accountID != "" {
+		return s.getAccount(ctx, accountID)
+	}
+	sessionToken := strings.TrimSpace(input.GetSessionToken())
+	accessToken := strings.TrimSpace(input.GetAccessToken())
+	if sessionToken == "" && accessToken == "" {
+		return nil, fmt.Errorf("account_id, session_token, or access_token is required")
+	}
+	return &pb.Account{
+		SessionToken: sessionToken,
+		AccessToken:  accessToken,
+	}, nil
 }
 
 func (s *Server) GoPayPaymentOTPResendActivity(ctx context.Context, input GoPayPaymentOTPResendInput) (GoPayPaymentOTPResendOutput, error) {
@@ -255,6 +275,7 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 	checkoutSessionID := strings.TrimSpace(input.GetCheckoutSessionId())
 	otpChannel := normalizeGoPayOTPChannel(input.GetOtpChannel())
 	useAccountToken := input.GetUseAccountToken()
+	skipBalanceCheck := input.GetSkipAccountBalanceCheck()
 	stateJSON := normalizeGoPayWorkflowStateJSON(input.GetStateJson())
 	preparedFlowID := strings.TrimSpace(input.GetPreparedFlowId())
 	requestedPhone := normalizeIndonesiaPhone(input.GetGopayPhone())
@@ -295,59 +316,83 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 	})
 	accountToken := ""
 	if useAccountToken {
-		data["account_balance_check"] = map[string]any{"required_before_payment": true}
-		step.progress("waiting for gopay min balance", nil)
-		stateJSON, err = s.waitForGoPayMinBalance(ctx, step, stateJSON)
-		if err != nil {
+		data["account_balance_check"] = map[string]any{"required_before_payment": !skipBalanceCheck}
+		if skipBalanceCheck {
+			data["account_balance_check"] = map[string]any{
+				"required_before_payment": false,
+				"skipped":                 true,
+			}
+			accountPhone = requestedPhone
+			if accountPhone == "" {
+				accountPhone = configuredGoPayPhone()
+			}
+			if accountPhone == "" {
+				err := fmt.Errorf("gopay phone is required")
+				data["gopay_phone"] = map[string]any{
+					"present":       false,
+					"error_message": err.Error(),
+				}
+				return output, err
+			}
+			data["account_token"] = map[string]any{
+				"ready_check_skipped": true,
+				"phone_present":       accountPhone != "",
+				"phone":               accountPhone,
+			}
+		} else {
+			step.progress("waiting for gopay min balance", nil)
+			stateJSON, err = s.waitForGoPayMinBalance(ctx, step, stateJSON)
+			if err != nil {
+				data["account_balance_check"] = map[string]any{
+					"required_before_payment": true,
+					"ready":                   false,
+					"error_message":           err.Error(),
+				}
+				return output, err
+			}
 			data["account_balance_check"] = map[string]any{
 				"required_before_payment": true,
-				"ready":                   false,
-				"error_message":           err.Error(),
+				"ready":                   true,
 			}
-			return output, err
-		}
-		data["account_balance_check"] = map[string]any{
-			"required_before_payment": true,
-			"ready":                   true,
-		}
 
-		var phone string
-		var nextStateJSON string
-		accountToken, phone, nextStateJSON, err = s.readyGoPayAccountToken(ctx, stateJSON)
-		stateJSON = nextStateJSON
-		if err != nil {
-			data["account_token"] = map[string]any{
-				"ready":         false,
-				"error_message": err.Error(),
+			var phone string
+			var nextStateJSON string
+			accountToken, phone, nextStateJSON, err = s.readyGoPayAccountToken(ctx, stateJSON)
+			stateJSON = nextStateJSON
+			if err != nil {
+				data["account_token"] = map[string]any{
+					"ready":         false,
+					"error_message": err.Error(),
+				}
+				return output, err
 			}
-			return output, err
-		}
-		accountPhone = normalizeIndonesiaPhone(phone)
-		if accountPhone == "" {
-			accountPhone = requestedPhone
-		}
-		if accountPhone == "" {
-			accountPhone = configuredGoPayPhone()
-		}
-		if accountPhone == "" {
-			err := fmt.Errorf("account phone is required")
+			accountPhone = normalizeIndonesiaPhone(phone)
+			if accountPhone == "" {
+				accountPhone = requestedPhone
+			}
+			if accountPhone == "" {
+				accountPhone = configuredGoPayPhone()
+			}
+			if accountPhone == "" {
+				err := fmt.Errorf("account phone is required")
+				data["account_token"] = map[string]any{
+					"ready":         true,
+					"phone_present": false,
+					"error_message": err.Error(),
+				}
+				return output, err
+			}
+			if preparedFlowID == "" {
+				sessionToken = ""
+				accessToken = accountToken
+				data["session_token_present"] = false
+				data["access_token_present"] = accessToken != ""
+			}
 			data["account_token"] = map[string]any{
 				"ready":         true,
-				"phone_present": false,
-				"error_message": err.Error(),
+				"phone_present": accountPhone != "",
+				"phone":         accountPhone,
 			}
-			return output, err
-		}
-		if preparedFlowID == "" {
-			sessionToken = ""
-			accessToken = accountToken
-			data["session_token_present"] = false
-			data["access_token_present"] = accessToken != ""
-		}
-		data["account_token"] = map[string]any{
-			"ready":         true,
-			"phone_present": accountPhone != "",
-			"phone":         accountPhone,
 		}
 	}
 

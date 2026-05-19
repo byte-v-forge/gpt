@@ -17,7 +17,6 @@ func ActivateAccountWorkflow(ctx workflow.Context, input ActivateAccountWorkflow
 	}()
 	retryCtx := workflow.WithActivityOptions(ctx, retryableActivityOptions(30*time.Second, 5))
 	atomicCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(15*time.Minute))
-	gopayCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(5*time.Minute))
 	paymentCtx := workflow.WithActivityOptions(ctx, paymentActivityOptions())
 	action := input.Action
 	if action == "" {
@@ -60,7 +59,7 @@ func ActivateAccountWorkflow(ctx workflow.Context, input ActivateAccountWorkflow
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
-	logon, err := runGoPayAppAuth(ctx, gopayCtx, retryCtx, input.GetJobId(), goPayAppOTPOptions{})
+	logon, err := runGoPayAppAuthChild(ctx, input.GetJobId(), goPayAppOTPOptions{})
 	if err != nil {
 		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}), nil
 	}
@@ -111,7 +110,6 @@ func AutoPayWorkflow(ctx workflow.Context, input AutoPayWorkflowInput) (AutoPayW
 	}()
 	retryCtx := workflow.WithActivityOptions(ctx, retryableActivityOptions(30*time.Second, 5))
 	atomicCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(15*time.Minute))
-	gopayCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(5*time.Minute))
 	paymentCtx := workflow.WithActivityOptions(ctx, paymentActivityOptions())
 	tierCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(2*time.Minute))
 
@@ -151,7 +149,7 @@ func AutoPayWorkflow(ctx workflow.Context, input AutoPayWorkflowInput) (AutoPayW
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
-	logon, err := runGoPayAppAuth(ctx, gopayCtx, retryCtx, input.GetJobId(), goPayAppOTPOptions{})
+	logon, err := runGoPayAppAuthChild(ctx, input.GetJobId(), goPayAppOTPOptions{})
 	if err != nil {
 		return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}), nil
 	}

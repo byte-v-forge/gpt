@@ -198,6 +198,26 @@ func (s *Server) RunGoPayPayment(ctx context.Context, req *pb.GoPayPaymentReques
 	return &pb.GoPayPaymentResponse{JobId: jobID, Started: true}, nil
 }
 
+func (s *Server) RunGoPayWAPayment(ctx context.Context, req *pb.GoPayWAPaymentRequest) (*pb.GoPayPaymentResponse, error) {
+	jobID := uuid.NewString()
+	input := workflows.GoPayWAPaymentWorkflowInput{
+		JobId:       jobID,
+		SourceJobId: strings.TrimSpace(req.GetSourceJobId()),
+		UserId:      strings.TrimSpace(req.GetUserId()),
+		WaPhone:     strings.TrimSpace(req.GetWaPhone()),
+	}
+	if accessToken := strings.TrimSpace(req.GetAccessToken()); accessToken != "" {
+		input.Payer = &pb.GoPayWAPaymentWorkflowInput_AccessToken{AccessToken: accessToken}
+	} else if accountID := strings.TrimSpace(req.GetAccountId()); accountID != "" {
+		input.Payer = &pb.GoPayWAPaymentWorkflowInput_AccountId{AccountId: accountID}
+	}
+	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionGoPayWAPayment, jobID)), workflows.GoPayWAPaymentWorkflow, input)
+	if err != nil {
+		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	return &pb.GoPayPaymentResponse{JobId: jobID, Started: true}, nil
+}
+
 func (s *Server) RetryGoPayPaymentRebind(ctx context.Context, req *pb.GoPayPaymentRebindRequest) (*pb.GoPayPaymentResponse, error) {
 	sourceJobID := strings.TrimSpace(req.GetSourceJobId())
 	if sourceJobID == "" {

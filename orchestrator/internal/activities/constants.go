@@ -11,6 +11,7 @@ const (
 	actionAutopay             = contracts.ActionAutopay
 	actionGoPayApp            = contracts.ActionGoPayApp
 	actionGoPayPayment        = contracts.ActionGoPayPayment
+	actionGoPayWAPayment      = contracts.ActionGoPayWAPayment
 	actionGoPayPaymentRebind  = contracts.ActionGoPayPaymentRebind
 	actionProbeAccount        = contracts.ActionProbeAccount
 	actionLoginSession        = contracts.ActionLoginSession

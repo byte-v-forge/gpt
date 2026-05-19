@@ -8,26 +8,40 @@ import (
 )
 
 func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input ProbePlusTrialActivityInput) (ProbePlusTrialActivityOutput, error) {
-	account, err := s.getAccount(ctx, input.GetAccountId())
-	if err != nil {
-		return ProbePlusTrialActivityOutput{}, err
-	}
-	if err := rejectUserAlreadyExistsAccount(account); err != nil {
-		return ProbePlusTrialActivityOutput{}, err
+	var account *pb.Account
+	accountID := strings.TrimSpace(input.GetAccountId())
+	if accountID != "" {
+		var err error
+		account, err = s.getAccount(ctx, accountID)
+		if err != nil {
+			return ProbePlusTrialActivityOutput{}, err
+		}
+		if err := rejectUserAlreadyExistsAccount(account); err != nil {
+			return ProbePlusTrialActivityOutput{}, err
+		}
 	}
 
 	var output ProbePlusTrialActivityOutput
+	var err error
 	step := s.activityStep(ctx, input.GetJobId(), stepProbePlusTrial, false, true)
 	_, err = step.run(func() (any, error) {
-		sessionToken := strings.TrimSpace(account.GetSessionToken())
-		accessToken := strings.TrimSpace(account.GetAccessToken())
+		sessionToken := strings.TrimSpace(input.GetSessionToken())
+		accessToken := strings.TrimSpace(input.GetAccessToken())
+		if account != nil {
+			if sessionToken == "" {
+				sessionToken = strings.TrimSpace(account.GetSessionToken())
+			}
+			if accessToken == "" {
+				accessToken = strings.TrimSpace(account.GetAccessToken())
+			}
+		}
 		data := map[string]any{
-			"account_id":            account.GetAccountId(),
+			"account_id":            accountID,
 			"session_token_present": sessionToken != "",
 			"access_token_present":  accessToken != "",
 		}
 		ref := accountRef(account)
-		if shouldSkipPlusTrialProbe(ref) {
+		if account != nil && shouldSkipPlusTrialProbe(ref) {
 			for key, value := range skippedPlusTrialProbeData(ref) {
 				data[key] = value
 			}
@@ -48,7 +62,7 @@ func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input ProbePl
 			data["plan_type"] = ref.GetTier()
 			data["source"] = source
 			update := &pb.Account{
-				AccountId:         input.GetAccountId(),
+				AccountId:         accountID,
 				PlusTrialEligible: boolPtr(false),
 				PlusActive:        boolPtr(true),
 			}
@@ -123,22 +137,24 @@ func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input ProbePl
 			if tier == "" && !resp.GetPlusActive() {
 				tier = "free"
 			}
-			update := &pb.Account{
-				AccountId:         input.GetAccountId(),
-				PlusTrialEligible: boolPtr(resp.GetPlusTrialEligible()),
-				PlusActive:        boolPtr(resp.GetPlusActive()),
-				Tier:              tier,
+			if accountID != "" {
+				update := &pb.Account{
+					AccountId:         accountID,
+					PlusTrialEligible: boolPtr(resp.GetPlusTrialEligible()),
+					PlusActive:        boolPtr(resp.GetPlusActive()),
+					Tier:              tier,
+				}
+				if resp.GetPlusActive() {
+					update.Status = accountStatusActivated
+					update.ErrorMessage = ""
+				}
+				if updateErr := s.updateAccount(ctx, update); updateErr != nil {
+					data["account_update_error"] = updateErr.Error()
+					output.Data = protoData(data)
+					return data, updateErr
+				}
+				data["account_updated"] = true
 			}
-			if resp.GetPlusActive() {
-				update.Status = accountStatusActivated
-				update.ErrorMessage = ""
-			}
-			if updateErr := s.updateAccount(ctx, update); updateErr != nil {
-				data["account_update_error"] = updateErr.Error()
-				output.Data = protoData(data)
-				return data, updateErr
-			}
-			data["account_updated"] = true
 		}
 		output.Data = protoData(data)
 		return data, nil

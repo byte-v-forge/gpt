@@ -8,6 +8,7 @@ const (
 	ActionAutopay             = "AUTOPAY"
 	ActionGoPayApp            = "GOPAY_APP"
 	ActionGoPayPayment        = "GOPAY_PAYMENT"
+	ActionGoPayWAPayment      = "GOPAY_WA_PAYMENT"
 	ActionGoPayPaymentRebind  = "GOPAY_PAYMENT_REBIND"
 	ActionProbeAccount        = "PROBE_ACCOUNT"
 	ActionLoginSession        = "LOGIN_SESSION"
@@ -87,6 +88,8 @@ func WorkflowID(action string, jobID string) (string, bool) {
 		return "gopay-app-" + jobID, true
 	case ActionGoPayPayment:
 		return "gopay-payment-" + jobID, true
+	case ActionGoPayWAPayment:
+		return "gopay-wa-payment-" + jobID, true
 	case ActionGoPayPaymentRebind:
 		return "gopay-payment-rebind-" + jobID, true
 	case ActionProbeAccount:
@@ -102,7 +105,7 @@ func WorkflowID(action string, jobID string) (string, bool) {
 
 func ManualOTPWorkflowID(action string, jobID string) (string, bool) {
 	switch strings.TrimSpace(action) {
-	case ActionRegister, ActionActivate, ActionAutopay, ActionGoPayApp, ActionGoPayPayment, ActionGoPayPaymentRebind, ActionRegisterAndActivate, ActionLoginSession:
+	case ActionRegister, ActionActivate, ActionAutopay, ActionGoPayApp, ActionGoPayPayment, ActionGoPayWAPayment, ActionGoPayPaymentRebind, ActionRegisterAndActivate, ActionLoginSession:
 		return WorkflowID(action, jobID)
 	default:
 		return "", false

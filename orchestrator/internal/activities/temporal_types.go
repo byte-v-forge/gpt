@@ -84,6 +84,7 @@ type AutoPayWorkflowResult = pb.AutoPayWorkflowResult
 type GoPayAppWorkflowInput = pb.GoPayAppWorkflowInput
 type GoPayAppWorkflowResult = pb.GoPayAppWorkflowResult
 type GoPayPaymentWorkflowInput = pb.GoPayPaymentWorkflowInput
+type GoPayWAPaymentWorkflowInput = pb.GoPayWAPaymentWorkflowInput
 type GoPayPaymentWorkflowResult = pb.GoPayPaymentWorkflowResult
 type GoPayPaymentRebindWorkflowInput = pb.GoPayPaymentRebindWorkflowInput
 type GoPayPaymentRebindWorkflowResult = pb.GoPayPaymentRebindWorkflowResult

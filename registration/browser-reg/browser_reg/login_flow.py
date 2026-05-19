@@ -4,17 +4,16 @@ import platform as _platform
 import random
 import shutil
 import tempfile
-import time
 from typing import Callable, Optional
 from urllib.parse import urlparse
 
 from browserforge.fingerprints import Screen
 from camoufox.sync_api import Camoufox
 
-from browser_reg.cookies import extract_session_token
-from browser_reg.flow import (
+from browser_reg.automation import (
     BrowserRegistrationCancelled,
-    _is_playwright_target_closed_error,
+    _env_bool,
+    _interruptible_sleep,
     apply_browser_language_overrides,
     browser_accept_language,
     browser_firefox_user_prefs,
@@ -24,27 +23,12 @@ from browser_reg.flow import (
     browser_timezone,
     browser_window_size,
     cleanup_stale_browser_profiles,
+    is_playwright_target_closed_error,
 )
+from browser_reg.cookies import extract_session_token
 from browser_reg.sensitive import redact_email, sanitize_text, sanitize_url_for_log
 
 logger = logging.getLogger(__name__)
-
-
-def _interruptible_sleep(seconds: float, check_cancel: Callable[[], None]) -> None:
-    deadline = time.time() + max(0.0, seconds)
-    while True:
-        check_cancel()
-        remaining = deadline - time.time()
-        if remaining <= 0:
-            return
-        time.sleep(min(0.25, remaining))
-
-
-def _env_bool(name: str, default: bool) -> bool:
-    value = os.environ.get(name, "").strip().lower()
-    if not value:
-        return default
-    return value not in ("0", "false", "no", "off")
 
 
 def browser_login(
@@ -68,7 +52,7 @@ def browser_login(
 
     screenshot_dir = os.environ.get("SCREENSHOT_DIR", "/tmp/screenshots")
     os.makedirs(screenshot_dir, exist_ok=True)
-    cleanup_stale_browser_profiles(4 * 3600)
+    cleanup_stale_browser_profiles("chatgpt_login_", 4 * 3600)
 
     tmp_profile = tempfile.mkdtemp(prefix="chatgpt_login_")
     logger.info("[browser-reg] Temp login profile: %s", tmp_profile)
@@ -106,7 +90,7 @@ def browser_login(
                 if not page.is_closed():
                     return page
             except Exception as e:
-                if not _is_playwright_target_closed_error(e):
+                if not is_playwright_target_closed_error(e):
                     raise
 
         if ctx is None:
@@ -130,7 +114,7 @@ def browser_login(
             try:
                 return action(active_page())
             except Exception as e:
-                if attempt == 0 and _is_playwright_target_closed_error(e):
+                if attempt == 0 and is_playwright_target_closed_error(e):
                     last_error = e
                     page = None
                     continue

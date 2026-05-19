@@ -22,12 +22,26 @@ Returns: {email, password, session_token, access_token, device_id, cookie_header
 import os
 import random
 import re
-import time
 import logging
 import tempfile
 import shutil
 from typing import Any, Callable, Optional
 
+from browser_reg.automation import (
+    BrowserRegistrationCancelled,
+    _env_bool,
+    _interruptible_sleep,
+    apply_browser_language_overrides,
+    browser_accept_language,
+    browser_firefox_user_prefs,
+    browser_languages,
+    browser_locale,
+    browser_process_env,
+    browser_timezone,
+    browser_window_size,
+    cleanup_stale_browser_profiles,
+    is_playwright_target_closed_error,
+)
 from browser_reg.cookies import extract_session_token
 from browser_reg.sensitive import redact_email, sanitize_text, sanitize_url_for_log
 
@@ -56,134 +70,6 @@ _CHECKOUT_AMOUNT_EXCLUDED_PATH_PARTS = {
     "tax_amount",
     "discount_amount",
 }
-
-
-class BrowserRegistrationCancelled(RuntimeError):
-    pass
-
-
-def _interruptible_sleep(seconds: float, check_cancel: Callable[[], None]) -> None:
-    deadline = time.time() + max(0.0, seconds)
-    while True:
-        check_cancel()
-        remaining = deadline - time.time()
-        if remaining <= 0:
-            return
-        time.sleep(min(0.25, remaining))
-
-
-def _env_bool(name: str, default: bool = False) -> bool:
-    value = os.environ.get(name, "").strip().lower()
-    if not value:
-        return default
-    return value in {"1", "true", "yes", "on"}
-
-
-def _env_int(name: str, default: int) -> int:
-    value = os.environ.get(name, "").strip()
-    if not value:
-        return default
-    try:
-        return int(value)
-    except ValueError:
-        return default
-
-
-def _env_str(name: str, default: str) -> str:
-    value = os.environ.get(name, "").strip()
-    return value or default
-
-
-def browser_locale() -> str:
-    return _env_str("BROWSER_REG_LOCALE", "en-US")
-
-
-def browser_languages() -> list[str]:
-    raw = _env_str("BROWSER_REG_LANGUAGES", f"{browser_locale()},en")
-    languages: list[str] = []
-    for item in re.split(r"[\s,]+", raw):
-        item = item.strip()
-        if item and item not in languages:
-            languages.append(item)
-    return languages or ["en-US", "en"]
-
-
-def browser_accept_language() -> str:
-    languages = browser_languages()
-    if len(languages) == 1:
-        return languages[0]
-    return ", ".join(
-        lang if index == 0 else f"{lang};q={max(0.1, 1.0 - index * 0.1):.1f}"
-        for index, lang in enumerate(languages)
-    )
-
-
-def browser_timezone() -> str:
-    return os.environ.get("BROWSER_REG_TIMEZONE", "").strip()
-
-
-def browser_window_size() -> tuple[int, int]:
-    width = max(800, _env_int("BROWSER_REG_WINDOW_WIDTH", 1365))
-    height = max(600, _env_int("BROWSER_REG_WINDOW_HEIGHT", 768))
-    return width, height
-
-
-def browser_firefox_user_prefs() -> dict[str, Any]:
-    return {
-        "intl.accept_languages": browser_accept_language(),
-        "intl.locale.requested": browser_locale(),
-        "javascript.use_us_english_locale": True,
-    }
-
-
-def browser_process_env() -> dict[str, str]:
-    env = dict(os.environ)
-    env.update({
-        "LANG": "en_US.UTF-8",
-        "LC_ALL": "en_US.UTF-8",
-        "LANGUAGE": "en_US:en",
-    })
-    return env
-
-
-def apply_browser_language_overrides(ctx) -> None:
-    languages = browser_languages()
-    locale = languages[0]
-    try:
-        ctx.set_extra_http_headers({"Accept-Language": browser_accept_language()})
-    except Exception as e:
-        logger.info("[browser-reg] set Accept-Language failed: %s", sanitize_text(e))
-
-    script = f"""
-(() => {{
-  const language = {locale!r};
-  const languages = {languages!r};
-  const define = (object, property, value) => {{
-    try {{
-      Object.defineProperty(object, property, {{
-        get: () => value,
-        configurable: true,
-      }});
-    }} catch (_) {{}}
-  }};
-  define(Navigator.prototype, 'language', language);
-  define(Navigator.prototype, 'languages', languages);
-}})();
-"""
-    try:
-        ctx.add_init_script(script)
-    except Exception as e:
-        logger.info("[browser-reg] language init script failed: %s", sanitize_text(e))
-
-
-def _is_playwright_target_closed_error(error: Exception) -> bool:
-    text = str(error).lower()
-    return (
-        "target page, context or browser has been closed" in text
-        or "page has been closed" in text
-        or "browser has been closed" in text
-        or "context has been closed" in text
-    )
 
 
 def _parse_checkout_amount(value: Any) -> Optional[int]:
@@ -288,29 +174,6 @@ def _apply_plus_trial_probe_result(result: dict, trial_info: dict) -> None:
     result["plus_trial"] = amount == 0
 
 
-def cleanup_stale_browser_profiles(max_age_seconds: float = 4 * 3600) -> int:
-    """Remove old temp profiles left by killed browser processes."""
-    now = time.time()
-    removed = 0
-    tmp_root = tempfile.gettempdir()
-    try:
-        names = os.listdir(tmp_root)
-    except OSError:
-        return 0
-    for name in names:
-        if not name.startswith("chatgpt_reg_"):
-            continue
-        path = os.path.join(tmp_root, name)
-        try:
-            if now - os.path.getmtime(path) < max_age_seconds:
-                continue
-            shutil.rmtree(path, ignore_errors=True)
-            removed += 1
-        except OSError:
-            continue
-    return removed
-
-
 def _gen_name() -> tuple[str, str]:
     first_names = [
         "James", "John", "Emily", "Sophia", "Michael", "Oliver", "Emma",
@@ -389,7 +252,7 @@ def browser_register(
     screenshot_dir = os.environ.get("SCREENSHOT_DIR", "/tmp/screenshots")
     os.makedirs(screenshot_dir, exist_ok=True)
 
-    removed_profiles = cleanup_stale_browser_profiles(4 * 3600)
+    removed_profiles = cleanup_stale_browser_profiles("chatgpt_reg_", 4 * 3600)
     if removed_profiles:
         logger.info(f"[browser-reg] Removed stale temp profiles: {removed_profiles}")
 
@@ -435,7 +298,7 @@ def browser_register(
                 if not page.is_closed():
                     return page
             except Exception as e:
-                if not _is_playwright_target_closed_error(e):
+                if not is_playwright_target_closed_error(e):
                     raise
 
         if ctx is None:
@@ -459,7 +322,7 @@ def browser_register(
             try:
                 return action(_active_page())
             except Exception as e:
-                if attempt == 0 and _is_playwright_target_closed_error(e):
+                if attempt == 0 and is_playwright_target_closed_error(e):
                     last_error = e
                     page = None
                     continue

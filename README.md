@@ -6,6 +6,7 @@
 
 - `account-db/`：GPT 账号库存和邮箱分配数据服务。
 - `registration/browser-reg/`：GPT 浏览器注册和登录自动化服务。
+  - `browser_reg/automation.py`：浏览器 runtime 配置、语言/窗口/profile 清理等通用自动化边界。
 - `orchestrator/`：GPT 注册、登录、激活、GoPay 支付和任务状态 workflow。
 - `channels/gopay/app/`：GoPay App 通道能力。
 - `channels/gopay/payment/`：GoPay 支付通道能力。

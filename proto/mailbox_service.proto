@@ -11,11 +11,33 @@ service MailboxService {
   rpc UpsertMailbox(email.UpsertEmailMailboxRequest) returns (email.UpsertEmailMailboxResponse);
   rpc DeleteMailbox(email.DeleteMailboxRequest) returns (email.DeleteMailboxResponse);
   rpc WaitForMailboxEmail(email.WaitForEmailRequest) returns (email.WaitForEmailResponse);
+  rpc ListMailboxDomains(ListMailboxDomainsRequest) returns (ListMailboxDomainsResponse);
   rpc RegisterMailbox(RegisterMailboxRequest) returns (RegisterMailboxResponse);
   rpc RunMailboxOAuth(StartMailboxOAuthRequest) returns (StartMailboxOAuthResponse);
   rpc FetchMailboxInboxes(FetchMailboxInboxesRequest) returns (FetchMailboxInboxesResponse);
   rpc GetMailboxOperation(GetMailboxOperationRequest) returns (GetMailboxOperationResponse);
   rpc ListMailboxOperations(ListMailboxOperationsRequest) returns (ListMailboxOperationsResponse);
+}
+
+enum MailboxProvider {
+  MAILBOX_PROVIDER_UNSPECIFIED = 0;
+  MAILBOX_PROVIDER_OUTLOOK = 1;
+  MAILBOX_PROVIDER_CLOUDFLARE = 2;
+}
+
+message MailboxDomain {
+  MailboxProvider provider = 1;
+  string domain = 2;
+  bool enabled = 3;
+}
+
+message ListMailboxDomainsRequest {
+  MailboxProvider provider = 1;
+}
+
+message ListMailboxDomainsResponse {
+  repeated MailboxDomain domains = 1;
+  string error_message = 2;
 }
 
 message RegisterMailboxRequest {

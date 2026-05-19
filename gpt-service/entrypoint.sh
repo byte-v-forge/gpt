@@ -20,7 +20,9 @@ if [[ -z "$service_pg_dsn" ]]; then
 fi
 
 account_addr=${GPT_ACCOUNT_INTERNAL_ADDR:-127.0.0.1:50052}
+account_listen_addr=${GPT_ACCOUNT_LISTEN_ADDR:-:50052}
 payment_addr=${GPT_GOPAY_PAYMENT_INTERNAL_ADDR:-127.0.0.1:50054}
+payment_listen_addr=${GPT_GOPAY_PAYMENT_LISTEN_ADDR:-:50054}
 gopay_app_port=${GPT_GOPAY_APP_INTERNAL_PORT:-50060}
 gopay_app_addr=${GPT_GOPAY_APP_INTERNAL_ADDR:-127.0.0.1:${gopay_app_port}}
 payment_config=${GOPAY_PAYMENT_CONFIG:-/app/gopay-flow/config.json}
@@ -51,7 +53,7 @@ PY
 fi
 
 (
-  export LISTEN_ADDR="$account_addr"
+  export LISTEN_ADDR="$account_listen_addr"
   export PG_DSN="$service_pg_dsn"
   exec /app/bin/account-db
 ) &
@@ -66,7 +68,7 @@ pids+=("$!")
 pids+=("$!")
 
 (
-  exec python /app/gopay-flow/payment_server.py --config "$payment_config" --listen "$payment_addr"
+  exec python /app/gopay-flow/payment_server.py --config "$payment_config" --listen "$payment_listen_addr"
 ) &
 pids+=("$!")
 

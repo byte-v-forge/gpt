@@ -9,17 +9,18 @@ message EmailMailbox {
   string password = 2;
   string refresh_token = 3;
   string access_token = 4;
-  string status = 5;
-  reserved 6;
+  reserved 5, 6;
+  reserved "status";
   string last_error = 7;
   bool is_primary = 8;
   string primary_email = 9;
   int64 created_at = 10;
   int64 updated_at = 11;
-  string latest_otp = 12;
-  string latest_otp_subject = 13;
-  int64 latest_otp_received_at_unix = 14;
+  reserved 12, 13, 14, 16, 17;
+  reserved "latest_otp", "latest_otp_subject", "latest_otp_received_at_unix",
+    "latest_otp_provider", "latest_otp_source_mailbox_email";
   string auth_status = 15;
+  string provider = 18;
 }
 
 message MarkEmailAuthStatusRequest {
@@ -41,8 +42,11 @@ message UpsertEmailMailboxResponse {
 }
 
 message ListEmailMailboxesRequest {
-  string status = 1;
+  reserved 1;
+  reserved "status";
   int32 limit = 2;
+  string auth_status = 3;
+  string provider = 4;
 }
 
 message ListEmailMailboxesResponse {
@@ -59,14 +63,14 @@ message DeleteMailboxResponse {
 
 message WaitForEmailRequest {
   string email_address = 1;
-  string subject_keyword = 2; // e.g., "OTP" or "验证码"
+  string subject_keyword = 2;
   int32 timeout_seconds = 3;
   int64 issued_after_unix = 4;
 }
 
 message WaitForEmailResponse {
   bool found = 1;
-  string content_extracted = 2; // the OTP
+  EmailInboxMessage message = 2;
 }
 
 message EmailInboxMessage {
@@ -77,7 +81,29 @@ message EmailInboxMessage {
   string body_preview = 5;
   int64 received_at_unix = 6;
   repeated string recipients = 7;
-  string otp = 8;
+  reserved 8, 11;
+  reserved "otp", "event_type";
+  string provider = 9;
+  string source_mailbox_email = 10;
+  string body_text = 12;
+  string html_body = 13;
+  int64 raw_size = 14;
+}
+
+message InboundEmailWebhook {
+  int32 version = 1;
+  string provider = 2;
+  string event_id = 3;
+  string message_id = 4;
+  string from_address = 5;
+  repeated string recipients = 6;
+  string subject = 7;
+  string text_body = 8;
+  string html_body = 9;
+  int64 received_at_unix = 10;
+  int64 raw_size = 11;
+  reserved 12, 13;
+  reserved "extracted_otp", "event_type";
 }
 
 message FetchInboxesRequest {

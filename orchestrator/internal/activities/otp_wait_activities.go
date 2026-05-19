@@ -75,7 +75,11 @@ func (s *Server) waitEmailOTP(ctx context.Context, input OTPWaitInput) (OTPWaitO
 		data["error_message"] = err.Error()
 		return OTPWaitOutput{Data: protoData(data)}, err
 	}
-	code := normalizeOTP(resp.GetContentExtracted())
+	message := resp.GetMessage()
+	code := ""
+	if message != nil {
+		code = extractOTP(firstNonEmpty(message.GetBodyText(), message.GetBodyPreview(), message.GetSubject()))
+	}
 	if resp.GetFound() && code != "" {
 		if err := s.setJobParams(ctx, input.GetJobId(), map[string]string{
 			input.GetOtpParam():         code,

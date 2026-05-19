@@ -22,6 +22,13 @@ func Run() {
 	if err := syncGPTEmailAllocationsFromMailboxes(deps); err != nil {
 		log.Fatalf("Failed to sync GPT email allocations: %v", err)
 	}
+	otpWebhookServer, err := startGoPayOTPWebhookServer(cfg.GoPayOTPWebhookListenAddr, deps.otpRelay)
+	if err != nil {
+		log.Fatalf("Failed to start GoPay OTP webhook: %v", err)
+	}
+	if otpWebhookServer != nil {
+		defer otpWebhookServer.Close()
+	}
 
 	lis, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {

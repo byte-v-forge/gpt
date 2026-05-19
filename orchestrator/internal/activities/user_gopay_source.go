@@ -2,7 +2,8 @@ package activities
 
 import (
 	"fmt"
-	"strings"
+
+	"orchestrator/internal/gopayotp"
 )
 
 func normalizeGoPayUserID(value string) (string, error) {
@@ -14,42 +15,13 @@ func normalizeGoPayUserID(value string) (string, error) {
 }
 
 func normalizeGoPaySource(value string) (string, error) {
-	value = strings.TrimSpace(value)
-	if value == "" || value == "local" {
-		return "local", nil
+	source, err := gopayotp.NormalizeSource(value)
+	if err != nil {
+		return "", fmt.Errorf("user_id must be local or tg:<user_id>")
 	}
-	if strings.HasPrefix(value, "tg:") {
-		userID := strings.TrimSpace(strings.TrimPrefix(value, "tg:"))
-		if validTelegramUserID(userID) {
-			return "tg:" + userID, nil
-		}
-	}
-	return "", fmt.Errorf("user_id must be local or tg:<user_id>")
-}
-
-func validTelegramUserID(value string) bool {
-	if value == "" {
-		return false
-	}
-	for _, r := range value {
-		if r < '0' || r > '9' {
-			return false
-		}
-	}
-	return true
+	return source, nil
 }
 
 func goPayOTPQueueKey(source, purpose string) (string, error) {
-	source, err := normalizeGoPaySource(source)
-	if err != nil {
-		return "", err
-	}
-	purpose = strings.ToLower(strings.TrimSpace(purpose))
-	if purpose == "" {
-		return "", fmt.Errorf("otp purpose is required")
-	}
-	if strings.Contains(purpose, "/") {
-		return "", fmt.Errorf("otp purpose must be a single path segment")
-	}
-	return source + "/" + purpose, nil
+	return gopayotp.QueueKey(source, purpose)
 }

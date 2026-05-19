@@ -13,7 +13,7 @@ func activityConfig(cfg orchestratorConfig, deps *orchestratorDependencies) acti
 		AccountClient: deps.accountClient,
 		BrowserClient: deps.browserClient,
 		PaymentClient: deps.paymentClient,
-		OTPClient:     deps.otpClient,
+		OTPRelay:      deps.otpRelay,
 		GoPayClient:   deps.gopayClient,
 		SmsClient:     deps.smsClient,
 		MailboxClient: deps.mailboxClient,

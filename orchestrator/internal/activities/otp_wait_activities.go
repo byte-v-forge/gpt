@@ -98,16 +98,16 @@ func (s *Server) waitPaymentWebhookOTP(ctx context.Context, input OTPWaitInput) 
 	if target == nil {
 		return OTPWaitOutput{}, fmt.Errorf("gopay otp target missing")
 	}
-	if s.otpClient == nil {
-		return OTPWaitOutput{}, fmt.Errorf("gopay otp client not configured")
+	if s.otpRelay == nil {
+		return OTPWaitOutput{}, fmt.Errorf("gopay otp relay not configured")
 	}
-	purpose := strings.TrimSpace(target.GetPurpose())
-	if purpose == "" {
-		var err error
-		purpose, err = goPayOTPQueueKey(target.GetSource(), "gopay")
-		if err != nil {
-			return OTPWaitOutput{}, err
-		}
+	purposeSegment := strings.TrimSpace(target.GetPurpose())
+	if purposeSegment == "" {
+		purposeSegment = "gopay"
+	}
+	purpose, err := goPayOTPQueueKey(target.GetSource(), purposeSegment)
+	if err != nil {
+		return OTPWaitOutput{}, err
 	}
 	timeoutSeconds := input.GetTimeoutSeconds()
 	if timeoutSeconds <= 0 {
@@ -115,42 +115,30 @@ func (s *Server) waitPaymentWebhookOTP(ctx context.Context, input OTPWaitInput) 
 	}
 
 	type otpServiceResult struct {
-		code string
-		err  error
+		code   string
+		source string
+		err    error
 	}
 	otpCtx, cancelOTP := context.WithCancel(ctx)
 	defer cancelOTP()
 
 	otpCh := make(chan otpServiceResult, 1)
 	go func() {
-		reqCtx, cancel := context.WithTimeout(otpCtx, time.Duration(timeoutSeconds+10)*time.Second)
-		defer cancel()
-
-		resp, err := s.otpClient.WaitForOtp(reqCtx, &pb.WaitForOtpRequest{
-			Purpose:         purpose,
-			TimeoutSeconds:  timeoutSeconds,
-			IssuedAfterUnix: input.GetIssuedAfterUnix(),
-		})
+		entry, found, err := s.otpRelay.Wait(otpCtx, purpose, input.GetIssuedAfterUnix(), time.Duration(timeoutSeconds+10)*time.Second)
 		if err != nil {
 			otpCh <- otpServiceResult{err: fmt.Errorf("otp not received after %ds: %w", timeoutSeconds, err)}
 			return
 		}
-		code := ""
-		if resp != nil {
-			code = normalizeOTP(resp.GetOtp())
-		}
-		if resp != nil && resp.GetFound() && code != "" {
-			otpCh <- otpServiceResult{code: code}
+		code := normalizeOTP(entry.OTP)
+		if found && code != "" {
+			source := strings.TrimSpace(entry.Source)
+			if source == "" {
+				source = "webhook"
+			}
+			otpCh <- otpServiceResult{code: code, source: source}
 			return
 		}
-		lastErr := ""
-		if resp != nil {
-			lastErr = resp.GetErrorMessage()
-		}
-		if lastErr == "" {
-			lastErr = "otp not found"
-		}
-		otpCh <- otpServiceResult{err: fmt.Errorf("otp not received after %ds: %s", timeoutSeconds, lastErr)}
+		otpCh <- otpServiceResult{err: fmt.Errorf("otp not received after %ds: otp not found", timeoutSeconds)}
 	}()
 
 	deadline := time.NewTimer(time.Duration(timeoutSeconds) * time.Second)
@@ -182,7 +170,12 @@ func (s *Server) waitPaymentWebhookOTP(ctx context.Context, input OTPWaitInput) 
 					return OTPWaitOutput{Data: protoData(data)}, err
 				}
 				data["found"] = true
-				return OTPWaitOutput{Found: true, Source: "webhook", Data: protoData(data)}, nil
+				source := strings.TrimSpace(otpResult.source)
+				if source == "" {
+					source = "webhook"
+				}
+				data["source"] = source
+				return OTPWaitOutput{Found: true, Source: source, Data: protoData(data)}, nil
 			}
 			if otpResult.err != nil {
 				lastErr = otpResult.err

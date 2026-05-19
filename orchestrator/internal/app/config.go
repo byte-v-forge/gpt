@@ -26,7 +26,9 @@ type orchestratorConfig struct {
 	SMSLeaseDuration      time.Duration
 	SMSPollInterval       time.Duration
 
-	GoPayOTPServiceAddr                    string
+	GoPayOTPWebhookListenAddr              string
+	GoPayOTPWebhookTTL                     time.Duration
+	GoPayOTPWebhookMaxItems                int
 	GoPayOTPTimeout                        int32
 	RegistrationOTPWait                    int32
 	GoPayAppStepBodyLimit                  int32
@@ -85,7 +87,9 @@ func loadOrchestratorConfig() orchestratorConfig {
 		SMSLeaseDuration:      envNonNegativeDurationSeconds("SMS_LEASE_SECONDS", 20*time.Minute),
 		SMSPollInterval:       envPositiveDurationSeconds("SMS_POLL_INTERVAL_SECONDS", 5*time.Second),
 
-		GoPayOTPServiceAddr:                    envDefault("GOPAY_OTP_SERVICE_ADDR", "otp-relay:50051"),
+		GoPayOTPWebhookListenAddr:              envDefault("GOPAY_OTP_WEBHOOK_LISTEN_ADDR", ":8081"),
+		GoPayOTPWebhookTTL:                     envPositiveDurationSeconds("GOPAY_OTP_WEBHOOK_TTL_SECONDS", 10*time.Minute),
+		GoPayOTPWebhookMaxItems:                envInt("GOPAY_OTP_WEBHOOK_MAX_ITEMS", 100),
 		GoPayOTPTimeout:                        envInt32("GOPAY_OTP_TIMEOUT_SECONDS", 180),
 		RegistrationOTPWait:                    envInt32("REGISTRATION_OTP_TIMEOUT_SECONDS", 180),
 		GoPayAppStepBodyLimit:                  int32(envInt("GOPAY_APP_STEP_BODY_LIMIT", 6000)),

@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"orchestrator/db"
+	"orchestrator/internal/gopayotp"
 	"orchestrator/internal/jobevents"
 	"orchestrator/internal/jobprojection"
 	"orchestrator/pb"
@@ -26,16 +27,18 @@ type orchestratorDependencies struct {
 	accountClient pb.AccountDatabaseServiceClient
 	browserClient pb.BrowserRegistrationClient
 	paymentClient pb.PaymentServiceClient
-	otpClient     pb.OtpServiceClient
 	gopayClient   pb.GopayAppServiceClient
 	smsClient     smsv1.SmsActivationServiceClient
 	mailboxClient pb.MailboxServiceClient
+	otpRelay      *gopayotp.Relay
 
 	closers []func() error
 }
 
 func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependencies, error) {
-	deps := &orchestratorDependencies{}
+	deps := &orchestratorDependencies{
+		otpRelay: gopayotp.NewRelay(cfg.GoPayOTPWebhookTTL, cfg.GoPayOTPWebhookMaxItems),
+	}
 
 	browserConn, err := newGRPCClientConn("browser service", cfg.BrowserAddr)
 	if err != nil {
@@ -49,13 +52,6 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 		return nil, err
 	}
 	deps.addCloser(paymentConn.Close)
-
-	otpConn, err := newGRPCClientConn("gopay otp service", cfg.GoPayOTPServiceAddr)
-	if err != nil {
-		deps.Close()
-		return nil, err
-	}
-	deps.addCloser(otpConn.Close)
 
 	gopayConn, err := newGRPCClientConn(
 		"gopay-app service",
@@ -108,7 +104,6 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 	deps.accountClient = pb.NewAccountDatabaseServiceClient(accountDBConn)
 	deps.browserClient = pb.NewBrowserRegistrationClient(browserConn)
 	deps.paymentClient = pb.NewPaymentServiceClient(paymentConn)
-	deps.otpClient = pb.NewOtpServiceClient(otpConn)
 	deps.gopayClient = pb.NewGopayAppServiceClient(gopayConn)
 	deps.smsClient = smsv1.NewSmsActivationServiceClient(smsConn)
 	deps.mailboxClient = pb.NewMailboxServiceClient(mailboxConn)

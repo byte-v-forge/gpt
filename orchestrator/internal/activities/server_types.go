@@ -5,6 +5,7 @@ import (
 
 	smsv1 "github.com/byte-v-forge/sms/gen/go/byte/v/forge/contracts/sms/v1"
 	"gorm.io/gorm"
+	"orchestrator/internal/gopayotp"
 	"orchestrator/internal/jobprojection"
 	"orchestrator/pb"
 )
@@ -15,13 +16,12 @@ type Config struct {
 	AccountClient                     pb.AccountDatabaseServiceClient
 	BrowserClient                     pb.BrowserRegistrationClient
 	PaymentClient                     pb.PaymentServiceClient
-	OTPClient                         pb.OtpServiceClient
+	OTPRelay                          *gopayotp.Relay
 	GoPayClient                       pb.GopayAppServiceClient
 	SmsClient                         smsv1.SmsActivationServiceClient
 	MailboxClient                     pb.MailboxServiceClient
 	EmailAllocator                    AccountEmailAllocator
 	SMSTarget                         SMSTargetConfig
-	OTPAddr                           string
 	OTPTimeout                        int32
 	RegistrationOTPTimeout            int32
 	GoPayAppStepBodyLimit             int32
@@ -41,7 +41,7 @@ type Server struct {
 	accountClient                     pb.AccountDatabaseServiceClient
 	browserClient                     pb.BrowserRegistrationClient
 	paymentClient                     pb.PaymentServiceClient
-	otpClient                         pb.OtpServiceClient
+	otpRelay                          *gopayotp.Relay
 	gopayClient                       pb.GopayAppServiceClient
 	smsClient                         smsv1.SmsActivationServiceClient
 	mailboxClient                     pb.MailboxServiceClient
@@ -67,7 +67,7 @@ func NewServer(cfg Config) *Server {
 		accountClient:                     cfg.AccountClient,
 		browserClient:                     cfg.BrowserClient,
 		paymentClient:                     cfg.PaymentClient,
-		otpClient:                         cfg.OTPClient,
+		otpRelay:                          cfg.OTPRelay,
 		gopayClient:                       cfg.GoPayClient,
 		smsClient:                         cfg.SmsClient,
 		mailboxClient:                     cfg.MailboxClient,

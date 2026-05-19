@@ -15,7 +15,7 @@ func activityConfig(cfg orchestratorConfig, deps *orchestratorDependencies) acti
 		PaymentClient:                     deps.paymentClient,
 		GoPayClient:                       deps.gopayClient,
 		SmsClient:                         deps.smsClient,
-		EmailClient:                       deps.emailClient,
+		MailboxClient:                     deps.mailboxClient,
 		OTPAddr:                           cfg.GoPayOTPServiceAddr,
 		OTPTimeout:                        cfg.GoPayOTPTimeout,
 		RegistrationOTPTimeout:            cfg.RegistrationOTPWait,

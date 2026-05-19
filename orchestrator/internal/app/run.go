@@ -36,7 +36,6 @@ func Run() {
 		Temporal:                             deps.temporal,
 		TaskQueue:                            cfg.Temporal.TaskQueue,
 		AccountClient:                        deps.accountClient,
-		EmailClient:                          deps.emailClient,
 		GoPayClient:                          deps.gopayClient,
 		DefaultGoPayAddBalance:               defaultGoPayAddBalance(cfg),
 		DefaultGoPayAddBalances:              defaultGoPayAddBalances(cfg),

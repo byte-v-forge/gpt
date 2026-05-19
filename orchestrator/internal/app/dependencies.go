@@ -27,7 +27,7 @@ type orchestratorDependencies struct {
 	paymentClient pb.PaymentServiceClient
 	gopayClient   pb.GopayAppServiceClient
 	smsClient     pb.SmsServiceClient
-	emailClient   pb.EmailServiceClient
+	mailboxClient pb.MailboxServiceClient
 
 	closers []func() error
 }
@@ -73,12 +73,12 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 	}
 	deps.addCloser(accountDBConn.Close)
 
-	emailConn, err := newGRPCClientConn("email service", cfg.EmailAddr)
+	mailboxConn, err := newGRPCClientConn("mailbox service", cfg.MailboxAddr)
 	if err != nil {
 		deps.Close()
 		return nil, err
 	}
-	deps.addCloser(emailConn.Close)
+	deps.addCloser(mailboxConn.Close)
 
 	temporalClient, closeTemporal, err := newTemporalClient(cfg)
 	if err != nil {
@@ -101,7 +101,7 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 	deps.paymentClient = pb.NewPaymentServiceClient(paymentConn)
 	deps.gopayClient = pb.NewGopayAppServiceClient(gopayConn)
 	deps.smsClient = pb.NewSmsServiceClient(smsConn)
-	deps.emailClient = pb.NewEmailServiceClient(emailConn)
+	deps.mailboxClient = pb.NewMailboxServiceClient(mailboxConn)
 
 	return deps, nil
 }

@@ -16,7 +16,7 @@ type orchestratorConfig struct {
 	GoPayAppAddr  string
 	SmsAddr       string
 	AccountDBAddr string
-	EmailAddr     string
+	MailboxAddr   string
 
 	GoPayOTPServiceAddr                    string
 	GoPayOTPTimeout                        int32
@@ -69,7 +69,7 @@ func loadOrchestratorConfig() orchestratorConfig {
 		GoPayAppAddr:  envDefault("GOPAY_APP_ADDR", "gopay-app:50051"),
 		SmsAddr:       envDefault("SMS_ADDR", "herosms-sms-service:50051"),
 		AccountDBAddr: envDefault("ACCOUNT_DB_ADDR", "account-db:50051"),
-		EmailAddr:     envDefault("EMAIL_ADDR", "outlook-imap-service:50051"),
+		MailboxAddr:   envDefault("MAILBOX_ADDR", "mailbox-api:50051"),
 
 		GoPayOTPServiceAddr:                    otpServiceAddr,
 		GoPayOTPTimeout:                        envInt32("GOPAY_OTP_TIMEOUT_SECONDS", 180),

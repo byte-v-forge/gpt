@@ -22,7 +22,6 @@ type Config struct {
 	Temporal                             temporalclient.Client
 	TaskQueue                            string
 	AccountClient                        pb.AccountDatabaseServiceClient
-	EmailClient                          pb.EmailServiceClient
 	GoPayClient                          pb.GopayAppServiceClient
 	DefaultGoPayAddBalance               *pb.GoPayAddBalance
 	DefaultGoPayAddBalances              map[string]*pb.GoPayAddBalance
@@ -42,7 +41,6 @@ type Server struct {
 	temporal                             temporalclient.Client
 	taskQueue                            string
 	accountClient                        pb.AccountDatabaseServiceClient
-	emailClient                          pb.EmailServiceClient
 	gopayClient                          pb.GopayAppServiceClient
 	defaultGoPayAddBalance               *pb.GoPayAddBalance
 	defaultGoPayAddBalances              map[string]*pb.GoPayAddBalance
@@ -91,7 +89,6 @@ func NewServer(cfg Config) *Server {
 		temporal:                             cfg.Temporal,
 		taskQueue:                            cfg.TaskQueue,
 		accountClient:                        cfg.AccountClient,
-		emailClient:                          cfg.EmailClient,
 		gopayClient:                          cfg.GoPayClient,
 		defaultGoPayAddBalance:               cfg.DefaultGoPayAddBalance,
 		defaultGoPayAddBalances:              cloneGoPayAddBalanceMap(cfg.DefaultGoPayAddBalances),

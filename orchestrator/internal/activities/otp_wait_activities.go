@@ -45,6 +45,9 @@ func (s *Server) waitEmailOTP(ctx context.Context, input OTPWaitInput) (OTPWaitO
 	if email == "" {
 		return OTPWaitOutput{}, fmt.Errorf("email otp target missing")
 	}
+	if s.mailboxClient == nil {
+		return OTPWaitOutput{}, fmt.Errorf("mailbox client not configured")
+	}
 	timeoutSeconds := input.GetTimeoutSeconds()
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 120
@@ -61,7 +64,7 @@ func (s *Server) waitEmailOTP(ctx context.Context, input OTPWaitInput) (OTPWaitO
 	defer stopHeartbeat()
 	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutSeconds+5)*time.Second)
 	defer cancel()
-	resp, err := s.emailClient.WaitForEmail(reqCtx, &pb.WaitForEmailRequest{
+	resp, err := s.mailboxClient.WaitForMailboxEmail(reqCtx, &pb.WaitForEmailRequest{
 		EmailAddress:    email,
 		TimeoutSeconds:  timeoutSeconds,
 		IssuedAfterUnix: input.GetIssuedAfterUnix(),
@@ -71,7 +74,7 @@ func (s *Server) waitEmailOTP(ctx context.Context, input OTPWaitInput) (OTPWaitO
 		return OTPWaitOutput{Data: protoData(data)}, err
 	}
 	if resp == nil {
-		err := fmt.Errorf("email service returned empty otp response")
+		err := fmt.Errorf("mailbox service returned empty otp response")
 		data["error_message"] = err.Error()
 		return OTPWaitOutput{Data: protoData(data)}, err
 	}

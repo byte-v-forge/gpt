@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+package mailbox;
+
+import "email.proto";
+
+option go_package = "./;pb";
+
+service MailboxService {
+  rpc ListMailboxes(email.ListEmailMailboxesRequest) returns (email.ListEmailMailboxesResponse);
+  rpc UpsertMailbox(email.UpsertEmailMailboxRequest) returns (email.UpsertEmailMailboxResponse);
+  rpc DeleteMailbox(email.DeleteMailboxRequest) returns (email.DeleteMailboxResponse);
+  rpc WaitForMailboxEmail(email.WaitForEmailRequest) returns (email.WaitForEmailResponse);
+  rpc RegisterMailbox(RegisterMailboxRequest) returns (RegisterMailboxResponse);
+  rpc RunMailboxOAuth(StartMailboxOAuthRequest) returns (StartMailboxOAuthResponse);
+  rpc FetchMailboxInboxes(FetchMailboxInboxesRequest) returns (FetchMailboxInboxesResponse);
+  rpc GetMailboxOperation(GetMailboxOperationRequest) returns (GetMailboxOperationResponse);
+  rpc ListMailboxOperations(ListMailboxOperationsRequest) returns (ListMailboxOperationsResponse);
+}
+
+message RegisterMailboxRequest {
+  bool import_only = 1;
+}
+
+message RegisterMailboxResponse {
+  reserved 4, 5;
+  reserved "exit_code", "mailboxes";
+
+  string operation_id = 1;
+  bool started = 2;
+  string error_message = 3;
+}
+
+message StartMailboxOAuthRequest {
+  string email_address = 1;
+  bool only_missing = 2;
+  int32 limit = 3;
+}
+
+message StartMailboxOAuthResponse {
+  string operation_id = 1;
+  bool started = 2;
+  string error_message = 3;
+}
+
+message FetchMailboxInboxesRequest {
+  int32 limit_per_mailbox = 1;
+  int32 max_mailboxes = 2;
+  string email_address = 3;
+}
+
+message FetchMailboxInboxesResponse {
+  repeated email.FetchMailboxInboxResult results = 1;
+  int32 mailbox_count = 2;
+  int32 fetched_count = 3;
+  int32 failed_count = 4;
+  int32 message_count = 5;
+  string operation_id = 6;
+}
+
+message MailboxOperation {
+  string operation_id = 1;
+  string action = 2;
+  string status = 3;
+  string email_address = 4;
+  string last_step = 5;
+  string error_message = 6;
+  int32 exit_code = 7;
+  int32 mailbox_count = 8;
+  int32 fetched_count = 9;
+  int32 failed_count = 10;
+  int32 message_count = 11;
+  int64 created_at = 12;
+  int64 updated_at = 13;
+}
+
+message GetMailboxOperationRequest {
+  string operation_id = 1;
+}
+
+message GetMailboxOperationResponse {
+  MailboxOperation operation = 1;
+  string error_message = 2;
+}
+
+message ListMailboxOperationsRequest {
+  int32 limit = 1;
+  string status = 2;
+  string action = 3;
+  string email_address = 4;
+}
+
+message ListMailboxOperationsResponse {
+  repeated MailboxOperation operations = 1;
+  string error_message = 2;
+}

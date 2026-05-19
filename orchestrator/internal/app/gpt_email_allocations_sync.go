@@ -27,13 +27,13 @@ const (
 )
 
 func syncGPTEmailAllocationsFromMailboxes(deps *orchestratorDependencies) error {
-	if deps == nil || deps.emailClient == nil || deps.accountClient == nil {
+	if deps == nil || deps.mailboxClient == nil || deps.accountClient == nil {
 		return nil
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	resp, err := deps.emailClient.ListMailboxes(ctx, &pb.ListEmailMailboxesRequest{Limit: 500})
+	resp, err := deps.mailboxClient.ListMailboxes(ctx, &pb.ListEmailMailboxesRequest{Limit: 500})
 	if err != nil {
 		return fmt.Errorf("list mailboxes: %w", err)
 	}

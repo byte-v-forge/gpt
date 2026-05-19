@@ -67,8 +67,6 @@ type orchestratorConfig struct {
 }
 
 func loadOrchestratorConfig() orchestratorConfig {
-	otpServiceAddr := envDefault("GOPAY_OTP_SERVICE_ADDR", envDefault("OTP_ADDR", "otp-relay:50051"))
-
 	return orchestratorConfig{
 		ListenAddr: envDefault("LISTEN_ADDR", ":50051"),
 
@@ -87,7 +85,7 @@ func loadOrchestratorConfig() orchestratorConfig {
 		SMSLeaseDuration:      envNonNegativeDurationSeconds("SMS_LEASE_SECONDS", 20*time.Minute),
 		SMSPollInterval:       envPositiveDurationSeconds("SMS_POLL_INTERVAL_SECONDS", 5*time.Second),
 
-		GoPayOTPServiceAddr:                    otpServiceAddr,
+		GoPayOTPServiceAddr:                    envDefault("GOPAY_OTP_SERVICE_ADDR", "otp-relay:50051"),
 		GoPayOTPTimeout:                        envInt32("GOPAY_OTP_TIMEOUT_SECONDS", 180),
 		RegistrationOTPWait:                    envInt32("REGISTRATION_OTP_TIMEOUT_SECONDS", 180),
 		GoPayAppStepBodyLimit:                  int32(envInt("GOPAY_APP_STEP_BODY_LIMIT", 6000)),

@@ -8,9 +8,6 @@ import (
 
 	"orchestrator/internal/otpwait"
 	"orchestrator/pb"
-
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -101,9 +98,8 @@ func (s *Server) waitPaymentWebhookOTP(ctx context.Context, input OTPWaitInput) 
 	if target == nil {
 		return OTPWaitOutput{}, fmt.Errorf("gopay otp target missing")
 	}
-	addr := s.otpAddr
-	if addr == "" {
-		addr = "otp-relay:50051"
+	if s.otpClient == nil {
+		return OTPWaitOutput{}, fmt.Errorf("gopay otp client not configured")
 	}
 	purpose := strings.TrimSpace(target.GetPurpose())
 	if purpose == "" {
@@ -127,17 +123,10 @@ func (s *Server) waitPaymentWebhookOTP(ctx context.Context, input OTPWaitInput) 
 
 	otpCh := make(chan otpServiceResult, 1)
 	go func() {
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err != nil {
-			otpCh <- otpServiceResult{err: err}
-			return
-		}
-		defer conn.Close()
-
 		reqCtx, cancel := context.WithTimeout(otpCtx, time.Duration(timeoutSeconds+10)*time.Second)
 		defer cancel()
 
-		resp, err := pb.NewOtpServiceClient(conn).WaitForOtp(reqCtx, &pb.WaitForOtpRequest{
+		resp, err := s.otpClient.WaitForOtp(reqCtx, &pb.WaitForOtpRequest{
 			Purpose:         purpose,
 			TimeoutSeconds:  timeoutSeconds,
 			IssuedAfterUnix: input.GetIssuedAfterUnix(),

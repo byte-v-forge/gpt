@@ -15,6 +15,7 @@ type Config struct {
 	AccountClient                     pb.AccountDatabaseServiceClient
 	BrowserClient                     pb.BrowserRegistrationClient
 	PaymentClient                     pb.PaymentServiceClient
+	OTPClient                         pb.OtpServiceClient
 	GoPayClient                       pb.GopayAppServiceClient
 	SmsClient                         smsv1.SmsActivationServiceClient
 	MailboxClient                     pb.MailboxServiceClient
@@ -40,12 +41,12 @@ type Server struct {
 	accountClient                     pb.AccountDatabaseServiceClient
 	browserClient                     pb.BrowserRegistrationClient
 	paymentClient                     pb.PaymentServiceClient
+	otpClient                         pb.OtpServiceClient
 	gopayClient                       pb.GopayAppServiceClient
 	smsClient                         smsv1.SmsActivationServiceClient
 	mailboxClient                     pb.MailboxServiceClient
 	emailAllocator                    AccountEmailAllocator
 	smsTarget                         SMSTargetConfig
-	otpAddr                           string
 	otpTimeout                        int32
 	regOTPTimeout                     int32
 	gopayAppStepBodyLimit             int32
@@ -66,12 +67,12 @@ func NewServer(cfg Config) *Server {
 		accountClient:                     cfg.AccountClient,
 		browserClient:                     cfg.BrowserClient,
 		paymentClient:                     cfg.PaymentClient,
+		otpClient:                         cfg.OTPClient,
 		gopayClient:                       cfg.GoPayClient,
 		smsClient:                         cfg.SmsClient,
 		mailboxClient:                     cfg.MailboxClient,
 		emailAllocator:                    defaultAccountEmailAllocator(cfg.EmailAllocator, cfg.AccountClient),
 		smsTarget:                         cfg.SMSTarget.withDefaults(),
-		otpAddr:                           cfg.OTPAddr,
 		otpTimeout:                        cfg.OTPTimeout,
 		regOTPTimeout:                     cfg.RegistrationOTPTimeout,
 		gopayAppStepBodyLimit:             cfg.GoPayAppStepBodyLimit,

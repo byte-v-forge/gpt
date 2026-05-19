@@ -29,27 +29,16 @@ func (s *Server) GoPayAppAcquireSignupPhoneActivity(ctx context.Context, input G
 		step.progress("acquiring unregistered gopay phone", map[string]any{
 			"failure_count": failures,
 		})
-		numResp, err := s.smsClient.AcquireNumber(ctx, &pb.AcquireNumberRequest{})
+		activationID, phone, err := s.acquireSMSNumber(ctx, input.GetJobId(), map[string]string{
+			"workflow": "gopay_signup",
+			"job_id":   input.GetJobId(),
+		})
 		if err != nil {
-			err = fmt.Errorf("AcquireNumber: %w", err)
-			data["error_message"] = err.Error()
-			return data, err
-		}
-		if numResp == nil || !numResp.GetSuccess() {
-			message := ""
-			if numResp != nil {
-				message = numResp.GetErrorMessage()
-			}
-			if message == "" {
-				message = "empty response"
-			}
-			err := fmt.Errorf("AcquireNumber: %s", message)
 			data["error_message"] = err.Error()
 			return data, err
 		}
 
-		phone := normalizeIndonesiaPhone(numResp.GetPhone())
-		activationID := numResp.GetActivationId()
+		phone = normalizeIndonesiaPhone(phone)
 		failures++
 		output.ActivationId = activationID
 		output.Phone = phone

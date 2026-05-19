@@ -3,6 +3,7 @@ module orchestrator
 go 1.26.2
 
 require (
+	github.com/byte-v-forge/sms v0.1.1-0.20260519030925-f4bb83fb3695
 	github.com/byte-v-forge/workflow-runtime v0.3.0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.6.0

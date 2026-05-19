@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	smsv1 "github.com/byte-v-forge/sms/gen/go/byte/v/forge/contracts/sms/v1"
 	pb "orchestrator/pb"
 )
 
@@ -59,7 +60,8 @@ func (s *Server) recordChangePhoneFailure(ctx context.Context, activationID stri
 }
 
 func smsNoNumbers(message string) bool {
-	return strings.Contains(strings.ToUpper(strings.TrimSpace(message)), "NO_NUMBERS")
+	upper := strings.ToUpper(strings.TrimSpace(message))
+	return strings.Contains(upper, "NO_NUMBERS") || strings.Contains(upper, "NO_NUMBER_AVAILABLE")
 }
 
 func changePhoneStartRetryableError(message string) bool {
@@ -88,13 +90,8 @@ func (s *Server) finishSMSActivation(ctx context.Context, activationID string) {
 	if s.smsClient == nil || activationID == "" {
 		return
 	}
-	resp, err := s.smsClient.FinishActivation(ctx, &pb.FinishActivationRequest{ActivationId: activationID})
-	if err != nil {
-		log.Printf("[gopay-app] FinishActivation failed: %v", err)
-		return
-	}
-	if !resp.GetSuccess() {
-		log.Printf("[gopay-app] FinishActivation failed: %s", resp.GetErrorMessage())
+	if err := s.completeSMSActivation(ctx, activationID, ""); err != nil {
+		log.Printf("[gopay-app] CompleteActivation failed: %v", err)
 	}
 }
 
@@ -108,12 +105,12 @@ func (s *Server) cancelSMSActivationBeforeRotation(ctx context.Context, activati
 
 	deadline := time.Now().Add(s.changePhoneSMSCancelWaitTimeout())
 	for {
-		resp, err := s.smsClient.CancelActivation(ctx, &pb.CancelActivationRequest{ActivationId: activationID})
+		resp, err := s.smsClient.CancelActivation(ctx, &smsv1.CancelActivationRequest{ActivationId: activationID, Reason: "change phone rotation"})
 		if err != nil {
 			return fmt.Errorf("CancelActivation: %w", err)
 		}
 		if smsCancelSettled(resp) {
-			if resp != nil && !resp.GetSuccess() {
+			if resp != nil && resp.GetError() != nil {
 				log.Printf("[gopay-app] CancelActivation settled without ACCESS_CANCEL: %s", smsCancelResponseText(resp))
 			}
 			return nil
@@ -153,36 +150,36 @@ func (s *Server) cancelSMSActivationAsync(activationID string, reason string) {
 	}()
 }
 
-func smsCancelSettled(resp *pb.ProviderActionResponse) bool {
+func smsCancelSettled(resp *smsv1.CancelActivationResponse) bool {
 	if resp == nil {
 		return false
 	}
-	if resp.GetSuccess() {
+	if resp.GetError() == nil {
 		return true
 	}
-	message := strings.ToUpper(smsCancelResponseText(resp))
-	return strings.Contains(message, "NO_ACTIVATION") || strings.Contains(message, "STATUS_CANCEL")
+	switch resp.GetError().GetCode() {
+	case smsv1.SmsErrorCode_SMS_ERROR_CODE_ACTIVATION_NOT_FOUND,
+		smsv1.SmsErrorCode_SMS_ERROR_CODE_ACTIVATION_ALREADY_FINALIZED,
+		smsv1.SmsErrorCode_SMS_ERROR_CODE_ACTIVATION_EXPIRED:
+		return true
+	default:
+		return false
+	}
 }
 
 func smsEarlyCancelDenied(message string) bool {
-	return strings.Contains(strings.ToUpper(message), "EARLY_CANCEL_DENIED")
+	upper := strings.ToUpper(message)
+	return strings.Contains(upper, "EARLY_CANCEL_DENIED") || strings.Contains(upper, "CANCEL_NOT_ALLOWED")
 }
 
-func smsCancelResponseText(resp *pb.ProviderActionResponse) string {
+func smsCancelResponseText(resp *smsv1.CancelActivationResponse) string {
 	if resp == nil {
 		return "empty response"
 	}
-	parts := []string{}
-	if resp.GetErrorMessage() != "" {
-		parts = append(parts, resp.GetErrorMessage())
+	if resp.GetError() != nil {
+		return smsErrorText(resp.GetError())
 	}
-	if resp.GetRawResponse() != "" {
-		parts = append(parts, resp.GetRawResponse())
-	}
-	if len(parts) == 0 {
-		return "unknown error"
-	}
-	return strings.Join(parts, ": ")
+	return "unknown error"
 }
 
 func sleepContext(ctx context.Context, delay time.Duration) error {

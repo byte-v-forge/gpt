@@ -3,6 +3,7 @@ package activities
 import (
 	"time"
 
+	smsv1 "github.com/byte-v-forge/sms/gen/go/byte/v/forge/contracts/sms/v1"
 	"gorm.io/gorm"
 	"orchestrator/internal/jobprojection"
 	"orchestrator/pb"
@@ -15,9 +16,10 @@ type Config struct {
 	BrowserClient                     pb.BrowserRegistrationClient
 	PaymentClient                     pb.PaymentServiceClient
 	GoPayClient                       pb.GopayAppServiceClient
-	SmsClient                         pb.SmsServiceClient
+	SmsClient                         smsv1.SmsActivationServiceClient
 	MailboxClient                     pb.MailboxServiceClient
 	EmailAllocator                    AccountEmailAllocator
+	SMSTarget                         SMSTargetConfig
 	OTPAddr                           string
 	OTPTimeout                        int32
 	RegistrationOTPTimeout            int32
@@ -39,9 +41,10 @@ type Server struct {
 	browserClient                     pb.BrowserRegistrationClient
 	paymentClient                     pb.PaymentServiceClient
 	gopayClient                       pb.GopayAppServiceClient
-	smsClient                         pb.SmsServiceClient
+	smsClient                         smsv1.SmsActivationServiceClient
 	mailboxClient                     pb.MailboxServiceClient
 	emailAllocator                    AccountEmailAllocator
+	smsTarget                         SMSTargetConfig
 	otpAddr                           string
 	otpTimeout                        int32
 	regOTPTimeout                     int32
@@ -67,6 +70,7 @@ func NewServer(cfg Config) *Server {
 		smsClient:                         cfg.SmsClient,
 		mailboxClient:                     cfg.MailboxClient,
 		emailAllocator:                    defaultAccountEmailAllocator(cfg.EmailAllocator, cfg.AccountClient),
+		smsTarget:                         cfg.SMSTarget.withDefaults(),
 		otpAddr:                           cfg.OTPAddr,
 		otpTimeout:                        cfg.OTPTimeout,
 		regOTPTimeout:                     cfg.RegistrationOTPTimeout,

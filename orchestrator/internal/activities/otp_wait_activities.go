@@ -280,18 +280,14 @@ func (s *Server) waitSMSOTP(ctx context.Context, input OTPWaitInput) (OTPWaitOut
 		step.progress("waiting for sms otp", data)
 		stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "waiting for sms otp", data)
 		defer stopHeartbeat()
-		otpResp, err := s.smsClient.WaitCode(ctx, &pb.WaitCodeRequest{
-			ActivationId:   activationID,
-			TimeoutSeconds: timeoutSeconds,
-		})
+		code, err := s.waitSMSCode(ctx, activationID, timeoutSeconds)
 		if err != nil {
-			err = fmt.Errorf("WaitCode: %w", err)
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		if otpResp != nil && otpResp.GetSuccess() && strings.TrimSpace(otpResp.GetCode()) != "" {
+		if strings.TrimSpace(code) != "" {
 			output.Found = true
-			output.Code = normalizeOTP(otpResp.GetCode())
+			output.Code = normalizeOTP(code)
 			if input.GetOtpParam() != "" {
 				if err := s.setJobParams(ctx, input.GetJobId(), map[string]string{
 					input.GetOtpParam():         output.GetCode(),
@@ -304,13 +300,7 @@ func (s *Server) waitSMSOTP(ctx context.Context, input OTPWaitInput) (OTPWaitOut
 			data["found"] = true
 			return data, nil
 		}
-		message := ""
-		if otpResp != nil {
-			message = otpResp.GetErrorMessage()
-		}
-		if message == "" {
-			message = "otp not found"
-		}
+		message := "otp not found"
 		output.ErrorMessage = message
 		data["found"] = false
 		data["error_message"] = message

@@ -33,3 +33,4 @@ Go 检查需要分别在 `account-db/` 和 `orchestrator/` 下执行。
 
 `orchestrator/` 通过 `TEMPORAL_ADDRESS`、`TEMPORAL_NAMESPACE`、`TEMPORAL_TASK_QUEUE` 和 `TEMPORAL_IDENTITY` 连接组织内 workflow runtime。
 邮箱验证码和邮箱池读取通过 `MAILBOX_ADDR` 连接 `mailbox-api`。
+接码生命周期通过 `SMS_ADDR` 连接 `sms-service`，并使用 `SMS_APPLICATION_KEY`、`SMS_COUNTRY_ISO2`、`SMS_COUNTRY_CALLING_CODE`、`SMS_MAX_PRICE_DECIMAL` 和 `SMS_POLL_INTERVAL_SECONDS` 描述 GPT/GoPay 所需目标。

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 
+	smsv1 "github.com/byte-v-forge/sms/gen/go/byte/v/forge/contracts/sms/v1"
 	temporalclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -26,7 +27,7 @@ type orchestratorDependencies struct {
 	browserClient pb.BrowserRegistrationClient
 	paymentClient pb.PaymentServiceClient
 	gopayClient   pb.GopayAppServiceClient
-	smsClient     pb.SmsServiceClient
+	smsClient     smsv1.SmsActivationServiceClient
 	mailboxClient pb.MailboxServiceClient
 
 	closers []func() error
@@ -100,7 +101,7 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 	deps.browserClient = pb.NewBrowserRegistrationClient(browserConn)
 	deps.paymentClient = pb.NewPaymentServiceClient(paymentConn)
 	deps.gopayClient = pb.NewGopayAppServiceClient(gopayConn)
-	deps.smsClient = pb.NewSmsServiceClient(smsConn)
+	deps.smsClient = smsv1.NewSmsActivationServiceClient(smsConn)
 	deps.mailboxClient = pb.NewMailboxServiceClient(mailboxConn)
 
 	return deps, nil

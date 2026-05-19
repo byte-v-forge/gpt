@@ -186,7 +186,7 @@ def gopay_proxy_for_state(state: dict) -> str:
 
 
 def wait_otp(prompt: str = "Enter OTP: ") -> str:
-    """等待 OTP：CLI 只支持手动输入；自动接码由 orchestrator 调用 SmsService。"""
+    """等待 OTP：CLI 只支持手动输入；自动接码由 orchestrator 调用 sms-service。"""
     return input(prompt).strip()
 
 
@@ -1492,12 +1492,12 @@ def get_client(state) -> GopayClient:
 # === 改手机号 ===
 
 def change_phone(state, new_phone: str, pin: str):
-    """改手机号：3步。自动取号由 orchestrator + SmsService 负责。"""
+    """改手机号：3步。自动取号由 orchestrator + sms-service 负责。"""
     c = get_client(state)
     email = state.get("email", "")
     name = state.get("name", "")
     if not new_phone:
-        raise RuntimeError("new_phone required; acquire temporary numbers through orchestrator SmsService")
+        raise RuntimeError("new_phone required; acquire temporary numbers through orchestrator sms-service")
 
     body = {"email": email, "name": name, "phone": f"+62{new_phone}", "profile_image_url": None}
 

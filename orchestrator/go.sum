@@ -1,5 +1,7 @@
 github.com/byte-v-forge/contracts-go v0.6.0 h1:fEP20ivA7F6f4wenyjwBv0rdgRJ3A7cyU2Tw7ec8xCU=
 github.com/byte-v-forge/contracts-go v0.6.0/go.mod h1:y2YP2d0SuI66CWYxdkJx9FUmIJYXnAJXtGJiJGSip8E=
+github.com/byte-v-forge/sms v0.1.1-0.20260519030925-f4bb83fb3695 h1:vJ9sTAxEP8bgh37AM96+MupDeql4YuQvOGVnrMbE098=
+github.com/byte-v-forge/sms v0.1.1-0.20260519030925-f4bb83fb3695/go.mod h1:pjAWwMT+w8+Go28RTx2b0DVhsBe5wTx6DDZpejxSIvs=
 github.com/byte-v-forge/workflow-runtime v0.3.0 h1:Vf8qZpiTBkaKbNsteJyeT/+HHfcY+F7xrge9DM8hGJc=
 github.com/byte-v-forge/workflow-runtime v0.3.0/go.mod h1:TrSfqw2rw8eYM09pnvmUwbDWeGxegc3+mrGouN7jw5A=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

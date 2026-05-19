@@ -18,6 +18,14 @@ type orchestratorConfig struct {
 	AccountDBAddr string
 	MailboxAddr   string
 
+	SMSApplicationKey     string
+	SMSCountryISO2        string
+	SMSCountryCallingCode string
+	SMSMaxPriceDecimal    string
+	SMSMaxPriceCurrency   string
+	SMSLeaseDuration      time.Duration
+	SMSPollInterval       time.Duration
+
 	GoPayOTPServiceAddr                    string
 	GoPayOTPTimeout                        int32
 	RegistrationOTPWait                    int32
@@ -67,9 +75,17 @@ func loadOrchestratorConfig() orchestratorConfig {
 		BrowserAddr:   envDefault("BROWSER_ADDR", "browser-reg:50051"),
 		PaymentAddr:   envDefault("PAYMENT_ADDR", "host.docker.internal:50051"),
 		GoPayAppAddr:  envDefault("GOPAY_APP_ADDR", "gopay-app:50051"),
-		SmsAddr:       envDefault("SMS_ADDR", "herosms-sms-service:50051"),
+		SmsAddr:       envDefault("SMS_ADDR", "sms-service:50051"),
 		AccountDBAddr: envDefault("ACCOUNT_DB_ADDR", "account-db:50051"),
 		MailboxAddr:   envDefault("MAILBOX_ADDR", "mailbox-api:50051"),
+
+		SMSApplicationKey:     envDefault("SMS_APPLICATION_KEY", "gopay"),
+		SMSCountryISO2:        envDefault("SMS_COUNTRY_ISO2", "ID"),
+		SMSCountryCallingCode: envDefault("SMS_COUNTRY_CALLING_CODE", "62"),
+		SMSMaxPriceDecimal:    envDefault("SMS_MAX_PRICE_DECIMAL", ""),
+		SMSMaxPriceCurrency:   envDefault("SMS_MAX_PRICE_CURRENCY", ""),
+		SMSLeaseDuration:      envNonNegativeDurationSeconds("SMS_LEASE_SECONDS", 20*time.Minute),
+		SMSPollInterval:       envPositiveDurationSeconds("SMS_POLL_INTERVAL_SECONDS", 5*time.Second),
 
 		GoPayOTPServiceAddr:                    otpServiceAddr,
 		GoPayOTPTimeout:                        envInt32("GOPAY_OTP_TIMEOUT_SECONDS", 180),

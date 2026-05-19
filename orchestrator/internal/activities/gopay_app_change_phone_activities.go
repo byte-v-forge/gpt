@@ -34,20 +34,12 @@ func (s *Server) GoPayAppChangePhoneGetNumberActivity(ctx context.Context, input
 				"failures":     failures,
 				"max_failures": maxFailures,
 			})
-			numResp, err := s.smsClient.AcquireNumber(ctx, &pb.AcquireNumberRequest{})
+			activationID, phone, err := s.acquireSMSNumber(ctx, input.GetJobId(), map[string]string{
+				"workflow": "gopay_change_phone",
+				"job_id":   input.GetJobId(),
+			})
 			if err != nil {
-				err = fmt.Errorf("GetNumber: %w", err)
-				data["error_message"] = err.Error()
-				return data, err
-			}
-			if numResp == nil || !numResp.GetSuccess() {
-				message := ""
-				if numResp != nil {
-					message = numResp.GetErrorMessage()
-				}
-				if message == "" {
-					message = "empty response"
-				}
+				message := err.Error()
 				if smsNoNumbers(message) {
 					data["last_get_number_error"] = message
 					data["failure_count"] = failures
@@ -67,27 +59,12 @@ func (s *Server) GoPayAppChangePhoneGetNumberActivity(ctx context.Context, input
 					}
 					continue
 				}
-				if err := s.recordChangePhoneFailure(ctx, "", &failures, fmt.Sprintf("GetNumber: %s", message)); err != nil {
-					output.FailureCount = int32(failures)
-					data["failure_count"] = failures
-					data["error_message"] = err.Error()
-					return data, err
-				}
-				output.FailureCount = int32(failures)
-				data["failure_count"] = failures
-				if delay := s.changePhoneGetNumberRetryInterval(); delay > 0 {
-					if err := sleepContext(ctx, delay); err != nil {
-						output.FailureCount = int32(failures)
-						err = fmt.Errorf("waiting to retry GetNumber: %w", err)
-						data["error_message"] = err.Error()
-						return data, err
-					}
-				}
-				continue
+				err = fmt.Errorf("GetNumber: %w", err)
+				data["error_message"] = err.Error()
+				return data, err
 			}
 
-			phone := normalizeIndonesiaPhone(numResp.GetPhone())
-			activationID := numResp.GetActivationId()
+			phone = normalizeIndonesiaPhone(phone)
 			data["activation_id"] = activationID
 			data["phone_present"] = phone != ""
 			step.progress("phone number acquired", map[string]any{
@@ -272,21 +249,8 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 		step.progress("change phone otp sent", map[string]any{
 			"activation_id": output.GetActivationId(),
 		})
-		if sentResp, err := s.smsClient.MarkMessageSent(ctx, &pb.MarkMessageSentRequest{ActivationId: output.GetActivationId()}); err != nil {
+		if err := s.markSMSMessageSent(ctx, output.GetActivationId(), input.GetJobId()); err != nil {
 			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
-			err = fmt.Errorf("MarkMessageSent: %w", err)
-			data["error_message"] = err.Error()
-			return data, err
-		} else if sentResp == nil || !sentResp.GetSuccess() {
-			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
-			message := ""
-			if sentResp != nil {
-				message = sentResp.GetErrorMessage()
-			}
-			if message == "" {
-				message = "empty response"
-			}
-			err := fmt.Errorf("MarkMessageSent: %s", message)
 			data["error_message"] = err.Error()
 			return data, err
 		}
@@ -406,21 +370,7 @@ func (s *Server) GoPayAppSMSRequestAdditionalCodeActivity(ctx context.Context, i
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		resp, err := s.smsClient.RequestAdditionalCode(ctx, &pb.RequestAdditionalCodeRequest{ActivationId: input.GetActivationId()})
-		if err != nil {
-			err = fmt.Errorf("RequestAdditionalCode: %w", err)
-			data["error_message"] = err.Error()
-			return data, err
-		}
-		if resp == nil || !resp.GetSuccess() {
-			message := ""
-			if resp != nil {
-				message = resp.GetErrorMessage()
-			}
-			if message == "" {
-				message = "empty response"
-			}
-			err := fmt.Errorf("RequestAdditionalCode: %s", message)
+		if err := s.requestAdditionalSMSCode(ctx, input.GetActivationId(), input.GetJobId()); err != nil {
 			data["error_message"] = err.Error()
 			return data, err
 		}

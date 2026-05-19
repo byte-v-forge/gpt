@@ -41,20 +41,10 @@ func (s *Server) markGoPaySMSMessageSent(ctx context.Context, activationID strin
 	if s.smsClient == nil {
 		return fmt.Errorf("sms client not configured")
 	}
-	resp, err := s.smsClient.MarkMessageSent(ctx, &pb.MarkMessageSentRequest{ActivationId: activationID})
-	data["sms_mark_sent"] = providerActionData(resp, err)
+	err := s.markSMSMessageSent(ctx, activationID, "")
+	data["sms_mark_sent"] = smsActionData(err)
 	if err != nil {
-		return fmt.Errorf("MarkMessageSent: %w", err)
-	}
-	if resp == nil || !resp.GetSuccess() {
-		message := ""
-		if resp != nil {
-			message = resp.GetErrorMessage()
-		}
-		if message == "" {
-			message = "empty response"
-		}
-		return fmt.Errorf("MarkMessageSent: %s", message)
+		return err
 	}
 	return nil
 }
@@ -166,14 +156,10 @@ func createPinRetryData(resp *pb.CreatePinRetryResponse) map[string]any {
 	}
 }
 
-func providerActionData(resp *pb.ProviderActionResponse, err error) map[string]any {
-	data := map[string]any{"response_present": resp != nil}
-	if resp != nil {
-		data["success"] = resp.GetSuccess()
-		data["error_message"] = resp.GetErrorMessage()
-	}
+func smsActionData(err error) map[string]any {
+	data := map[string]any{"success": err == nil}
 	if err != nil {
-		data["error"] = err.Error()
+		data["error_message"] = err.Error()
 	}
 	return data
 }

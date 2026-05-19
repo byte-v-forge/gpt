@@ -11,7 +11,7 @@ GoPay 场景使用的 Android OTP 通知转发器，把包含 OTP 的通知 POST
 }
 ```
 
-服务端地址填：
+服务端地址填现有 GPT/Web API 暴露的 OTP 提交 URL，例如：
 
 ```text
 http://192.168.0.115:8081/local/gopay

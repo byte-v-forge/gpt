@@ -3,12 +3,15 @@ package activities
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
 	"orchestrator/internal/otpwait"
 	"orchestrator/pb"
 )
+
+var emailOTPPattern = regexp.MustCompile(`(^|[^0-9])([0-9]{6})([^0-9]|$)`)
 
 const (
 	otpWaitChannelEmail   = otpwait.ChannelEmail
@@ -71,15 +74,12 @@ func (s *Server) waitEmailOTP(ctx context.Context, input OTPWaitInput) (OTPWaitO
 		return OTPWaitOutput{Data: protoData(data)}, err
 	}
 	if resp == nil {
-		err := fmt.Errorf("mailbox service returned empty otp response")
+		err := fmt.Errorf("mailbox service returned empty email response")
 		data["error_message"] = err.Error()
 		return OTPWaitOutput{Data: protoData(data)}, err
 	}
 	message := resp.GetMessage()
-	code := ""
-	if message != nil {
-		code = extractOTP(firstNonEmpty(message.GetBodyText(), message.GetBodyPreview(), message.GetSubject()))
-	}
+	code := extractOTPFromEmailMessage(message)
 	if resp.GetFound() && code != "" {
 		if err := s.setJobParams(ctx, input.GetJobId(), map[string]string{
 			input.GetOtpParam():         code,
@@ -89,12 +89,32 @@ func (s *Server) waitEmailOTP(ctx context.Context, input OTPWaitInput) (OTPWaitO
 			return OTPWaitOutput{Data: protoData(data)}, err
 		}
 		data["found"] = true
+		if message != nil {
+			data["email_provider"] = message.GetProvider()
+			data["message_id"] = message.GetId()
+		}
 		return OTPWaitOutput{Found: true, Source: otpWaitChannelEmail, Data: protoData(data)}, nil
 	}
 	err = fmt.Errorf("email otp not found")
 	data["found"] = false
 	data["error_message"] = err.Error()
 	return OTPWaitOutput{Data: protoData(data)}, err
+}
+
+func extractOTPFromEmailMessage(message *pb.EmailInboxMessage) string {
+	if message == nil {
+		return ""
+	}
+	combined := strings.Join([]string{
+		message.GetSubject(),
+		message.GetBodyPreview(),
+		message.GetBodyText(),
+	}, "\n")
+	match := emailOTPPattern.FindStringSubmatch(combined)
+	if len(match) < 3 {
+		return ""
+	}
+	return normalizeOTP(match[2])
 }
 
 func (s *Server) waitPaymentWebhookOTP(ctx context.Context, input OTPWaitInput) (OTPWaitOutput, error) {

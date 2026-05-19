@@ -7,7 +7,6 @@ import "email.proto";
 option go_package = "./;pb";
 
 service MailboxService {
-  rpc ListMailboxes(email.ListEmailMailboxesRequest) returns (email.ListEmailMailboxesResponse);
   rpc UpsertMailbox(email.UpsertEmailMailboxRequest) returns (email.UpsertEmailMailboxResponse);
   rpc DeleteMailbox(email.DeleteMailboxRequest) returns (email.DeleteMailboxResponse);
   rpc WaitForMailboxEmail(email.WaitForEmailRequest) returns (email.WaitForEmailResponse);

@@ -125,3 +125,12 @@ message FetchInboxesResponse {
   int32 failed_count = 4;
   int32 message_count = 5;
 }
+
+service EmailService {
+  rpc MarkEmailAuthStatus(MarkEmailAuthStatusRequest) returns (MarkEmailAuthStatusResponse);
+  rpc UpsertMailbox(UpsertEmailMailboxRequest) returns (UpsertEmailMailboxResponse);
+  rpc ListMailboxes(ListEmailMailboxesRequest) returns (ListEmailMailboxesResponse);
+  rpc DeleteMailbox(DeleteMailboxRequest) returns (DeleteMailboxResponse);
+  rpc WaitForEmail(WaitForEmailRequest) returns (WaitForEmailResponse);
+  rpc FetchInboxes(FetchInboxesRequest) returns (FetchInboxesResponse);
+}

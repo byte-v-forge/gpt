@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 
 	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
 	smsv1 "github.com/byte-v-forge/sms/gen/go/byte/v/forge/contracts/sms/v1"
@@ -115,11 +116,19 @@ func newOrchestratorDependencies(cfg orchestratorConfig) (*orchestratorDependenc
 func newGRPCClientConn(name string, addr string, extraOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	opts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 	opts = append(opts, extraOpts...)
-	conn, err := grpc.NewClient(addr, opts...)
+	conn, err := grpc.NewClient(normalizeGRPCTarget(addr), opts...)
 	if err != nil {
 		return nil, fmt.Errorf("connect to %s: %w", name, err)
 	}
 	return conn, nil
+}
+
+func normalizeGRPCTarget(addr string) string {
+	addr = strings.TrimSpace(addr)
+	if addr == "" || strings.Contains(addr, "://") {
+		return addr
+	}
+	return "dns:///" + addr
 }
 
 func gopayAppGRPCRetryServiceConfig() string {

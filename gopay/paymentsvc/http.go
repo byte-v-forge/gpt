@@ -6,24 +6,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"net/http/cookiejar"
+	stdhttp "net/http"
 	"net/url"
 	"strings"
 	"time"
 
+	fhttp "github.com/bogdanfinn/fhttp"
+	tlsclient "github.com/bogdanfinn/tls-client"
+	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
 const defaultTimeout = 30 * time.Second
 
 type httpSession struct {
-	client  *http.Client
-	headers http.Header
+	client  tlsclient.HttpClient
+	headers stdhttp.Header
 }
 
 type requestOptions struct {
-	headers    http.Header
+	headers    stdhttp.Header
 	jsonBody   any
 	formBody   url.Values
 	query      url.Values
@@ -32,25 +34,34 @@ type requestOptions struct {
 
 type httpResult struct {
 	status  int
-	headers http.Header
+	headers stdhttp.Header
 	body    []byte
 	json    map[string]any
 }
 
 func newHTTPSession(proxyURL string) (*httpSession, error) {
-	client, err := protocol.NewHTTPClient(defaultTimeout, proxyURL)
+	options := []tlsclient.HttpClientOption{
+		tlsclient.WithTimeoutSeconds(int(defaultTimeout.Seconds())),
+		tlsclient.WithClientProfile(profiles.Chrome_146),
+		tlsclient.WithRandomTLSExtensionOrder(),
+		tlsclient.WithDisableHttp3(),
+		tlsclient.WithCookieJar(tlsclient.NewCookieJar()),
+	}
+	if proxyURL = strings.TrimSpace(proxyURL); proxyURL != "" {
+		options = append(options, tlsclient.WithProxyUrl(proxyURL))
+	}
+	client, err := tlsclient.NewHttpClient(tlsclient.NewNoopLogger(), options...)
 	if err != nil {
 		return nil, err
 	}
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		return nil, err
-	}
-	client.Jar = jar
-	return &httpSession{client: client, headers: make(http.Header)}, nil
+	return &httpSession{client: client, headers: make(stdhttp.Header)}, nil
 }
 
-func (s *httpSession) close() {}
+func (s *httpSession) close() {
+	if s != nil && s.client != nil {
+		s.client.CloseIdleConnections()
+	}
+}
 
 func (s *httpSession) request(ctx context.Context, method, rawURL string, opts requestOptions) (*httpResult, error) {
 	var body io.Reader
@@ -82,18 +93,15 @@ func (s *httpSession) request(ctx context.Context, method, rawURL string, opts r
 		}
 		target.RawQuery = query.Encode()
 	}
-	req, err := http.NewRequestWithContext(ctx, strings.ToUpper(method), target.String(), body)
+	req, err := fhttp.NewRequestWithContext(ctx, strings.ToUpper(method), target.String(), body)
 	if err != nil {
 		return nil, err
 	}
-	req.Header = headers
+	req.Header = toFHTTPHeader(headers)
 	client := s.client
 	if opts.noRedirect {
-		clone := *s.client
-		clone.CheckRedirect = func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
-		client = &clone
+		client.SetFollowRedirect(false)
+		defer client.SetFollowRedirect(true)
 	}
 	var lastErr error
 	for attempt := 1; attempt <= 3; attempt++ {
@@ -105,7 +113,7 @@ func (s *httpSession) request(ctx context.Context, method, rawURL string, opts r
 				return nil, readErr
 			}
 			payload, _ := protocol.DecodeJSONMap(raw)
-			return &httpResult{status: resp.StatusCode, headers: resp.Header.Clone(), body: raw, json: map[string]any(payload)}, nil
+			return &httpResult{status: resp.StatusCode, headers: fromFHTTPHeader(resp.Header), body: raw, json: map[string]any(payload)}, nil
 		}
 		lastErr = err
 		if attempt >= 3 || !retryableTransportError(err) {
@@ -155,8 +163,8 @@ func (r *httpResult) require(status int, label string) error {
 	return nil
 }
 
-func cloneHeader(src http.Header) http.Header {
-	dst := make(http.Header)
+func cloneHeader(src stdhttp.Header) stdhttp.Header {
+	dst := make(stdhttp.Header)
 	for key, values := range src {
 		for _, value := range values {
 			dst.Add(key, value)
@@ -165,13 +173,33 @@ func cloneHeader(src http.Header) http.Header {
 	return dst
 }
 
-func mergeHeader(dst http.Header, src http.Header) {
+func mergeHeader(dst stdhttp.Header, src stdhttp.Header) {
 	for key, values := range src {
 		dst.Del(key)
 		for _, value := range values {
 			dst.Add(key, value)
 		}
 	}
+}
+
+func toFHTTPHeader(src stdhttp.Header) fhttp.Header {
+	dst := make(fhttp.Header)
+	for key, values := range src {
+		for _, value := range values {
+			dst.Add(key, value)
+		}
+	}
+	return dst
+}
+
+func fromFHTTPHeader(src fhttp.Header) stdhttp.Header {
+	dst := make(stdhttp.Header)
+	for key, values := range src {
+		for _, value := range values {
+			dst.Add(key, value)
+		}
+	}
+	return dst
 }
 
 func retryableTransportError(err error) bool {

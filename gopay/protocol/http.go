@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -109,8 +108,6 @@ func NewHTTPClient(timeout time.Duration, proxyRawURL string) (*http.Client, err
 		timeout = 30 * time.Second
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.ForceAttemptHTTP2 = false
-	transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
 	proxyRawURL = strings.TrimSpace(proxyRawURL)
 	if proxyRawURL != "" {
 		parsed, err := url.Parse(proxyRawURL)

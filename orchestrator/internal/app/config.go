@@ -64,12 +64,10 @@ type orchestratorConfig struct {
 	GoPayAddBalanceRekberinajaPollInterval int32
 	GoPayAddBalanceConfirmTimeoutSeconds   int32
 
-	ChangePhoneMaxFailures            int
-	ChangePhoneDisabled               bool
-	ChangePhoneOTPRetryAttempts       int
-	ChangePhoneGetNumberRetryDelay    time.Duration
-	ChangePhoneSMSCancelTimeout       time.Duration
-	ChangePhoneSMSCancelRetryInterval time.Duration
+	ChangePhoneMaxFailures         int
+	ChangePhoneDisabled            bool
+	ChangePhoneOTPRetryAttempts    int
+	ChangePhoneGetNumberRetryDelay time.Duration
 
 	WorkflowRuntime workflowruntime.Config
 }
@@ -131,12 +129,10 @@ func loadOrchestratorConfig() orchestratorConfig {
 		GoPayAddBalanceRekberinajaPollInterval: envInt32("GOPAY_ADD_BALANCE_REKBERINAJA_POLL_INTERVAL_SECONDS", 5),
 		GoPayAddBalanceConfirmTimeoutSeconds:   envInt32("GOPAY_ADD_BALANCE_CONFIRM_TIMEOUT_SECONDS", 1800),
 
-		ChangePhoneMaxFailures:            envInt("GOPAY_CHANGE_PHONE_MAX_FAILURES", defaultChangePhoneMaxFailures),
-		ChangePhoneDisabled:               envBool("GOPAY_CHANGE_PHONE_DISABLED", false),
-		ChangePhoneOTPRetryAttempts:       envIntNonNegative("GOPAY_CHANGE_PHONE_OTP_RETRY_ATTEMPTS", defaultChangePhoneOTPRetryAttempts),
-		ChangePhoneGetNumberRetryDelay:    envNonNegativeDurationSeconds("GOPAY_CHANGE_PHONE_GET_NUMBER_RETRY_SECONDS", defaultChangePhoneGetNumberRetryDelay),
-		ChangePhoneSMSCancelTimeout:       envPositiveDurationSeconds("GOPAY_CHANGE_PHONE_SMS_CANCEL_TIMEOUT_SECONDS", defaultChangePhoneSMSCancelTimeout),
-		ChangePhoneSMSCancelRetryInterval: envPositiveDurationSeconds("GOPAY_CHANGE_PHONE_SMS_CANCEL_RETRY_SECONDS", defaultChangePhoneSMSCancelRetryInterval),
+		ChangePhoneMaxFailures:         envInt("GOPAY_CHANGE_PHONE_MAX_FAILURES", defaultChangePhoneMaxFailures),
+		ChangePhoneDisabled:            envBool("GOPAY_CHANGE_PHONE_DISABLED", false),
+		ChangePhoneOTPRetryAttempts:    envIntNonNegative("GOPAY_CHANGE_PHONE_OTP_RETRY_ATTEMPTS", defaultChangePhoneOTPRetryAttempts),
+		ChangePhoneGetNumberRetryDelay: envNonNegativeDurationSeconds("GOPAY_CHANGE_PHONE_GET_NUMBER_RETRY_SECONDS", defaultChangePhoneGetNumberRetryDelay),
 
 		WorkflowRuntime: loadWorkflowRuntimeConfig(),
 	}

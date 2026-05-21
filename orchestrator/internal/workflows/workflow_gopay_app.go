@@ -338,6 +338,26 @@ func runGoPayAppChangePhone(ctx workflow.Context, activityCtx workflow.Context, 
 			Data:         start.GetData(),
 			StateJson:    stateJSON,
 		}
+		if start.GetErrorMessage() != "" {
+			var canceled GoPayAppSMSActivationOutput
+			err := workflow.ExecuteActivity(activityCtx, goPayAppSMSCancelBeforeRotationActivityName, GoPayAppSMSActivationInput{
+				JobId:        jobID,
+				ActivationId: start.GetActivationId(),
+				FailureCount: failureCount,
+				Reason:       start.GetErrorMessage(),
+			}).Get(ctx, &canceled)
+			failureCount = canceled.GetFailureCount()
+			last.ActivationId = canceled.GetActivationId()
+			last.Data = canceled.GetData()
+			last.StateJson = stateJSON
+			if err != nil {
+				return last, err
+			}
+			if start.GetRetryableFailure() {
+				continue
+			}
+			return last, fmt.Errorf("%s", start.GetErrorMessage())
+		}
 		if start.GetRetryableFailure() {
 			continue
 		}

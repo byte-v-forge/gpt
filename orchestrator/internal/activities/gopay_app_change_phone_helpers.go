@@ -32,20 +32,6 @@ func (s *Server) changePhoneGetNumberRetryInterval() time.Duration {
 	return s.changePhoneGetNumberRetryDelay
 }
 
-func (s *Server) changePhoneSMSCancelWaitTimeout() time.Duration {
-	if s.changePhoneSMSCancelTimeout <= 0 {
-		return defaultChangePhoneSMSCancelTimeout
-	}
-	return s.changePhoneSMSCancelTimeout
-}
-
-func (s *Server) changePhoneSMSCancelRetryDelay() time.Duration {
-	if s.changePhoneSMSCancelRetryInterval <= 0 {
-		return defaultChangePhoneSMSCancelRetryInterval
-	}
-	return s.changePhoneSMSCancelRetryInterval
-}
-
 func (s *Server) recordChangePhoneFailure(ctx context.Context, activationID string, failures *int, reason string) error {
 	if activationID != "" {
 		if err := s.cancelSMSActivationForFailure(ctx, activationID, reason); err != nil {
@@ -59,17 +45,6 @@ func (s *Server) recordChangePhoneFailure(ctx context.Context, activationID stri
 		return fmt.Errorf("failed to change phone after %d consecutive failures: %s", maxFailures, reason)
 	}
 	return nil
-}
-
-func (s *Server) changePhoneErrorWithCancel(ctx context.Context, activationID string, reason string, err error, data map[string]any) error {
-	if err == nil {
-		err = fmt.Errorf("%s", reason)
-	}
-	if cancelErr := s.cancelSMSActivationForFailure(ctx, activationID, reason); cancelErr != nil {
-		err = fmt.Errorf("%w; cleanup: %v", err, cancelErr)
-	}
-	data["error_message"] = err.Error()
-	return err
 }
 
 func smsNoNumbers(message string) bool {
@@ -129,34 +104,17 @@ func (s *Server) cancelSMSActivationBeforeRotation(ctx context.Context, activati
 		return fmt.Errorf("activation id missing")
 	}
 
-	deadline := time.Now().Add(s.changePhoneSMSCancelWaitTimeout())
-	for {
-		resp, err := s.smsClient.CancelActivation(ctx, &smsv1.CancelActivationRequest{ActivationId: activationID, Reason: "change phone rotation"})
-		if err != nil {
-			return fmt.Errorf("CancelActivation: %w", err)
-		}
-		if smsCancelSettled(resp) {
-			if resp != nil && resp.GetError() != nil {
-				log.Printf("[gopay-app] CancelActivation settled without ACCESS_CANCEL: %s", smsCancelResponseText(resp))
-			}
-			return nil
-		}
-
-		message := smsCancelResponseText(resp)
-		if !smsEarlyCancelDenied(message) {
-			return fmt.Errorf("CancelActivation: %s", message)
-		}
-
-		remaining := time.Until(deadline)
-		if remaining <= 0 {
-			return fmt.Errorf("CancelActivation: %s", message)
-		}
-		delay := minDuration(s.changePhoneSMSCancelRetryDelay(), remaining)
-		log.Printf("[gopay-app] CancelActivation denied too early; retrying in %s", delay)
-		if err := sleepContext(ctx, delay); err != nil {
-			return fmt.Errorf("waiting to retry CancelActivation: %w", err)
-		}
+	resp, err := s.smsClient.CancelActivation(ctx, &smsv1.CancelActivationRequest{ActivationId: activationID, Reason: "change phone rotation"})
+	if err != nil {
+		return fmt.Errorf("CancelActivation: %w", err)
 	}
+	if smsCancelSettled(resp) {
+		if resp != nil && resp.GetError() != nil {
+			log.Printf("[gopay-app] CancelActivation settled without ACCESS_CANCEL: %s", smsCancelResponseText(resp))
+		}
+		return nil
+	}
+	return fmt.Errorf("CancelActivation: %s", smsCancelResponseText(resp))
 }
 
 func smsCancelSettled(resp *smsv1.CancelActivationResponse) bool {
@@ -174,11 +132,6 @@ func smsCancelSettled(resp *smsv1.CancelActivationResponse) bool {
 	default:
 		return false
 	}
-}
-
-func smsEarlyCancelDenied(message string) bool {
-	upper := strings.ToUpper(message)
-	return strings.Contains(upper, "EARLY_CANCEL_DENIED") || strings.Contains(upper, "CANCEL_NOT_ALLOWED")
 }
 
 func smsCancelResponseText(resp *smsv1.CancelActivationResponse) string {
@@ -200,13 +153,6 @@ func sleepContext(ctx context.Context, delay time.Duration) error {
 	case <-timer.C:
 		return nil
 	}
-}
-
-func minDuration(a, b time.Duration) time.Duration {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func authOtpIssuedAfterUnix(resp *pb.StatusResponse, fallback int64) int64 {

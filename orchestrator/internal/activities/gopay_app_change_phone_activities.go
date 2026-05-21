@@ -148,6 +148,15 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 	}
 	step := s.activityStep(ctx, input.GetJobId(), stepGoPayAppChangePhoneStart, false, true)
 	_, err := step.run(func() (any, error) {
+		failStart := func(err error, retryable bool) (any, error) {
+			output.ErrorMessage = err.Error()
+			output.RetryableFailure = retryable
+			data["error_message"] = err.Error()
+			if retryable {
+				data["retryable_failure"] = true
+			}
+			return data, nil
+		}
 		failures := int(input.GetFailureCount())
 		if failures < 0 {
 			failures = 0
@@ -166,29 +175,28 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 
 		if s.changePhoneDisabled {
 			err := fmt.Errorf("gopay change phone disabled by GOPAY_CHANGE_PHONE_DISABLED")
-			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
+			return failStart(err, false)
 		}
 		if s.gopayClient == nil {
 			err := fmt.Errorf("gopay app client not configured")
-			data["error_message"] = err.Error()
-			return data, err
+			return failStart(err, false)
 		}
 		if output.GetPhone() == "" {
 			err := fmt.Errorf("change phone number missing")
-			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
+			return failStart(err, false)
 		}
 
 		statusBefore, statusErr := s.goPayStatusForState(ctx, output.GetStateJson())
 		output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(statusBefore))
 		data["status_before"] = goPayStatusSnapshotData(goPayStatusSnapshot(statusBefore, statusErr))
 		if statusErr != nil {
-			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", statusErr, data)
+			return failStart(statusErr, false)
 		}
 
 		pin := strings.TrimSpace(input.GetPin())
 		if pin == "" {
 			err := fmt.Errorf("gopay pin is required")
-			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
+			return failStart(err, false)
 		}
 
 		changeResp, err := s.gopayClient.ChangePhoneStart(ctx, &pb.ChangePhoneStartRequest{
@@ -200,32 +208,21 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 		output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(changeResp))
 		if err != nil {
 			err = fmt.Errorf("ChangePhoneStart: %w", err)
-			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
+			return failStart(err, false)
 		}
 		if changeResp == nil {
 			err := fmt.Errorf("ChangePhoneStart returned empty response")
-			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
+			return failStart(err, false)
 		}
 		if !changeResp.GetSuccess() {
 			reason := fmt.Sprintf("ChangePhoneStart: %s", changeResp.GetErrorMessage())
 			if output.GetActivationId() != "" && changePhoneStartRetryableError(changeResp.GetErrorMessage()) {
-				if err := s.recordChangePhoneFailure(ctx, output.GetActivationId(), &failures, reason); err != nil {
-					output.FailureCount = int32(failures)
-					output.ErrorMessage = err.Error()
-					data["failure_count"] = failures
-					data["error_message"] = err.Error()
-					return data, err
-				}
 				output.FailureCount = int32(failures)
-				output.RetryableFailure = true
-				output.ErrorMessage = reason
 				data["failure_count"] = failures
-				data["retryable_failure"] = true
-				data["error_message"] = reason
-				return data, nil
+				return failStart(fmt.Errorf("%s", reason), true)
 			}
 			err := fmt.Errorf("%s", reason)
-			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
+			return failStart(err, false)
 		}
 
 		step.progress("change phone otp sent", map[string]any{
@@ -233,7 +230,7 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 		})
 		if output.GetActivationId() != "" {
 			if err := s.markSMSMessageSent(ctx, output.GetActivationId(), input.GetJobId()); err != nil {
-				return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
+				return failStart(err, false)
 			}
 		}
 

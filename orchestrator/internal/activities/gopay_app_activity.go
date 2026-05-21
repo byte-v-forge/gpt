@@ -10,13 +10,11 @@ import (
 )
 
 const (
-	defaultChangePhoneMaxFailures            = 3
-	defaultChangePhoneOTPRetryAttempts       = 1
-	defaultChangePhoneGetNumberRetryDelay    = 5 * time.Second
-	defaultChangePhoneSMSCancelTimeout       = 130 * time.Second
-	defaultChangePhoneSMSCancelRetryInterval = 10 * time.Second
-	gopayBalanceWaitTimeout                  = 2 * time.Minute
-	gopayBalancePollInterval                 = 5 * time.Second
+	defaultChangePhoneMaxFailures         = 3
+	defaultChangePhoneOTPRetryAttempts    = 1
+	defaultChangePhoneGetNumberRetryDelay = 5 * time.Second
+	gopayBalanceWaitTimeout               = 2 * time.Minute
+	gopayBalancePollInterval              = 5 * time.Second
 )
 
 func (s *Server) EnsureLogonActivity(ctx context.Context, input *pb.EnsureLogonRequest) (*pb.EnsureLogonResponse, error) {

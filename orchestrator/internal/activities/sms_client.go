@@ -18,15 +18,9 @@ const (
 func goPaySMSRequest(requestID string, labels map[string]string) *smsv1.AcquireNumberRequest {
 	return &smsv1.AcquireNumberRequest{
 		RequestId:     requestID,
-		ProviderKey:   "smsbower",
+		ProfileKey:    "gopay-id",
 		LeaseDuration: durationOrNil(defaultSMSLeaseDuration),
-		Target: &smsv1.SmsTarget{
-			ApplicationKey:     "gojek",
-			CountryIso2:        "ID",
-			CountryCallingCode: "62",
-			MaxPrice:           smsMoney("USD", "0.007"),
-		},
-		Labels: labels,
+		Labels:        labels,
 	}
 }
 
@@ -34,8 +28,8 @@ func (s *Server) acquireSMSNumber(ctx context.Context, request *smsv1.AcquireNum
 	if s.smsClient == nil {
 		return "", "", fmt.Errorf("sms client not configured")
 	}
-	if request == nil || request.GetTarget() == nil {
-		return "", "", fmt.Errorf("sms acquire request target is required")
+	if request == nil || (strings.TrimSpace(request.GetProfileKey()) == "" && request.GetTarget() == nil) {
+		return "", "", fmt.Errorf("sms acquire request profile or target is required")
 	}
 	normalizeAcquireNumberRequest(request)
 	resp, err := s.smsClient.AcquireNumber(ctx, request)
@@ -60,11 +54,15 @@ func (s *Server) acquireSMSNumber(ctx context.Context, request *smsv1.AcquireNum
 }
 
 func normalizeAcquireNumberRequest(request *smsv1.AcquireNumberRequest) {
-	if request == nil || request.GetTarget() == nil {
+	if request == nil {
 		return
 	}
+	request.ProfileKey = strings.TrimSpace(request.GetProfileKey())
 	request.ProviderKey = strings.TrimSpace(request.GetProviderKey())
 	request.ProviderConfigId = strings.TrimSpace(request.GetProviderConfigId())
+	if request.GetTarget() == nil {
+		return
+	}
 	request.Target.ApplicationKey = strings.TrimSpace(request.GetTarget().GetApplicationKey())
 	request.Target.CountryIso2 = strings.ToUpper(strings.TrimSpace(request.GetTarget().GetCountryIso2()))
 	request.Target.CountryCallingCode = strings.TrimPrefix(strings.TrimSpace(request.GetTarget().GetCountryCallingCode()), "+")
@@ -148,15 +146,6 @@ func (s *Server) completeSMSActivation(ctx context.Context, activationID string,
 		return fmt.Errorf("CompleteActivation: %s", smsErrorText(resp.GetError()))
 	}
 	return nil
-}
-
-func smsMoney(currency string, amount string) *smsv1.DecimalMoney {
-	currency = strings.TrimSpace(currency)
-	amount = strings.TrimSpace(amount)
-	if currency == "" && amount == "" {
-		return nil
-	}
-	return &smsv1.DecimalMoney{CurrencyCode: currency, AmountDecimal: amount}
 }
 
 func durationOrNil(value time.Duration) *durationpb.Duration {

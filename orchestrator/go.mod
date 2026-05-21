@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/byte-v-forge/browser-automation v0.1.1-0.20260519042351-f4009fb5babf
-	github.com/byte-v-forge/sms v0.1.1-0.20260519030925-f4bb83fb3695
+	github.com/byte-v-forge/sms v0.1.1-0.20260521055714-8193c07347e9
 	github.com/byte-v-forge/workflow-runtime v0.3.1-0.20260519081429-c1beebeabff0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2

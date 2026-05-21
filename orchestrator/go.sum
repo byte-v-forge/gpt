@@ -2,6 +2,8 @@ github.com/byte-v-forge/browser-automation v0.1.1-0.20260519042351-f4009fb5babf 
 github.com/byte-v-forge/browser-automation v0.1.1-0.20260519042351-f4009fb5babf/go.mod h1:AVmSiSAgZy1VvDnlg42BBYbeaJqOKQyt5RBP7fg74o4=
 github.com/byte-v-forge/sms v0.1.1-0.20260519030925-f4bb83fb3695 h1:vJ9sTAxEP8bgh37AM96+MupDeql4YuQvOGVnrMbE098=
 github.com/byte-v-forge/sms v0.1.1-0.20260519030925-f4bb83fb3695/go.mod h1:pjAWwMT+w8+Go28RTx2b0DVhsBe5wTx6DDZpejxSIvs=
+github.com/byte-v-forge/sms v0.1.1-0.20260521055714-8193c07347e9 h1:jGnDsdeL6GTZaRsYkuGca9gBMGGEQKFG5fNLZYc8UVE=
+github.com/byte-v-forge/sms v0.1.1-0.20260521055714-8193c07347e9/go.mod h1:i7n0tGMQayOctX6cmj4HlrKGaj1inXsYzXHSy15U9Nk=
 github.com/byte-v-forge/workflow-runtime v0.3.1-0.20260519081429-c1beebeabff0 h1:D2Kw47Y2lQsaMXNqVjwhsxEPgy+leU3+Fd9ecHIM2tk=
 github.com/byte-v-forge/workflow-runtime v0.3.1-0.20260519081429-c1beebeabff0/go.mod h1:UMag4r7wCgWEN82m/nktvww+Nc8zHvkYUI1yalN+e9Y=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

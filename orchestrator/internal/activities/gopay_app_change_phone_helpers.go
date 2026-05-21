@@ -48,7 +48,9 @@ func (s *Server) changePhoneSMSCancelRetryDelay() time.Duration {
 
 func (s *Server) recordChangePhoneFailure(ctx context.Context, activationID string, failures *int, reason string) error {
 	if activationID != "" {
-		s.cancelSMSActivationAsync(activationID, reason)
+		if err := s.cancelSMSActivationForFailure(ctx, activationID, reason); err != nil {
+			return err
+		}
 	}
 	*failures++
 	maxFailures := s.changePhoneMaxFailureCount()
@@ -57,6 +59,17 @@ func (s *Server) recordChangePhoneFailure(ctx context.Context, activationID stri
 		return fmt.Errorf("failed to change phone after %d consecutive failures: %s", maxFailures, reason)
 	}
 	return nil
+}
+
+func (s *Server) changePhoneErrorWithCancel(ctx context.Context, activationID string, reason string, err error, data map[string]any) error {
+	if err == nil {
+		err = fmt.Errorf("%s", reason)
+	}
+	if cancelErr := s.cancelSMSActivationForFailure(ctx, activationID, reason); cancelErr != nil {
+		err = fmt.Errorf("%w; cleanup: %v", err, cancelErr)
+	}
+	data["error_message"] = err.Error()
+	return err
 }
 
 func smsNoNumbers(message string) bool {
@@ -95,6 +108,19 @@ func (s *Server) finishSMSActivation(ctx context.Context, activationID string) {
 	}
 }
 
+func (s *Server) cancelSMSActivationForFailure(ctx context.Context, activationID string, reason string) error {
+	if strings.TrimSpace(activationID) == "" {
+		return nil
+	}
+	if strings.TrimSpace(reason) != "" {
+		log.Printf("[gopay-app] CancelActivation for %s: %s", activationID, reason)
+	}
+	if err := s.cancelSMSActivationBeforeRotation(ctx, activationID); err != nil {
+		return fmt.Errorf("CancelActivation cleanup failed: %w", err)
+	}
+	return nil
+}
+
 func (s *Server) cancelSMSActivationBeforeRotation(ctx context.Context, activationID string) error {
 	if s.smsClient == nil {
 		return fmt.Errorf("code receiver client not configured")
@@ -131,23 +157,6 @@ func (s *Server) cancelSMSActivationBeforeRotation(ctx context.Context, activati
 			return fmt.Errorf("waiting to retry CancelActivation: %w", err)
 		}
 	}
-}
-
-func (s *Server) cancelSMSActivationAsync(activationID string, reason string) {
-	if s.smsClient == nil || activationID == "" {
-		return
-	}
-	go func() {
-		timeout := s.changePhoneSMSCancelWaitTimeout() + 5*time.Second
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-		if strings.TrimSpace(reason) != "" {
-			log.Printf("[gopay-app] async CancelActivation for %s: %s", activationID, reason)
-		}
-		if err := s.cancelSMSActivationBeforeRotation(ctx, activationID); err != nil {
-			log.Printf("[gopay-app] async CancelActivation failed for %s: %v", activationID, err)
-		}
-	}()
 }
 
 func smsCancelSettled(resp *smsv1.CancelActivationResponse) bool {

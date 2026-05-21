@@ -165,10 +165,8 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 		data["otp_retry_attempts"] = otpRetryAttempts
 
 		if s.changePhoneDisabled {
-			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
 			err := fmt.Errorf("gopay change phone disabled by GOPAY_CHANGE_PHONE_DISABLED")
-			data["error_message"] = err.Error()
-			return data, err
+			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
 		}
 		if s.gopayClient == nil {
 			err := fmt.Errorf("gopay app client not configured")
@@ -176,27 +174,21 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 			return data, err
 		}
 		if output.GetPhone() == "" {
-			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
 			err := fmt.Errorf("change phone number missing")
-			data["error_message"] = err.Error()
-			return data, err
+			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
 		}
 
 		statusBefore, statusErr := s.goPayStatusForState(ctx, output.GetStateJson())
 		output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(statusBefore))
 		data["status_before"] = goPayStatusSnapshotData(goPayStatusSnapshot(statusBefore, statusErr))
 		if statusErr != nil {
-			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
-			data["error_message"] = statusErr.Error()
-			return data, statusErr
+			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", statusErr, data)
 		}
 
 		pin := strings.TrimSpace(input.GetPin())
 		if pin == "" {
-			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
 			err := fmt.Errorf("gopay pin is required")
-			data["error_message"] = err.Error()
-			return data, err
+			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
 		}
 
 		changeResp, err := s.gopayClient.ChangePhoneStart(ctx, &pb.ChangePhoneStartRequest{
@@ -207,16 +199,12 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 		})
 		output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(changeResp))
 		if err != nil {
-			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
 			err = fmt.Errorf("ChangePhoneStart: %w", err)
-			data["error_message"] = err.Error()
-			return data, err
+			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
 		}
 		if changeResp == nil {
-			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
 			err := fmt.Errorf("ChangePhoneStart returned empty response")
-			data["error_message"] = err.Error()
-			return data, err
+			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
 		}
 		if !changeResp.GetSuccess() {
 			reason := fmt.Sprintf("ChangePhoneStart: %s", changeResp.GetErrorMessage())
@@ -236,10 +224,8 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 				data["error_message"] = reason
 				return data, nil
 			}
-			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
 			err := fmt.Errorf("%s", reason)
-			data["error_message"] = err.Error()
-			return data, err
+			return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
 		}
 
 		step.progress("change phone otp sent", map[string]any{
@@ -247,9 +233,7 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 		})
 		if output.GetActivationId() != "" {
 			if err := s.markSMSMessageSent(ctx, output.GetActivationId(), input.GetJobId()); err != nil {
-				s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
-				data["error_message"] = err.Error()
-				return data, err
+				return data, s.changePhoneErrorWithCancel(ctx, output.GetActivationId(), "discard change phone activation", err, data)
 			}
 		}
 

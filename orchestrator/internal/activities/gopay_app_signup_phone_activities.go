@@ -48,19 +48,21 @@ func (s *Server) GoPayAppAcquireSignupPhoneActivity(ctx context.Context, input G
 		data["phone_present"] = phone != ""
 		data["failure_count"] = failures
 		if phone == "" {
-			s.cancelSMSActivationAsync(activationID, "discard signup phone")
-			data["async_cancel_scheduled"] = true
 			err := fmt.Errorf("signup phone missing")
+			if cancelErr := s.cancelSMSActivationForFailure(ctx, activationID, "discard signup phone"); cancelErr != nil {
+				err = fmt.Errorf("%w; cleanup: %v", err, cancelErr)
+			}
 			data["error_message"] = err.Error()
 			return data, err
 		}
 
 		checkResp, err := s.gopayClient.CheckPhone(ctx, &pb.CheckPhoneRequest{Phone: phone})
 		if err != nil {
-			s.cancelSMSActivationAsync(activationID, "discard signup phone")
-			data["async_cancel_scheduled"] = true
 			data["phone_status"] = "error"
 			err = fmt.Errorf("CheckPhone: %w", err)
+			if cancelErr := s.cancelSMSActivationForFailure(ctx, activationID, "discard signup phone"); cancelErr != nil {
+				err = fmt.Errorf("%w; cleanup: %v", err, cancelErr)
+			}
 			data["error_message"] = err.Error()
 			return data, err
 		}
@@ -71,16 +73,18 @@ func (s *Server) GoPayAppAcquireSignupPhoneActivity(ctx context.Context, input G
 			"status":        status,
 		})
 		if status == "registered" {
-			s.cancelSMSActivationAsync(activationID, "signup phone already registered")
-			data["async_cancel_scheduled"] = true
 			err := fmt.Errorf("signup phone already registered")
+			if cancelErr := s.cancelSMSActivationForFailure(ctx, activationID, "signup phone already registered"); cancelErr != nil {
+				err = fmt.Errorf("%w; cleanup: %v", err, cancelErr)
+			}
 			data["error_message"] = err.Error()
 			return data, err
 		}
 		if status != "available" {
-			s.cancelSMSActivationAsync(activationID, "discard signup phone")
-			data["async_cancel_scheduled"] = true
 			err := fmt.Errorf("signup phone unavailable: %s", status)
+			if cancelErr := s.cancelSMSActivationForFailure(ctx, activationID, "discard signup phone"); cancelErr != nil {
+				err = fmt.Errorf("%w; cleanup: %v", err, cancelErr)
+			}
 			data["error_message"] = err.Error()
 			return data, err
 		}
@@ -112,8 +116,11 @@ func (s *Server) GoPayAppDiscardSignupPhoneActivity(ctx context.Context, input G
 		if reason == "" {
 			reason = "discard signup phone"
 		}
-		s.cancelSMSActivationAsync(input.GetActivationId(), reason)
-		data["async_cancel_scheduled"] = true
+		if err := s.cancelSMSActivationForFailure(ctx, input.GetActivationId(), reason); err != nil {
+			data["error_message"] = err.Error()
+			return data, err
+		}
+		data["canceled"] = true
 		return data, nil
 	})
 	output.Data = protoData(data)

@@ -32,6 +32,7 @@ type orchestratorConfig struct {
 	BrowserAuthHumanize       string
 
 	GoPayOTPWebhookListenAddr              string
+	MailboxWebhookToken                    string
 	GoPayOTPWebhookTTL                     time.Duration
 	GoPayOTPWebhookMaxItems                int
 	GoPayOTPTimeout                        int32
@@ -98,6 +99,7 @@ func loadOrchestratorConfig() orchestratorConfig {
 		BrowserAuthHumanize:       envDefault("BROWSER_AUTH_HUMANIZE", "true"),
 
 		GoPayOTPWebhookListenAddr:              envDefault("GOPAY_OTP_WEBHOOK_LISTEN_ADDR", ":8081"),
+		MailboxWebhookToken:                    envDefault("GPT_MAILBOX_WEBHOOK_TOKEN", ""),
 		GoPayOTPWebhookTTL:                     envPositiveDurationSeconds("GOPAY_OTP_WEBHOOK_TTL_SECONDS", 10*time.Minute),
 		GoPayOTPWebhookMaxItems:                envInt("GOPAY_OTP_WEBHOOK_MAX_ITEMS", 100),
 		GoPayOTPTimeout:                        envInt32("GOPAY_OTP_TIMEOUT_SECONDS", 180),

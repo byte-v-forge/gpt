@@ -5,10 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"gorm.io/gorm/clause"
-
-	"orchestrator/db"
 )
 
 func (s *Server) GoPayResolveWAPhoneActivity(ctx context.Context, input GoPayResolveWAPhoneInput) (GoPayResolveWAPhoneOutput, error) {
@@ -28,19 +24,6 @@ func (s *Server) GoPayResolveWAPhoneActivity(ctx context.Context, input GoPayRes
 
 		phone := normalizeIndonesiaPhone(input.GetWaPhone())
 		data["request_phone_present"] = phone != ""
-		if phone == "" && userID == goPayLocalSource {
-			phone = configuredGoPayWAPhone()
-			data["env_phone_present"] = phone != ""
-		}
-		if phone == "" {
-			stored, err := s.loadGoPayWAPhoneProfile(ctx, userID)
-			if err != nil {
-				data["profile_error"] = err.Error()
-				return data, err
-			}
-			phone = stored
-			data["profile_phone_present"] = phone != ""
-		}
 		if phone == "" {
 			err := fmt.Errorf("wa_phone is required for WA GoPay payment")
 			data["error_message"] = err.Error()
@@ -48,11 +31,6 @@ func (s *Server) GoPayResolveWAPhoneActivity(ctx context.Context, input GoPayRes
 		}
 
 		data["phone_present"] = true
-		if err := s.saveGoPayWAPhoneProfile(ctx, userID, phone); err != nil {
-			data["profile_error"] = err.Error()
-			return data, err
-		}
-		data["profile_saved"] = true
 		output.WaPhone = phone
 		return data, nil
 	})
@@ -157,9 +135,6 @@ func (s *Server) GoPayPaymentRebindSourceActivity(ctx context.Context, input GoP
 	}
 	waPhone := firstNonEmpty(jobParam(ctx, s, output.GetSourceJobId(), "wa_phone"), stringField(result, "wa_phone"))
 	if waPhone == "" {
-		waPhone, _ = s.loadGoPayWAPhoneProfile(ctx, userID)
-	}
-	if waPhone == "" {
 		err := fmt.Errorf("source job wa_phone is required for GoPay WA rebind")
 		data["error_message"] = err.Error()
 		output.Data = protoData(data)
@@ -186,35 +161,6 @@ func (s *Server) GoPayPaymentRebindSourceActivity(ctx context.Context, input GoP
 	data["snap_token_present"] = snapToken != ""
 	output.Data = protoData(data)
 	return output, nil
-}
-
-func (s *Server) loadGoPayWAPhoneProfile(ctx context.Context, userID string) (string, error) {
-	if s.db == nil {
-		return "", fmt.Errorf("orchestrator db not configured")
-	}
-	var profile db.GoPayUserProfile
-	result := s.db.WithContext(ctx).Where("state_key = ?", userID).Limit(1).Find(&profile)
-	if result.Error != nil {
-		return "", result.Error
-	}
-	if result.RowsAffected == 0 {
-		return "", nil
-	}
-	return normalizeIndonesiaPhone(profile.WAPhone), nil
-}
-
-func (s *Server) saveGoPayWAPhoneProfile(ctx context.Context, userID, phone string) error {
-	if s.db == nil {
-		return fmt.Errorf("orchestrator db not configured")
-	}
-	phone = normalizeIndonesiaPhone(phone)
-	if phone == "" {
-		return fmt.Errorf("wa_phone is required")
-	}
-	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "state_key"}},
-		DoUpdates: clause.AssignmentColumns([]string{"wa_phone", "updated_at"}),
-	}).Create(&db.GoPayUserProfile{StateKey: userID, WAPhone: phone}).Error
 }
 
 func jobParam(ctx context.Context, s *Server, jobID, key string) string {

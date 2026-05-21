@@ -1,0 +1,198 @@
+.accountsList {
+  grid-auto-rows: 96px;
+}
+
+.registrationSummary {
+  margin: 12px 14px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.registrationSummary svg {
+  flex: 0 0 auto;
+}
+
+.registrationSummary div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.registrationSummary span {
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.registrationSummary.good { background: var(--success-soft); color: var(--success); }
+.registrationSummary.mid { background: var(--warning-soft); color: var(--warning); }
+.registrationSummary.bad { background: var(--danger-soft); color: var(--danger); border-color: #f2c7c1; }
+
+.goPayStatusCard {
+  margin: 12px 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  background: var(--surface-soft);
+}
+
+.goPayStatusCard.good { background: var(--success-soft); color: var(--success); border-color: #bfe7cc; }
+.goPayStatusCard.mid { background: var(--warning-soft); color: var(--warning); border-color: #f1dc9b; }
+.goPayStatusCard.bad { background: var(--danger-soft); color: var(--danger); border-color: #f2c7c1; }
+
+.goPayStatusHead,
+.goPayCurrentFlow {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.goPayStatusHead div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.goPayStatusHead span,
+.goPayCurrentFlow em {
+  min-width: 0;
+  color: var(--muted-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.goPayCurrentFlow span {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.accountStatePill {
+  min-width: 0;
+  height: 25px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-soft);
+  color: #334155;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.accountStatePill em {
+  color: var(--muted-foreground);
+  font-style: normal;
+  font-weight: 650;
+}
+
+.accountStatePill strong {
+  color: inherit;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.accountStatePill.good { color: var(--success); background: var(--success-soft); border-color: #bfe7cc; }
+.accountStatePill.mid { color: var(--warning); background: var(--warning-soft); border-color: #f1dc9b; }
+.accountStatePill.bad { color: var(--danger); background: var(--danger-soft); border-color: #f2c7c1; }
+.accountStatePill.neutral { color: #475569; background: #f8fafc; border-color: #e2e8f0; }
+
+.accountCardTags {
+  min-width: 0;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.paymentIconAction {
+  width: 46px;
+  min-width: 46px;
+}
+
+.paymentChannelIcon {
+  min-width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+}
+
+.paymentChannelIcon svg {
+  flex: 0 0 auto;
+}
+
+.goPayWalletIcon {
+  width: 15px;
+  height: 15px;
+}
+
+.whatsAppPaymentIcon {
+  color: #25d366;
+  display: inline-flex;
+  align-items: center;
+}
+
+.accountCardEmail {
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px;
+  align-items: center;
+  gap: 6px;
+}
+
+.accountCardEmail > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inlineCopyAction {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  flex: 0 0 auto;
+}
+
+.runningOtpActions,
+.runningOtpForm { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.runningOtpForm { min-width: 0; }
+.runningOtpInput { width: 72px; height: 32px; font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.accountSignalBadge.compact {
+  margin: 0;
+}
+
+.accountChannelTag {
+  max-width: 92px;
+  height: 25px;
+  border: 1px solid #c7d2fe;
+  border-radius: 999px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  color: #4338ca;
+  background: #eef2ff;
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

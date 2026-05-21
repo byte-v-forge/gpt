@@ -34,10 +34,10 @@ func (s *Server) GoPayAppChangePhoneGetNumberActivity(ctx context.Context, input
 				"failures":     failures,
 				"max_failures": maxFailures,
 			})
-			activationID, phone, err := s.acquireSMSNumber(ctx, input.GetJobId(), goPaySMSTarget(), map[string]string{
+			activationID, phone, err := s.acquireSMSNumber(ctx, goPaySMSRequest(input.GetJobId(), map[string]string{
 				"workflow": "gopay_change_phone",
 				"job_id":   input.GetJobId(),
-			})
+			}))
 			if err != nil {
 				message := err.Error()
 				if smsNoNumbers(message) {
@@ -170,13 +170,8 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		if s.gopayClient == nil || s.smsClient == nil {
-			err := fmt.Errorf("gopay app or code receiver client not configured")
-			data["error_message"] = err.Error()
-			return data, err
-		}
-		if output.GetActivationId() == "" {
-			err := fmt.Errorf("activation id missing")
+		if s.gopayClient == nil {
+			err := fmt.Errorf("gopay app client not configured")
 			data["error_message"] = err.Error()
 			return data, err
 		}
@@ -196,18 +191,19 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 			return data, statusErr
 		}
 
-		pin := configuredGoPayPIN()
+		pin := strings.TrimSpace(input.GetPin())
 		if pin == "" {
 			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
-			err := fmt.Errorf("GOPAY_PIN is required")
+			err := fmt.Errorf("gopay pin is required")
 			data["error_message"] = err.Error()
 			return data, err
 		}
 
 		changeResp, err := s.gopayClient.ChangePhoneStart(ctx, &pb.ChangePhoneStartRequest{
-			NewPhone:  output.GetPhone(),
-			Pin:       pin,
-			StateJson: output.GetStateJson(),
+			NewPhone:    output.GetPhone(),
+			Pin:         pin,
+			CountryCode: input.GetCountryCode(),
+			StateJson:   output.GetStateJson(),
 		})
 		output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(changeResp))
 		if err != nil {
@@ -224,7 +220,7 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 		}
 		if !changeResp.GetSuccess() {
 			reason := fmt.Sprintf("ChangePhoneStart: %s", changeResp.GetErrorMessage())
-			if changePhoneStartRetryableError(changeResp.GetErrorMessage()) {
+			if output.GetActivationId() != "" && changePhoneStartRetryableError(changeResp.GetErrorMessage()) {
 				if err := s.recordChangePhoneFailure(ctx, output.GetActivationId(), &failures, reason); err != nil {
 					output.FailureCount = int32(failures)
 					output.ErrorMessage = err.Error()
@@ -249,10 +245,12 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 		step.progress("change phone otp sent", map[string]any{
 			"activation_id": output.GetActivationId(),
 		})
-		if err := s.markSMSMessageSent(ctx, output.GetActivationId(), input.GetJobId()); err != nil {
-			s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
-			data["error_message"] = err.Error()
-			return data, err
+		if output.GetActivationId() != "" {
+			if err := s.markSMSMessageSent(ctx, output.GetActivationId(), input.GetJobId()); err != nil {
+				s.cancelSMSActivationAsync(output.GetActivationId(), "discard change phone activation")
+				data["error_message"] = err.Error()
+				return data, err
+			}
 		}
 
 		data["change_phone_start_complete"] = true
@@ -396,18 +394,22 @@ func (s *Server) GoPayAppChangePhoneCompleteActivity(ctx context.Context, input 
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		if input.GetActivationId() == "" {
-			err := fmt.Errorf("activation id missing")
-			data["error_message"] = err.Error()
-			return data, err
+		code := strings.TrimSpace(input.GetCode())
+		if code == "" && strings.TrimSpace(input.GetOtpParam()) != "" {
+			var consumeErr error
+			code, consumeErr = s.consumeStoredOTP(ctx, input.GetJobId(), input.GetOtpParam(), input.GetSubmittedAtParam(), input.GetIssuedAfterUnix())
+			if consumeErr != nil {
+				data["error_message"] = consumeErr.Error()
+				return data, consumeErr
+			}
 		}
-		if strings.TrimSpace(input.GetCode()) == "" {
+		if code == "" {
 			s.finishSMSActivation(ctx, input.GetActivationId())
 			err := fmt.Errorf("WaitCode returned empty code")
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		completeResp, err := s.gopayClient.ChangePhoneComplete(ctx, &pb.ChangePhoneCompleteRequest{Otp: input.GetCode(), StateJson: output.GetStateJson()})
+		completeResp, err := s.gopayClient.ChangePhoneComplete(ctx, &pb.ChangePhoneCompleteRequest{Otp: code, StateJson: output.GetStateJson()})
 		output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(completeResp))
 		if err != nil {
 			s.finishSMSActivation(ctx, input.GetActivationId())

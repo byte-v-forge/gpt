@@ -12,6 +12,7 @@ const (
 	resolveAccountActivityName                   = contracts.ResolveAccountActivityName
 	browserAuthStartActivityName                 = contracts.BrowserAuthStartActivityName
 	browserAuthWaitActivityName                  = contracts.BrowserAuthWaitActivityName
+	browserAuthResendOTPActivityName             = contracts.BrowserAuthResendOTPActivityName
 	browserAuthCompleteActivityName              = contracts.BrowserAuthCompleteActivityName
 	browserAuthCancelActivityName                = contracts.BrowserAuthCancelActivityName
 	waitOTPActivityName                          = contracts.WaitOTPActivityName
@@ -54,6 +55,7 @@ const (
 	markJobSucceededActivityName                 = contracts.MarkJobSucceededActivityName
 
 	manualOTPSignalName                = contracts.ManualOTPSignalName
+	otpResendSignalName                = contracts.OTPResendSignalName
 	manualAddBalanceSignalName         = contracts.ManualAddBalanceSignalName
 	goPayAddBalanceSelectionSignalName = contracts.GoPayAddBalanceSelectionSignalName
 	workflowProgressQueryName          = contracts.WorkflowProgressQueryName

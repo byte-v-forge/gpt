@@ -430,18 +430,24 @@ func (s *accountDatabaseServer) buildAccount(input *pb.Account) (*db.Account, er
 
 	now := time.Now()
 	account := &db.Account{
-		ID:           strings.TrimSpace(input.GetAccountId()),
-		Email:        strings.TrimSpace(input.GetEmail()),
-		Password:     input.GetPassword(),
-		Status:       strings.TrimSpace(input.GetStatus()),
-		ErrorMessage: input.GetErrorMessage(),
-		SessionToken: strings.TrimSpace(input.GetSessionToken()),
-		AccessToken:  strings.TrimSpace(input.GetAccessToken()),
-		ChargeRef:    strings.TrimSpace(input.GetChargeRef()),
-		FirstName:    strings.TrimSpace(input.GetFirstName()),
-		LastName:     strings.TrimSpace(input.GetLastName()),
-		DOB:          strings.TrimSpace(input.GetDob()),
-		Tier:         normalizeTier(input.GetTier()),
+		ID:                             strings.TrimSpace(input.GetAccountId()),
+		Email:                          strings.TrimSpace(input.GetEmail()),
+		Password:                       input.GetPassword(),
+		Status:                         strings.TrimSpace(input.GetStatus()),
+		ErrorMessage:                   input.GetErrorMessage(),
+		SessionToken:                   strings.TrimSpace(input.GetSessionToken()),
+		AccessToken:                    strings.TrimSpace(input.GetAccessToken()),
+		ChargeRef:                      strings.TrimSpace(input.GetChargeRef()),
+		FirstName:                      strings.TrimSpace(input.GetFirstName()),
+		LastName:                       strings.TrimSpace(input.GetLastName()),
+		DOB:                            strings.TrimSpace(input.GetDob()),
+		Tier:                           normalizeTier(input.GetTier()),
+		PrimaryMailboxEmail:            normalizeEmail(input.GetPrimaryMailboxEmail()),
+		MailboxLastFetchedAtUnix:       input.GetMailboxLastFetchedAtUnix(),
+		MailboxLastMessageAtUnix:       input.GetMailboxLastMessageAtUnix(),
+		MailboxLatestOTP:               strings.TrimSpace(input.GetMailboxLatestOtp()),
+		MailboxLatestOTPSubject:        strings.TrimSpace(input.GetMailboxLatestOtpSubject()),
+		MailboxLatestOTPReceivedAtUnix: input.GetMailboxLatestOtpReceivedAtUnix(),
 	}
 	if input.PlusTrialEligible != nil {
 		value := input.GetPlusTrialEligible()
@@ -456,6 +462,9 @@ func (s *accountDatabaseServer) buildAccount(input *pb.Account) (*db.Account, er
 		account.ID = gofakeit.UUID()
 	}
 	account.Email = normalizeEmail(account.Email)
+	if account.PrimaryMailboxEmail == "" {
+		account.PrimaryMailboxEmail = canonicalEmail(account.Email)
+	}
 	if account.Password == "" {
 		account.Password = gofakeit.Password(true, true, true, true, false, 12)
 	}
@@ -594,6 +603,9 @@ func updateMap(account *pb.Account) map[string]interface{} {
 
 	if value := normalizeEmail(account.GetEmail()); value != "" {
 		updates["email"] = value
+		if normalizeEmail(account.GetPrimaryMailboxEmail()) == "" {
+			updates["primary_mailbox_email"] = canonicalEmail(value)
+		}
 	}
 	if value := account.GetPassword(); value != "" {
 		updates["password"] = value
@@ -634,6 +646,21 @@ func updateMap(account *pb.Account) map[string]interface{} {
 	if account.ActivationChannel != nil {
 		updates["activation_channel"] = strings.TrimSpace(account.GetActivationChannel())
 	}
+	if value := normalizeEmail(account.GetPrimaryMailboxEmail()); value != "" {
+		updates["primary_mailbox_email"] = value
+	}
+	if account.GetMailboxLastFetchedAtUnix() > 0 {
+		updates["mailbox_last_fetched_at_unix"] = account.GetMailboxLastFetchedAtUnix()
+	}
+	if account.GetMailboxLastMessageAtUnix() > 0 {
+		updates["mailbox_last_message_at_unix"] = gorm.Expr("GREATEST(mailbox_last_message_at_unix, ?)", account.GetMailboxLastMessageAtUnix())
+	}
+	if value := strings.TrimSpace(account.GetMailboxLatestOtp()); value != "" {
+		receivedAt := account.GetMailboxLatestOtpReceivedAtUnix()
+		updates["mailbox_latest_otp"] = gorm.Expr("CASE WHEN mailbox_latest_otp_received_at_unix <= ? THEN ? ELSE mailbox_latest_otp END", receivedAt, value)
+		updates["mailbox_latest_otp_subject"] = gorm.Expr("CASE WHEN mailbox_latest_otp_received_at_unix <= ? THEN ? ELSE mailbox_latest_otp_subject END", receivedAt, strings.TrimSpace(account.GetMailboxLatestOtpSubject()))
+		updates["mailbox_latest_otp_received_at_unix"] = gorm.Expr("GREATEST(mailbox_latest_otp_received_at_unix, ?)", receivedAt)
+	}
 	return updates
 }
 
@@ -642,23 +669,29 @@ func accountToProto(account *db.Account) *pb.Account {
 		return nil
 	}
 	return &pb.Account{
-		AccountId:         account.ID,
-		Email:             account.Email,
-		Password:          account.Password,
-		Status:            account.Status,
-		ErrorMessage:      account.ErrorMessage,
-		SessionToken:      account.SessionToken,
-		AccessToken:       account.AccessToken,
-		ChargeRef:         account.ChargeRef,
-		FirstName:         account.FirstName,
-		LastName:          account.LastName,
-		Dob:               account.DOB,
-		CreatedAt:         account.CreatedAt,
-		UpdatedAt:         account.UpdatedAt,
-		PlusTrialEligible: account.PlusTrialEligible,
-		PlusActive:        account.PlusActive,
-		Tier:              account.Tier,
-		ActivationChannel: &account.ActivationChannel,
+		AccountId:                      account.ID,
+		Email:                          account.Email,
+		Password:                       account.Password,
+		Status:                         account.Status,
+		ErrorMessage:                   account.ErrorMessage,
+		SessionToken:                   account.SessionToken,
+		AccessToken:                    account.AccessToken,
+		ChargeRef:                      account.ChargeRef,
+		FirstName:                      account.FirstName,
+		LastName:                       account.LastName,
+		Dob:                            account.DOB,
+		CreatedAt:                      account.CreatedAt,
+		UpdatedAt:                      account.UpdatedAt,
+		PlusTrialEligible:              account.PlusTrialEligible,
+		PlusActive:                     account.PlusActive,
+		Tier:                           account.Tier,
+		ActivationChannel:              &account.ActivationChannel,
+		PrimaryMailboxEmail:            account.PrimaryMailboxEmail,
+		MailboxLastFetchedAtUnix:       account.MailboxLastFetchedAtUnix,
+		MailboxLastMessageAtUnix:       account.MailboxLastMessageAtUnix,
+		MailboxLatestOtp:               account.MailboxLatestOTP,
+		MailboxLatestOtpSubject:        account.MailboxLatestOTPSubject,
+		MailboxLatestOtpReceivedAtUnix: account.MailboxLatestOTPReceivedAtUnix,
 	}
 }
 

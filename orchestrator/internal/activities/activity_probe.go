@@ -177,16 +177,18 @@ func (s *Server) ProbeTierAtomicActivity(ctx context.Context, input ProbeTierAct
 	step := s.activityStep(ctx, input.GetJobId(), stepProbeTier, false, true)
 	_, err = step.run(func() (any, error) {
 		sessionToken := strings.TrimSpace(account.GetSessionToken())
+		accessToken := strings.TrimSpace(account.GetAccessToken())
 		data := map[string]any{
 			"account_id":            account.GetAccountId(),
 			"session_token_present": sessionToken != "",
+			"access_token_present":  accessToken != "",
 		}
-		if sessionToken == "" {
+		if sessionToken == "" && accessToken == "" {
 			output.Data = protoData(data)
-			return data, fmt.Errorf("session_token is required")
+			return data, fmt.Errorf("session_token or access_token is required")
 		}
 		resp, callErr := s.paymentClient.ProbeTier(ctx, &pb.ProbeTierPaymentRequest{
-			Credential: paymentCredential(sessionToken, ""),
+			Credential: paymentCredential(sessionToken, accessToken),
 		})
 		data["tier_probe"] = tierProbeData(resp)
 		if resp != nil {

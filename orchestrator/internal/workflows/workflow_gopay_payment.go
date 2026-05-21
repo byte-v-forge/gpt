@@ -130,6 +130,8 @@ func goPaySMSPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInp
 			Source:          userID,
 			ResetState:      true,
 			StateJSON:       stateJSON,
+			Pin:             input.GetPin(),
+			CountryCode:     input.GetCountryCode(),
 		}
 
 		setWorkflowProgress(ctx, progress, stepGoPayAppSignup)
@@ -237,6 +239,7 @@ func goPaySMSPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInp
 		CheckoutSessionId: probe.GetCheckoutSessionId(),
 		GopayPhone:        result.GetPhone(),
 		StateJson:         stateJSON,
+		CountryCode:       input.GetCountryCode(),
 	})
 	stateJSON = paymentPrepare.GetStateJson()
 	combined["gopay_payment_prepare"] = protoDataMap(paymentPrepare.GetData())
@@ -276,6 +279,8 @@ func goPaySMSPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInp
 		SmsActivationId:   otpOpts.SMSActivationID,
 		UserId:            userID,
 		StateJson:         stateJSON,
+		Pin:               input.GetPin(),
+		CountryCode:       input.GetCountryCode(),
 	})
 	stateJSON = payment.GetStateJson()
 	if err != nil {
@@ -414,10 +419,12 @@ func goPayWAPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInpu
 	combined["load_state"] = protoDataMap(stored.GetData())
 
 	otpOpts := goPayAppOTPOptions{
-		Phone:      result.GetWaPhone(),
-		OTPChannel: "wa",
-		Source:     userID,
-		StateJSON:  stateJSON,
+		Phone:       result.GetWaPhone(),
+		OTPChannel:  "wa",
+		Source:      userID,
+		StateJSON:   stateJSON,
+		Pin:         input.GetPin(),
+		CountryCode: input.GetCountryCode(),
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
@@ -533,6 +540,8 @@ func goPayWAPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInpu
 		GopayPhone:        result.GetWaPhone(),
 		UserId:            userID,
 		StateJson:         stateJSON,
+		Pin:               input.GetPin(),
+		CountryCode:       input.GetCountryCode(),
 	})
 	stateJSON = paymentPrepare.GetStateJson()
 	combined["gopay_payment_prepare"] = protoDataMap(paymentPrepare.GetData())
@@ -554,6 +563,8 @@ func goPayWAPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInpu
 		OtpChannel:        "wa",
 		UserId:            userID,
 		StateJson:         stateJSON,
+		Pin:               input.GetPin(),
+		CountryCode:       input.GetCountryCode(),
 	})
 	stateJSON = payment.GetStateJson()
 	combined["gopay_payment"] = protoDataMap(payment.GetData())
@@ -588,7 +599,7 @@ func goPayWAPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInpu
 		JobId:  input.GetJobId(),
 		Result: protoData(combined),
 	}).Get(ctx, nil)
-	startGoPayPaymentRebindSideEffect(ctx, input.GetJobId(), account.GetAccountId(), userID, combined)
+	startGoPayPaymentRebindSideEffect(ctx, input.GetJobId(), account.GetAccountId(), userID, input.GetPin(), input.GetCountryCode(), combined)
 	_ = workflow.ExecuteActivity(retryCtx, markJobSucceededActivityName, JobSuccessInput{
 		JobId:  input.GetJobId(),
 		Result: protoData(combined),
@@ -729,6 +740,7 @@ func GoPayWAPaymentWorkflow(ctx workflow.Context, input GoPayWAPaymentWorkflowIn
 		GopayPhone:        result.GetWaPhone(),
 		UserId:            userID,
 		StateJson:         stateJSON,
+		CountryCode:       input.GetCountryCode(),
 	})
 	stateJSON = paymentPrepare.GetStateJson()
 	combined["gopay_payment_prepare"] = protoDataMap(paymentPrepare.GetData())
@@ -752,6 +764,8 @@ func GoPayWAPaymentWorkflow(ctx workflow.Context, input GoPayWAPaymentWorkflowIn
 		UserId:                  userID,
 		StateJson:               stateJSON,
 		SkipAccountBalanceCheck: true,
+		Pin:                     input.GetPin(),
+		CountryCode:             input.GetCountryCode(),
 	})
 	stateJSON = payment.GetStateJson()
 	combined["gopay_payment"] = protoDataMap(payment.GetData())
@@ -799,7 +813,7 @@ func isGoPaySignupPhoneRotatableError(err error) bool {
 	return strings.Contains(message, "signup phone already registered")
 }
 
-func startGoPayPaymentRebindSideEffect(ctx workflow.Context, sourceJobID string, accountID string, userID string, combined map[string]any) {
+func startGoPayPaymentRebindSideEffect(ctx workflow.Context, sourceJobID string, accountID string, userID string, pin string, countryCode string, combined map[string]any) {
 	sourceJobID = strings.TrimSpace(sourceJobID)
 	if sourceJobID == "" {
 		return
@@ -822,6 +836,8 @@ func startGoPayPaymentRebindSideEffect(ctx workflow.Context, sourceJobID string,
 		SourceJobId: sourceJobID,
 		AccountId:   accountID,
 		UserId:      userID,
+		Pin:         pin,
+		CountryCode: countryCode,
 	})
 	err := future.GetChildWorkflowExecution().Get(ctx, nil)
 	if err != nil {

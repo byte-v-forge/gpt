@@ -13,23 +13,29 @@ import (
 )
 
 type Account struct {
-	ID                string `gorm:"primaryKey"`
-	Email             string `gorm:"uniqueIndex;not null"`
-	Password          string
-	Status            string
-	ErrorMessage      string
-	SessionToken      string
-	AccessToken       string
-	ChargeRef         string
-	FirstName         string
-	LastName          string
-	DOB               string // YYYY-MM-DD
-	PlusTrialEligible *bool
-	PlusActive        *bool
-	Tier              string
-	ActivationChannel string
-	CreatedAt         int64 `gorm:"autoCreateTime"`
-	UpdatedAt         int64 `gorm:"autoUpdateTime"`
+	ID                             string `gorm:"primaryKey"`
+	Email                          string `gorm:"uniqueIndex;not null"`
+	Password                       string
+	Status                         string
+	ErrorMessage                   string
+	SessionToken                   string
+	AccessToken                    string
+	ChargeRef                      string
+	FirstName                      string
+	LastName                       string
+	DOB                            string // YYYY-MM-DD
+	PlusTrialEligible              *bool
+	PlusActive                     *bool
+	Tier                           string
+	ActivationChannel              string
+	PrimaryMailboxEmail            string `gorm:"index"`
+	MailboxLastFetchedAtUnix       int64
+	MailboxLastMessageAtUnix       int64
+	MailboxLatestOTP               string
+	MailboxLatestOTPSubject        string
+	MailboxLatestOTPReceivedAtUnix int64
+	CreatedAt                      int64 `gorm:"autoCreateTime"`
+	UpdatedAt                      int64 `gorm:"autoUpdateTime"`
 }
 
 type GPTEmailAllocation struct {
@@ -64,11 +70,27 @@ func InitDB() *gorm.DB {
 	if err := db.Exec("ALTER TABLE accounts DROP COLUMN IF EXISTS proxy_url").Error; err != nil {
 		log.Printf("failed to drop legacy proxy_url column: %v", err)
 	}
+	if err := backfillAccountPrimaryMailboxes(db); err != nil {
+		log.Printf("failed to backfill account primary mailboxes: %v", err)
+	}
 	if err := backfillGPTEmailAllocationsFromAccounts(db); err != nil {
 		log.Printf("failed to backfill GPT email allocations from accounts: %v", err)
 	}
 
 	return db
+}
+
+func backfillAccountPrimaryMailboxes(db *gorm.DB) error {
+	return db.Exec(`
+		UPDATE accounts
+		SET primary_mailbox_email = CASE
+			WHEN lower(btrim(email)) LIKE '%@%' THEN split_part(split_part(lower(btrim(email)), '@', 1), '+', 1) || '@' || split_part(lower(btrim(email)), '@', 2)
+			ELSE lower(btrim(email))
+		END
+		WHERE email IS NOT NULL
+			AND btrim(email) <> ''
+			AND COALESCE(primary_mailbox_email, '') = ''
+	`).Error
 }
 
 func backfillGPTEmailAllocationsFromAccounts(db *gorm.DB) error {

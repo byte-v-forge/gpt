@@ -98,7 +98,7 @@ func RunPaymentOrder(ctx context.Context, client *Client, order map[string]any, 
 		return recorder.result(paymentID, "", err), err
 	}
 	capture1, err := recorder.call("capture1", func() (*protocol.Response, error) {
-		headers := http.Header{"Idempotency-Key": []string{uuid.NewString()}}
+		headers := http.Header{"Idempotency-Key": []string{newTimeUUIDString()}}
 		return client.Request(ctx, http.MethodPatch, CustomerBaseURL+"/v3/payments/"+paymentID+"/capture", BuildCaptureBody(order, capturePaymentToken, "", "", ""), headers, http.StatusOK)
 	})
 	if err != nil {
@@ -132,7 +132,7 @@ func RunPaymentOrder(ctx context.Context, client *Client, order map[string]any, 
 		return recorder.result(paymentID, "", err), err
 	}
 	capture2, err := recorder.call("capture2", func() (*protocol.Response, error) {
-		headers := http.Header{"Idempotency-Key": []string{uuid.NewString()}}
+		headers := http.Header{"Idempotency-Key": []string{newTimeUUIDString()}}
 		return client.Request(ctx, http.MethodPatch, CustomerBaseURL+"/v3/payments/"+paymentID+"/capture", BuildCaptureBody(order, capturePaymentToken, pinToken, challengeID, clientID), headers, http.StatusOK)
 	})
 	if err != nil {
@@ -282,12 +282,6 @@ func ExtractChallenge(response *protocol.Response) (string, string, error) {
 	data := response.Data()
 	challengeID := protocol.StringAt(data, "challenge", "action", "value", "challenge_id")
 	clientID := protocol.StringAt(data, "challenge", "action", "value", "client_id")
-	if challengeID == "" {
-		challengeID = protocol.StringAt(data, "challenge", "metadata", "challenge_id")
-	}
-	if clientID == "" {
-		clientID = protocol.StringAt(data, "challenge", "metadata", "client_id")
-	}
 	if challengeID == "" || clientID == "" {
 		return "", "", fmt.Errorf("capture challenge missing")
 	}
@@ -296,10 +290,7 @@ func ExtractChallenge(response *protocol.Response) (string, string, error) {
 
 func ExtractPinToken(response *protocol.Response) (string, error) {
 	data := response.Data()
-	token := firstNonEmpty(protocol.StringAt(data, "token"), protocol.StringAt(data, "pin_token"))
-	if token == "" {
-		token = protocol.StringAt(response.Payload, "token")
-	}
+	token := protocol.StringAt(data, "token")
 	if token == "" {
 		return "", fmt.Errorf("pin token missing")
 	}
@@ -356,8 +347,6 @@ func paymentOptionItems(response *protocol.Response) []map[string]any {
 	data := response.Data()
 	collectItems(data["selected_options"])
 	collectItems(data["payment_options"])
-	collectItems(response.Payload["selected_options"])
-	collectItems(response.Payload["payment_options"])
 	return out
 }
 

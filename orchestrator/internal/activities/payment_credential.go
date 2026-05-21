@@ -8,16 +8,9 @@ import (
 
 func paymentCredential(sessionToken, accessToken string) *pb.ChatGPTCredential {
 	accessToken = strings.TrimSpace(accessToken)
-	if accessToken != "" {
-		return &pb.ChatGPTCredential{
-			Token: &pb.ChatGPTCredential_AccessToken{AccessToken: accessToken},
-		}
-	}
 	sessionToken = strings.TrimSpace(sessionToken)
-	if sessionToken != "" {
-		return &pb.ChatGPTCredential{
-			Token: &pb.ChatGPTCredential_SessionToken{SessionToken: sessionToken},
-		}
+	if sessionToken != "" || accessToken != "" {
+		return &pb.ChatGPTCredential{SessionToken: sessionToken, AccessToken: accessToken}
 	}
 	return nil
 }

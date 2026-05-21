@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"orchestrator/internal/jobevents"
 	"orchestrator/internal/jobprojection"
 	"orchestrator/pb"
 	"strings"
@@ -23,17 +22,20 @@ func (s *Server) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb.GetJobR
 }
 
 func (s *Server) ListJobs(ctx context.Context, req *pb.ListJobsRequest) (*pb.ListJobsResponse, error) {
-	snapshots, err := s.jobStore.ListSnapshots(ctx, jobprojection.ListFilter{
-		Limit:     int(req.GetLimit()),
-		Status:    req.GetStatus(),
-		Action:    req.GetAction(),
-		AccountID: req.GetAccountId(),
+	before := req.GetBefore()
+	snapshots, next, hasMore, err := s.jobStore.ListSnapshots(ctx, jobprojection.ListFilter{
+		Limit:           int(req.GetLimit()),
+		Status:          req.GetStatus(),
+		Action:          req.GetAction(),
+		AccountID:       req.GetAccountId(),
+		BeforeUpdatedAt: before.GetUpdatedAt(),
+		BeforeJobID:     before.GetJobId(),
 	})
 	if err != nil {
 		return &pb.ListJobsResponse{ErrorMessage: err.Error()}, nil
 	}
 
-	return &pb.ListJobsResponse{Snapshots: snapshots}, nil
+	return &pb.ListJobsResponse{Snapshots: snapshots, Next: next, HasMore: hasMore}, nil
 }
 
 func (s *Server) WatchJob(req *pb.WatchJobRequest, stream pb.JobService_WatchJobServer) error {
@@ -45,8 +47,7 @@ func (s *Server) WatchJob(req *pb.WatchJobRequest, stream pb.JobService_WatchJob
 		return stream.Send(&pb.WatchJobResponse{ErrorMessage: err.Error()})
 	}
 
-	lastSent := req.GetAfterEventId()
-	return s.watchJobEvents(stream.Context(), []string{jobID}, "", lastSent, func(event *pb.JobEvent) (bool, error) {
+	return s.watchJobEvents(stream.Context(), []string{jobID}, "", func(event *pb.JobEvent) (bool, error) {
 		if event == nil {
 			return true, nil
 		}
@@ -58,8 +59,7 @@ func (s *Server) WatchJob(req *pb.WatchJobRequest, stream pb.JobService_WatchJob
 }
 
 func (s *Server) WatchJobs(req *pb.WatchJobsRequest, stream pb.JobService_WatchJobsServer) error {
-	lastSent := req.GetAfterEventId()
-	return s.watchJobEvents(stream.Context(), req.GetJobIds(), req.GetStatus(), lastSent, func(event *pb.JobEvent) (bool, error) {
+	return s.watchJobEvents(stream.Context(), req.GetJobIds(), req.GetStatus(), func(event *pb.JobEvent) (bool, error) {
 		if event == nil {
 			return true, nil
 		}
@@ -70,7 +70,7 @@ func (s *Server) WatchJobs(req *pb.WatchJobsRequest, stream pb.JobService_WatchJ
 	})
 }
 
-func (s *Server) watchJobEvents(ctx context.Context, jobIDs []string, status string, lastSent int64, send func(*pb.JobEvent) (bool, error)) error {
+func (s *Server) watchJobEvents(ctx context.Context, jobIDs []string, status string, send func(*pb.JobEvent) (bool, error)) error {
 	if s.jobEvents == nil {
 		_, err := send(nil)
 		return err
@@ -78,45 +78,47 @@ func (s *Server) watchJobEvents(ctx context.Context, jobIDs []string, status str
 	ch, cancel := s.jobEvents.Subscribe(ctx)
 	defer cancel()
 
-	filter := jobevents.Filter{JobIDs: compactJobIDs(jobIDs)}
+	jobIDs = compactJobIDs(jobIDs)
 	status = strings.ToUpper(strings.TrimSpace(status))
-	sendPending := func() (bool, error) {
-		filter.AfterEventID = lastSent
-		events, err := s.jobEvents.List(ctx, filter)
-		if err != nil {
-			return false, err
-		}
-		for _, event := range events {
-			if event.GetEventId() <= lastSent {
-				continue
+	lastSent := int64(0)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case event, ok := <-ch:
+			if !ok {
+				return nil
 			}
-			if status != "" && !strings.EqualFold(event.GetSnapshot().GetJob().GetStatus(), status) {
-				lastSent = event.GetEventId()
+			if event == nil || event.GetEventId() <= lastSent || !jobEventMatches(event, jobIDs, status) {
 				continue
 			}
 			keepGoing, err := send(event)
 			if err != nil || !keepGoing {
-				return keepGoing, err
+				return err
 			}
 			lastSent = event.GetEventId()
 		}
-		return true, nil
 	}
+}
 
-	for {
-		keepGoing, err := sendPending()
-		if err != nil || !keepGoing {
-			return err
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case _, ok := <-ch:
-			if !ok {
-				return nil
+func jobEventMatches(event *pb.JobEvent, jobIDs []string, status string) bool {
+	if event == nil {
+		return false
+	}
+	if len(jobIDs) > 0 {
+		matched := false
+		for _, jobID := range jobIDs {
+			if event.GetJobId() == jobID {
+				matched = true
+				break
 			}
 		}
+		if !matched {
+			return false
+		}
 	}
+	return status == "" || strings.EqualFold(event.GetSnapshot().GetJob().GetStatus(), status)
 }
 
 func compactJobIDs(values []string) []string {

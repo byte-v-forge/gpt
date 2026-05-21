@@ -5,12 +5,10 @@
 ## 目录
 
 - `account-db/`：GPT 账号库存和邮箱分配数据模块。
-- `gopay/`：GoPay App 和钱包侧支付调用的 Go 协议实现。
+- `gopay/`：GoPay App gRPC provider、GoPay payment gRPC provider 和钱包侧支付调用的 Go 协议实现。
 - `stripe/`：ChatGPT checkout、Stripe payment pages 和 Midtrans Snap 支付链路的 Go 协议实现。
 - `orchestrator/`：GPT 注册、登录、激活、GoPay 支付和任务状态 workflow 源码，并通过 `browser-automation` 执行浏览器注册和登录步骤。
 - `gpt-service/`：部署入口，把 GPT 账号库、GoPay 通道和 GPT workflow 组装为单个服务进程。
-- `channels/gopay/app/`：GoPay App 通道能力。
-- `channels/gopay/payment/`：GoPay 支付通道能力。
 - `channels/gopay/whatsapp-relay/`：GoPay 场景使用的 Android OTP 通知转发器。
 - `channels/paypal/`：PayPal 通道目录。
 - `proto/`：本仓服务使用的 proto 源契约。

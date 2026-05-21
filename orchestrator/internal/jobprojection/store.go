@@ -38,10 +38,12 @@ type StepFailure struct {
 }
 
 type ListFilter struct {
-	Limit     int
-	Status    string
-	Action    string
-	AccountID string
+	Limit           int
+	Status          string
+	Action          string
+	AccountID       string
+	BeforeUpdatedAt int64
+	BeforeJobID     string
 }
 
 func NewStore(db *gorm.DB) *Store {
@@ -132,7 +134,7 @@ func (s *Store) Get(ctx context.Context, jobID string) (*db.Job, error) {
 	return &job, nil
 }
 
-func (s *Store) List(ctx context.Context, filter ListFilter) ([]db.Job, error) {
+func (s *Store) List(ctx context.Context, filter ListFilter) ([]db.Job, *pb.JobListCursor, bool, error) {
 	limit := filter.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 100
@@ -148,12 +150,28 @@ func (s *Store) List(ctx context.Context, filter ListFilter) ([]db.Job, error) {
 	if value := strings.TrimSpace(filter.AccountID); value != "" {
 		query = query.Where("account_id = ?", value)
 	}
+	if filter.BeforeUpdatedAt > 0 {
+		if beforeJobID := strings.TrimSpace(filter.BeforeJobID); beforeJobID != "" {
+			query = query.Where("(updated_at < ?) OR (updated_at = ? AND id < ?)", filter.BeforeUpdatedAt, filter.BeforeUpdatedAt, beforeJobID)
+		} else {
+			query = query.Where("updated_at < ?", filter.BeforeUpdatedAt)
+		}
+	}
 
 	var jobs []db.Job
-	if err := query.Order("updated_at DESC").Limit(limit).Find(&jobs).Error; err != nil {
-		return nil, err
+	if err := query.Order("updated_at DESC, id DESC").Limit(limit + 1).Find(&jobs).Error; err != nil {
+		return nil, nil, false, err
 	}
-	return jobs, nil
+	hasMore := len(jobs) > limit
+	if hasMore {
+		jobs = jobs[:limit]
+	}
+	var next *pb.JobListCursor
+	if hasMore && len(jobs) > 0 {
+		last := jobs[len(jobs)-1]
+		next = &pb.JobListCursor{UpdatedAt: last.UpdatedAt, JobId: last.ID}
+	}
+	return jobs, next, hasMore, nil
 }
 
 func (s *Store) Steps(ctx context.Context, jobID string) ([]db.JobStep, error) {
@@ -176,13 +194,13 @@ func (s *Store) GetSnapshot(ctx context.Context, jobID string) (*pb.JobSnapshot,
 	return BuildSnapshot(job, steps), nil
 }
 
-func (s *Store) ListSnapshots(ctx context.Context, filter ListFilter) ([]*pb.JobSnapshot, error) {
-	jobs, err := s.List(ctx, filter)
+func (s *Store) ListSnapshots(ctx context.Context, filter ListFilter) ([]*pb.JobSnapshot, *pb.JobListCursor, bool, error) {
+	jobs, next, hasMore, err := s.List(ctx, filter)
 	if err != nil {
-		return nil, err
+		return nil, nil, false, err
 	}
 	if len(jobs) == 0 {
-		return []*pb.JobSnapshot{}, nil
+		return []*pb.JobSnapshot{}, nil, false, nil
 	}
 
 	jobIDs := make([]string, 0, len(jobs))
@@ -195,7 +213,7 @@ func (s *Store) ListSnapshots(ctx context.Context, filter ListFilter) ([]*pb.Job
 		Where("job_id IN ?", jobIDs).
 		Order("started_at ASC, step_name ASC").
 		Find(&steps).Error; err != nil {
-		return nil, err
+		return nil, nil, false, err
 	}
 
 	stepsByJob := make(map[string][]db.JobStep, len(jobs))
@@ -208,7 +226,7 @@ func (s *Store) ListSnapshots(ctx context.Context, filter ListFilter) ([]*pb.Job
 		job := jobs[i]
 		snapshots = append(snapshots, BuildSnapshot(&job, stepsByJob[job.ID]))
 	}
-	return snapshots, nil
+	return snapshots, next, hasMore, nil
 }
 
 func (s *Store) RunAtomicStep(ctx context.Context, jobID, stepName string, recoverable bool, retryable bool, fn func() (any, error)) (any, error) {

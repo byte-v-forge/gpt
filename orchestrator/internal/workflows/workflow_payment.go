@@ -59,7 +59,11 @@ func ActivateAccountWorkflow(ctx workflow.Context, input ActivateAccountWorkflow
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
-	logon, err := runGoPayAppAuthChild(ctx, input.GetJobId(), goPayAppOTPOptions{})
+	logon, err := runGoPayAppAuthChild(ctx, input.GetJobId(), goPayAppOTPOptions{
+		Phone:       input.GetGopayPhone(),
+		CountryCode: input.GetGopayCountryCode(),
+		Pin:         input.GetGopayPin(),
+	})
 	if err != nil {
 		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}), nil
 	}
@@ -76,6 +80,8 @@ func ActivateAccountWorkflow(ctx workflow.Context, input ActivateAccountWorkflow
 		CheckoutUrl:       probe.GetCheckoutUrl(),
 		CheckoutSessionId: probe.GetCheckoutSessionId(),
 		StateJson:         logon.GetStateJson(),
+		Pin:               input.GetGopayPin(),
+		CountryCode:       input.GetGopayCountryCode(),
 	})
 	if err != nil {
 		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayPayment, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}), nil
@@ -149,7 +155,11 @@ func AutoPayWorkflow(ctx workflow.Context, input AutoPayWorkflowInput) (AutoPayW
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
-	logon, err := runGoPayAppAuthChild(ctx, input.GetJobId(), goPayAppOTPOptions{})
+	logon, err := runGoPayAppAuthChild(ctx, input.GetJobId(), goPayAppOTPOptions{
+		Phone:       input.GetGopayPhone(),
+		CountryCode: input.GetGopayCountryCode(),
+		Pin:         input.GetGopayPin(),
+	})
 	if err != nil {
 		return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}), nil
 	}
@@ -167,6 +177,8 @@ func AutoPayWorkflow(ctx workflow.Context, input AutoPayWorkflowInput) (AutoPayW
 		CheckoutUrl:       probe.GetCheckoutUrl(),
 		CheckoutSessionId: probe.GetCheckoutSessionId(),
 		StateJson:         logon.GetStateJson(),
+		Pin:               input.GetGopayPin(),
+		CountryCode:       input.GetGopayCountryCode(),
 	})
 	if err != nil {
 		combined := map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
@@ -444,6 +456,7 @@ func runGoPayPayment(ctx workflow.Context, paymentCtx workflow.Context, cancelCt
 		UseAccountToken:    start.GetUseAccountToken(),
 		Data:               start.GetData(),
 		StateJson:          start.GetStateJson(),
+		Pin:                input.GetPin(),
 	}).Get(ctx, &payment)
 	return payment, err
 }

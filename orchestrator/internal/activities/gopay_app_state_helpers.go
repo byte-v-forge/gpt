@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 
 	pb "orchestrator/pb"
@@ -149,27 +148,4 @@ func (s *Server) deleteGoPayAppStateForUser(ctx context.Context, stateKey string
 		return fmt.Errorf("DeleteGoPayState: %s", resp.GetErrorMessage())
 	}
 	return nil
-}
-
-func configuredGoPayPhone() string {
-	return normalizeIndonesiaPhone(os.Getenv("GOPAY_PHONE_NUMBER"))
-}
-
-func configuredGoPayWAPhone() string {
-	return normalizeIndonesiaPhone(os.Getenv("GOPAY_WA_PHONE_NUMBER"))
-}
-
-func configuredGoPayPIN() string {
-	return strings.TrimSpace(os.Getenv("GOPAY_PIN"))
-}
-
-func configuredGoPayCountryCode() string {
-	value := strings.TrimSpace(os.Getenv("GOPAY_COUNTRY_CODE"))
-	if value == "" {
-		value = "62"
-	}
-	if !strings.HasPrefix(value, "+") {
-		value = "+" + value
-	}
-	return value
 }

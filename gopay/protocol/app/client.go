@@ -214,7 +214,7 @@ func appHeaders(device DeviceFingerprint, xM1 string, hasBody bool) http.Header 
 	headers.Set("X-AppVersion", device.AppVersion)
 	headers.Set("X-M1", xM1)
 	headers.Set("Gojek-Country-Code", device.GojekCountryCode)
-	headers.Set("X-Request-ID", uuid.NewString())
+	headers.Set("X-Request-ID", newTimeUUIDString())
 	headers.Set("X-UniqueId", device.UniqueID)
 	headers.Set("X-PhoneMake", device.PhoneMake)
 	headers.Set("X-Help-Version", device.AppVersion)
@@ -246,6 +246,14 @@ func envDefault(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func newTimeUUIDString() string {
+	value, err := uuid.NewUUID()
+	if err == nil {
+		return value.String()
+	}
+	return uuid.NewString()
 }
 
 var gopayCustomerSlimGetPaths = map[string]bool{

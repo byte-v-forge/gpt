@@ -5,10 +5,8 @@ package payment;
 option go_package = "./;pb";
 
 message ChatGPTCredential {
-  oneof token {
-    string session_token = 1;
-    string access_token = 2;
-  }
+  string session_token = 1;
+  string access_token = 2;
 }
 
 message StartGoPayRequest {
@@ -19,6 +17,7 @@ message StartGoPayRequest {
   string checkout_session_id = 5;
   string gopay_phone = 6;
   string otp_channel = 7; // sms 时调用 resend-otp；wa/空值只走 user-consent
+  string gopay_country_code = 8;
 }
 
 message PrepareGoPayRequest {
@@ -27,6 +26,7 @@ message PrepareGoPayRequest {
   string checkout_url = 3;
   string checkout_session_id = 4;
   string gopay_phone = 5;
+  string gopay_country_code = 6;
 }
 
 message PrepareGoPayResponse {
@@ -42,6 +42,7 @@ message StartPreparedGoPayRequest {
   string flow_id = 1;
   string gopay_phone = 2;
   string otp_channel = 3; // sms 时调用 resend-otp；wa/空值只走 user-consent
+  string gopay_country_code = 4;
 }
 
 message StartGoPayResponse {
@@ -101,6 +102,7 @@ message ProbeTierPaymentResponse {
 message CompleteGoPayRequest {
   string flow_id = 1;
   string otp = 2;
+  string pin = 3;
 }
 
 message ResendGoPayOTPRequest {

@@ -86,7 +86,7 @@ func (s *Server) GoPayPaymentCompleteActivity(ctx context.Context, input GoPayPa
 		}
 	}
 
-	result, stateJSON, err := s.completeGoPayPayment(ctx, step, stateJSON, input.GetFlowId(), otp, input.GetUseAccountToken(), data)
+	result, stateJSON, err := s.completeGoPayPayment(ctx, step, stateJSON, input.GetFlowId(), otp, input.GetUseAccountToken(), input.GetPin(), data)
 	if err != nil {
 		return GoPayActivityOutput{Data: protoData(data), StateJson: stateJSON}, s.completeGoPayPaymentStep(ctx, input.GetJobId(), input.GetAccountId(), data, err)
 	}
@@ -230,6 +230,7 @@ func (s *Server) prepareGoPayPayment(ctx context.Context, step activityStep, inp
 		CheckoutUrl:       checkoutURL,
 		CheckoutSessionId: checkoutSessionID,
 		GopayPhone:        gopayPhone,
+		GopayCountryCode:  input.GetCountryCode(),
 	})
 	data["payment_prepare_called"] = true
 	data["payment_prepare"] = paymentPrepareData(prepared)
@@ -323,9 +324,6 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 			}
 			accountPhone = requestedPhone
 			if accountPhone == "" {
-				accountPhone = configuredGoPayPhone()
-			}
-			if accountPhone == "" {
 				err := fmt.Errorf("gopay phone is required")
 				data["gopay_phone"] = map[string]any{
 					"present":       false,
@@ -370,9 +368,6 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 				accountPhone = requestedPhone
 			}
 			if accountPhone == "" {
-				accountPhone = configuredGoPayPhone()
-			}
-			if accountPhone == "" {
 				err := fmt.Errorf("account phone is required")
 				data["account_token"] = map[string]any{
 					"ready":         true,
@@ -405,14 +400,12 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 			CheckoutSessionId: checkoutSessionID,
 			GopayPhone:        accountPhone,
 			OtpChannel:        otpChannel,
+			GopayCountryCode:  input.GetCountryCode(),
 		})
 	}
 	if preparedFlowID != "" {
 		if accountPhone == "" {
 			accountPhone = requestedPhone
-		}
-		if accountPhone == "" {
-			accountPhone = configuredGoPayPhone()
 		}
 		if accountPhone == "" {
 			err := fmt.Errorf("gopay phone is required for prepared payment")
@@ -427,9 +420,10 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 			"phone":   accountPhone,
 		}
 		started, err = s.paymentClient.StartPreparedGoPay(ctx, &pb.StartPreparedGoPayRequest{
-			FlowId:     preparedFlowID,
-			GopayPhone: accountPhone,
-			OtpChannel: otpChannel,
+			FlowId:           preparedFlowID,
+			GopayPhone:       accountPhone,
+			OtpChannel:       otpChannel,
+			GopayCountryCode: input.GetCountryCode(),
 		})
 		if isStalePreparedPaymentFlow(started, err) && useAccountToken && accountToken != "" {
 			data["prepared_flow_stale"] = paymentStartData(started)
@@ -474,7 +468,7 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 	return output, nil
 }
 
-func (s *Server) completeGoPayPayment(ctx context.Context, step activityStep, stateJSON, flowID, otp string, useAccountToken bool, data map[string]any) (*pb.GoPayResponse, string, error) {
+func (s *Server) completeGoPayPayment(ctx context.Context, step activityStep, stateJSON, flowID, otp string, useAccountToken bool, pin string, data map[string]any) (*pb.GoPayResponse, string, error) {
 	stateJSON = normalizeGoPayWorkflowStateJSON(stateJSON)
 	completed := false
 	defer func() {
@@ -486,7 +480,7 @@ func (s *Server) completeGoPayPayment(ctx context.Context, step activityStep, st
 		}
 	}()
 
-	result, err := s.paymentClient.CompleteGoPay(ctx, &pb.CompleteGoPayRequest{FlowId: flowID, Otp: otp})
+	result, err := s.paymentClient.CompleteGoPay(ctx, &pb.CompleteGoPayRequest{FlowId: flowID, Otp: otp, Pin: pin})
 	data["payment_complete"] = paymentResultData(result)
 	data["payment_result_present"] = result != nil
 	step.progress("gopay payment complete called", map[string]any{
@@ -512,7 +506,7 @@ func (s *Server) completeGoPayPayment(ctx context.Context, step activityStep, st
 			return nil, stateJSON, fmt.Errorf("payment requires manual confirmation; QR autopay did not settle automatically")
 		}
 
-		replayResp, nextStateJSON, replayErr := s.replayGoPayPaymentLink(ctx, stateJSON, result)
+		replayResp, nextStateJSON, replayErr := s.replayGoPayPaymentLink(ctx, stateJSON, result, pin)
 		stateJSON = nextStateJSON
 		data["gopay_link_payment"] = replayLinkPaymentData(replayResp, replayErr)
 		step.progress("gopay link payment replayed", map[string]any{

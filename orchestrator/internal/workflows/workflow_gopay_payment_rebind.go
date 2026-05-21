@@ -83,10 +83,12 @@ func GoPayPaymentRebindWorkflow(ctx workflow.Context, input GoPayPaymentRebindWo
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
 	auth, err := runGoPayAppAuth(ctx, gopayCtx, retryCtx, input.GetJobId(), goPayAppOTPOptions{
-		Phone:      source.GetWaPhone(),
-		OTPChannel: "wa",
-		Source:     userID,
-		StateJSON:  stateJSON,
+		Phone:       source.GetWaPhone(),
+		OTPChannel:  "wa",
+		Source:      userID,
+		StateJSON:   stateJSON,
+		Pin:         input.GetPin(),
+		CountryCode: input.GetCountryCode(),
 	})
 	combined["login"] = protoDataMap(auth.GetData())
 	if nextStateJSON := strings.TrimSpace(auth.GetStateJson()); nextStateJSON != "" {
@@ -103,7 +105,7 @@ func GoPayPaymentRebindWorkflow(ctx workflow.Context, input GoPayPaymentRebindWo
 	}).Get(ctx, nil)
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppChangePhone)
-	changePhone, err := runGoPayAppChangePhone(ctx, gopayCtx, input.GetJobId(), stateJSON)
+	changePhone, err := runGoPayAppChangePhone(ctx, gopayCtx, input.GetJobId(), stateJSON, input.GetPin(), input.GetCountryCode())
 	combined["change_phone"] = protoDataMap(changePhone.GetData())
 	result.ActivationId = changePhone.GetActivationId()
 	result.BoundPhone = changePhone.GetPhone()

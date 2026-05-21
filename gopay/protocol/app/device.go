@@ -118,6 +118,10 @@ func NewDeviceFingerprint(cfg DeviceConfig) (DeviceFingerprint, error) {
 	make := randomBrandWord()
 	model := randomPhoneModel(make)
 	android := firstNonEmpty(cfg.AndroidVersion, fmt.Sprint(randomIntRange(10, 14)))
+	deviceOS := android
+	if !strings.HasPrefix(strings.ToLower(deviceOS), "android") {
+		deviceOS = "Android, " + deviceOS
+	}
 	appVersion := firstNonEmpty(cfg.AppVersion, defaultAppVersion)
 	appID := firstNonEmpty(cfg.AppID, defaultAppID)
 	appBuild := firstNonEmpty(cfg.AppBuild, defaultAppBuild)
@@ -157,7 +161,7 @@ func NewDeviceFingerprint(cfg DeviceConfig) (DeviceFingerprint, error) {
 		UniqueID:         uniqueID,
 		PhoneMake:        make,
 		PhoneModel:       model,
-		DeviceOS:         firstNonEmpty(cfg.AndroidVersion, "Android, "+android),
+		DeviceOS:         deviceOS,
 		UserType:         defaultUserType,
 		SessionID:        sessionID,
 		TransactionID:    transactionID,
@@ -175,8 +179,8 @@ func NewDeviceFingerprint(cfg DeviceConfig) (DeviceFingerprint, error) {
 		M1DeviceUUID:     uuid.NewString(),
 		UserUUID:         cfg.UserUUID,
 		DeviceToken:      cfg.DeviceToken,
-		Location:         firstNonEmpty(cfg.Location, defaultLocation),
-		LocationAccuracy: firstNonEmpty(cfg.LocationAccuracy, defaultLocationAcc),
+		Location:         firstNonEmpty(cfg.Location, randomLocation()),
+		LocationAccuracy: firstNonEmpty(cfg.LocationAccuracy, randomLocationAccuracy()),
 		GojekCountryCode: firstNonEmpty(cfg.GojekCountryCode, defaultGojekCountry),
 	}, nil
 }
@@ -298,6 +302,16 @@ func randomWiFiMAC() string {
 		parts = append(parts, raw[i:i+2])
 	}
 	return strings.Join(parts, ":")
+}
+
+func randomLocation() string {
+	lat := -62_000_000 + randomIntRange(-500_000, 500_000)
+	lon := 1_068_000_000 + randomIntRange(-500_000, 500_000)
+	return fmt.Sprintf("%.7f,%.7f", float64(lat)/10_000_000, float64(lon)/10_000_000)
+}
+
+func randomLocationAccuracy() string {
+	return fmt.Sprintf("0.0%d999999552965164", randomIntRange(10, 99))
 }
 
 func randomLetters(length int) string {

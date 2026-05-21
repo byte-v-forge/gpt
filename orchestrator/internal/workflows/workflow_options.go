@@ -40,12 +40,6 @@ func waitForOTP(ctx workflow.Context, input OTPWaitInput) (OTPWaitOutput, error)
 			MaximumAttempts: 1,
 		},
 	})
-	if channel == otpWaitChannelSMS {
-		var out OTPWaitOutput
-		err := workflow.ExecuteActivity(waitCtx, waitOTPActivityName, input).Get(ctx, &out)
-		return out, err
-	}
-
 	manualCtx := workflow.WithActivityOptions(ctx, retryableActivityOptions(30*time.Second, 3))
 	otpCtx, cancelOTP := workflow.WithCancel(waitCtx)
 	defer cancelOTP()

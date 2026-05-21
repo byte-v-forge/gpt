@@ -10,57 +10,35 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-type SMSTargetConfig struct {
-	ApplicationKey     string
-	CountryISO2        string
-	CountryCallingCode string
-	MaxPriceCurrency   string
-	MaxPriceDecimal    string
-	LeaseDuration      time.Duration
-	PollInterval       time.Duration
-}
-
 const (
 	defaultSMSLeaseDuration = 20 * time.Minute
 	defaultSMSPollInterval  = 5 * time.Second
 )
 
-func goPaySMSTarget() SMSTargetConfig {
-	return SMSTargetConfig{
-		ApplicationKey:     "gopay",
-		CountryISO2:        "ID",
-		CountryCallingCode: "62",
-		LeaseDuration:      defaultSMSLeaseDuration,
-		PollInterval:       defaultSMSPollInterval,
+func goPaySMSRequest(requestID string, labels map[string]string) *smsv1.AcquireNumberRequest {
+	return &smsv1.AcquireNumberRequest{
+		RequestId:     requestID,
+		ProviderKey:   "smsbower",
+		LeaseDuration: durationOrNil(defaultSMSLeaseDuration),
+		Target: &smsv1.SmsTarget{
+			ApplicationKey:     "gojek",
+			CountryIso2:        "ID",
+			CountryCallingCode: "62",
+			MaxPrice:           smsMoney("USD", "0.007"),
+		},
+		Labels: labels,
 	}
 }
 
-func (c SMSTargetConfig) withDefaults() SMSTargetConfig {
-	if c.LeaseDuration <= 0 {
-		c.LeaseDuration = defaultSMSLeaseDuration
-	}
-	if c.PollInterval <= 0 {
-		c.PollInterval = defaultSMSPollInterval
-	}
-	return c
-}
-
-func (s *Server) acquireSMSNumber(ctx context.Context, requestID string, target SMSTargetConfig, labels map[string]string) (activationID string, phone string, err error) {
+func (s *Server) acquireSMSNumber(ctx context.Context, request *smsv1.AcquireNumberRequest) (activationID string, phone string, err error) {
 	if s.smsClient == nil {
 		return "", "", fmt.Errorf("sms client not configured")
 	}
-	target = target.withDefaults()
-	resp, err := s.smsClient.AcquireNumber(ctx, &smsv1.AcquireNumberRequest{
-		RequestId: requestID,
-		Target: &smsv1.SmsTarget{
-			ApplicationKey:     target.ApplicationKey,
-			CountryIso2:        strings.ToUpper(target.CountryISO2),
-			CountryCallingCode: strings.TrimPrefix(target.CountryCallingCode, "+"),
-			MaxPrice:           smsMoney(target.MaxPriceCurrency, target.MaxPriceDecimal),
-		},
-		LeaseDuration: durationOrNil(target.LeaseDuration),
-		Labels:        labels,
-	})
+	if request == nil || request.GetTarget() == nil {
+		return "", "", fmt.Errorf("sms acquire request target is required")
+	}
+	normalizeAcquireNumberRequest(request)
+	resp, err := s.smsClient.AcquireNumber(ctx, request)
 	if err != nil {
 		return "", "", fmt.Errorf("AcquireNumber: %w", err)
 	}
@@ -79,6 +57,17 @@ func (s *Server) acquireSMSNumber(ctx context.Context, requestID string, target 
 		phone = activation.GetPhoneNumber().GetNationalNumber()
 	}
 	return activation.GetActivationId(), phone, nil
+}
+
+func normalizeAcquireNumberRequest(request *smsv1.AcquireNumberRequest) {
+	if request == nil || request.GetTarget() == nil {
+		return
+	}
+	request.ProviderKey = strings.TrimSpace(request.GetProviderKey())
+	request.ProviderConfigId = strings.TrimSpace(request.GetProviderConfigId())
+	request.Target.ApplicationKey = strings.TrimSpace(request.GetTarget().GetApplicationKey())
+	request.Target.CountryIso2 = strings.ToUpper(strings.TrimSpace(request.GetTarget().GetCountryIso2()))
+	request.Target.CountryCallingCode = strings.TrimPrefix(strings.TrimSpace(request.GetTarget().GetCountryCallingCode()), "+")
 }
 
 func (s *Server) waitSMSCode(ctx context.Context, activationID string, timeoutSeconds int32) (string, error) {

@@ -25,6 +25,7 @@ const (
 	ResolveAccountActivityName                   = "ResolveAccountFromJobActivity"
 	BrowserAuthStartActivityName                 = "BrowserAuthStartActivity"
 	BrowserAuthWaitActivityName                  = "BrowserAuthWaitActivity"
+	BrowserAuthResendOTPActivityName             = "BrowserAuthResendOTPActivity"
 	BrowserAuthCompleteActivityName              = "BrowserAuthCompleteActivity"
 	BrowserAuthCancelActivityName                = "BrowserAuthCancelActivity"
 	WaitOTPActivityName                          = "OTPWaitActivity"
@@ -67,6 +68,7 @@ const (
 	MarkJobSucceededActivityName                 = "MarkJobSucceededActivity"
 
 	ManualOTPSignalName                = "manual_otp_available"
+	OTPResendSignalName                = "otp_resend_requested"
 	ManualAddBalanceSignalName         = "manual_add_balance_confirmed"
 	GoPayAddBalanceSelectionSignalName = "gopay_add_balance_selected"
 	WorkflowProgressQueryName          = "progress"

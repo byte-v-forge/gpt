@@ -23,6 +23,12 @@ message Account {
   optional bool plus_active = 16;
   string tier = 17;
   optional string activation_channel = 18;
+  string primary_mailbox_email = 19;
+  int64 mailbox_last_fetched_at_unix = 20;
+  int64 mailbox_last_message_at_unix = 21;
+  string mailbox_latest_otp = 22;
+  string mailbox_latest_otp_subject = 23;
+  int64 mailbox_latest_otp_received_at_unix = 24;
 }
 
 message CreateAccountRequest {

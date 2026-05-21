@@ -29,10 +29,10 @@ func (s *Server) GoPayAppAcquireSignupPhoneActivity(ctx context.Context, input G
 		step.progress("acquiring unregistered gopay phone", map[string]any{
 			"failure_count": failures,
 		})
-		activationID, phone, err := s.acquireSMSNumber(ctx, input.GetJobId(), goPaySMSTarget(), map[string]string{
+		activationID, phone, err := s.acquireSMSNumber(ctx, goPaySMSRequest(input.GetJobId(), map[string]string{
 			"workflow": "gopay_signup",
 			"job_id":   input.GetJobId(),
-		})
+		}))
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err

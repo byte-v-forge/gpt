@@ -64,19 +64,16 @@ func (s *Server) startGoPayAppAuth(ctx context.Context, input GoPayAppOTPStartIn
 
 	phone := normalizeIndonesiaPhone(input.GetPhone())
 	if phone == "" {
-		phone = configuredGoPayPhone()
-	}
-	if phone == "" {
 		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay login phone is required"))
 	}
-	pin := configuredGoPayPIN()
+	pin := strings.TrimSpace(input.GetPin())
 	if pin == "" {
-		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("GOPAY_PIN is required"))
+		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay pin is required"))
 	}
 	startedAt := time.Now().Unix()
 	startResp, err := s.gopayClient.AuthStart(ctx, &pb.AuthStartRequest{
 		Phone:       phone,
-		CountryCode: configuredGoPayCountryCode(),
+		CountryCode: input.GetCountryCode(),
 		Pin:         pin,
 		OtpChannel:  goPayOTPMethod(otpChannel),
 		StateJson:   output.GetStateJson(),
@@ -155,9 +152,9 @@ func (s *Server) completeGoPayAppAuth(ctx context.Context, input GoPayAppOTPComp
 	if err != nil {
 		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, err)
 	}
-	pin := configuredGoPayPIN()
+	pin := strings.TrimSpace(input.GetPin())
 	if pin == "" {
-		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("GOPAY_PIN is required"))
+		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay pin is required"))
 	}
 	completeResp, err := s.gopayClient.AuthComplete(ctx, &pb.AuthCompleteRequest{Otp: otp, Pin: pin, StateJson: output.GetStateJson()})
 	output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(completeResp))

@@ -9,6 +9,7 @@ option go_package = "./;pb";
 message ChangePhoneStartRequest {
   string pin = 1;
   string new_phone = 2;  // 编排服务从接码服务取号后传入，不含国家码
+  string country_code = 3; // 电话区号，例如 "+62"
   string state_json = 100;
 }
 
@@ -75,7 +76,7 @@ message LoginStartRequest {
   string phone = 1;  // 登录手机号；必填，由上游编排传入
   string country_code = 2; // 电话区号，例如 "+62"；必填，由上游编排传入
   string pin = 3;          // 登录 PIN；必填，由上游编排传入
-  string otp_channel = 4;  // sms 或 wa；为空时使用服务默认配置
+  string otp_channel = 4;  // sms 或 wa；为空时由 provider 选择当前流程默认通道
   string state_json = 100;
 }
 
@@ -108,7 +109,7 @@ message SignupStartRequest {
   string phone = 1;        // 新账号手机号；必填，由上游编排传入
   string name = 2;
   string email = 3;
-  string country_code = 4; // 电话区号，例如 "+62"；默认 GOPAY_COUNTRY_CODE=62
+  string country_code = 4; // 电话区号，例如 "+62"；为空时 provider 使用 GoPay 默认国家区号
   string otp_channel = 5;  // sms 或 wa；为空默认 sms；由服务映射为 otp_sms / otp_wa
   string state_json = 100;
 }
@@ -190,20 +191,20 @@ message CreatePinCompleteResponse {
   string state_json = 100;
 }
 
-// === 登录 / 注册入口 ===
+// === 登录入口 ===
 
 message AuthStartRequest {
   string phone = 1;        // 手机号；必填，由上游编排传入
-  string country_code = 2; // 电话区号，例如 "+62"；默认 GOPAY_COUNTRY_CODE=62
-  string pin = 3;          // login 或 signup PIN setup 使用；为空时使用 GOPAY_PIN
-  string otp_channel = 4;  // sms 或 wa；为空时使用服务默认配置
+  string country_code = 2; // 电话区号，例如 "+62"；为空时 provider 使用 GoPay 默认国家区号
+  string pin = 3;          // login 使用；需要 PIN 的步骤必须由调用方传入
+  string otp_channel = 4;  // sms 或 wa；为空时由 provider 选择当前流程默认通道
   string state_json = 100;
 }
 
 message AuthStartResponse {
   bool success = 1;
   string error_message = 2;
-  string mode = 3; // 自动判定结果：token、login 或 signup
+  string mode = 3; // token 或 login；注册走 SignupStart
   string stage = 4;
   bool otp_sent = 5;
   string verification_id = 6;
@@ -215,14 +216,14 @@ message AuthStartResponse {
 
 message AuthCompleteRequest {
   string otp = 1;
-  string pin = 2;  // signup PIN setup 使用；为空时使用 GOPAY_PIN
+  string pin = 2;  // 保留给需要 PIN 的登录后置步骤；需要 PIN 的步骤必须由调用方传入
   string state_json = 100;
 }
 
 message AuthCompleteResponse {
   bool success = 1;
   string error_message = 2;
-  string mode = 3; // 自动判定结果：token、login 或 signup
+  string mode = 3; // token 或 login；注册走 SignupStart
   string stage = 4;
   string phone = 5;
   bool ready = 6;
@@ -304,6 +305,8 @@ message StatusResponse {
   int64 balance_amount = 14;
   bool has_min_balance = 15;
   string balance_currency = 16;
+  bool pin_setup = 17;
+  int64 pin_setup_at_unix = 18;
   string state_json = 100;
 }
 
@@ -350,7 +353,7 @@ message CheckPhoneRequest {
   string phone = 1;  // 不含国家码
   reserved 2;
   reserved "country";
-  string country_code = 3; // 电话区号，例如 "+62"；默认 GOPAY_COUNTRY_CODE=62
+  string country_code = 3; // 电话区号，例如 "+62"；为空时 provider 使用 GoPay 默认国家区号
 }
 
 message CheckPhoneResponse {

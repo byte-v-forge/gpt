@@ -65,7 +65,7 @@ func paymentLinkFromGoPayResponse(resp *pb.GoPayResponse) (string, error) {
 	return "", fmt.Errorf("midtrans payment link is missing")
 }
 
-func (s *Server) replayGoPayPaymentLink(ctx context.Context, stateJSON string, paymentResp *pb.GoPayResponse) (*pb.ReplayLinkPaymentResponse, string, error) {
+func (s *Server) replayGoPayPaymentLink(ctx context.Context, stateJSON string, paymentResp *pb.GoPayResponse, pin string) (*pb.ReplayLinkPaymentResponse, string, error) {
 	if s.gopayClient == nil {
 		return nil, normalizeGoPayWorkflowStateJSON(stateJSON), fmt.Errorf("gopay-app client not configured")
 	}
@@ -73,9 +73,9 @@ func (s *Server) replayGoPayPaymentLink(ctx context.Context, stateJSON string, p
 	if err != nil {
 		return nil, normalizeGoPayWorkflowStateJSON(stateJSON), err
 	}
-	pin := configuredGoPayPIN()
+	pin = strings.TrimSpace(pin)
 	if pin == "" {
-		return nil, normalizeGoPayWorkflowStateJSON(stateJSON), fmt.Errorf("GOPAY_PIN is required")
+		return nil, normalizeGoPayWorkflowStateJSON(stateJSON), fmt.Errorf("gopay pin is required")
 	}
 	timeout := s.gopayAppLinkPaymentWaitTimeout()
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)

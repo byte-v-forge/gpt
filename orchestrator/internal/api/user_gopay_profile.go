@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"gorm.io/gorm/clause"
@@ -18,20 +17,29 @@ func (s *Server) GoPayUserSetWAPhone(ctx context.Context, req *pb.GoPayUserSetWA
 		return &pb.GoPayUserWAPhoneResponse{ErrorMessage: err.Error()}, nil
 	}
 	phone := normalizeIndonesiaPhoneForAPI(req.GetWaPhone())
-	if phone == "" {
-		return &pb.GoPayUserWAPhoneResponse{UserId: stateKey, ErrorMessage: "wa_phone is required"}, nil
+	pin := strings.TrimSpace(req.GetPin())
+	if phone == "" && pin == "" {
+		return &pb.GoPayUserWAPhoneResponse{UserId: stateKey, ErrorMessage: "wa_phone or pin is required"}, nil
 	}
 	if s.db == nil {
 		return &pb.GoPayUserWAPhoneResponse{UserId: stateKey, ErrorMessage: "orchestrator db not configured"}, nil
 	}
+	profile := db.GoPayUserProfile{StateKey: stateKey, WAPhone: phone, PIN: pin}
+	updates := []string{"updated_at"}
+	if phone != "" {
+		updates = append(updates, "wa_phone")
+	}
+	if pin != "" {
+		updates = append(updates, "pin")
+	}
 	err = s.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "state_key"}},
-		DoUpdates: clause.AssignmentColumns([]string{"wa_phone", "updated_at"}),
-	}).Create(&db.GoPayUserProfile{StateKey: stateKey, WAPhone: phone}).Error
+		DoUpdates: clause.AssignmentColumns(updates),
+	}).Create(&profile).Error
 	if err != nil {
-		return &pb.GoPayUserWAPhoneResponse{UserId: stateKey, ErrorMessage: fmt.Sprintf("save wa_phone: %v", err)}, nil
+		return &pb.GoPayUserWAPhoneResponse{UserId: stateKey, ErrorMessage: fmt.Sprintf("save gopay user profile: %v", err)}, nil
 	}
-	return &pb.GoPayUserWAPhoneResponse{Success: true, UserId: stateKey, WaPhone: phone}, nil
+	return &pb.GoPayUserWAPhoneResponse{Success: true, UserId: stateKey, WaPhone: phone, Pin: pin}, nil
 }
 
 func (s *Server) GoPayUserGetWAPhone(ctx context.Context, req *pb.GoPayUserGetWAPhoneRequest) (*pb.GoPayUserWAPhoneResponse, error) {
@@ -47,19 +55,15 @@ func (s *Server) GoPayUserGetWAPhone(ctx context.Context, req *pb.GoPayUserGetWA
 	if result.Error != nil {
 		return &pb.GoPayUserWAPhoneResponse{UserId: stateKey, ErrorMessage: fmt.Sprintf("load wa_phone: %v", result.Error)}, nil
 	}
-	if stateKey == "local" {
-		if phone := configuredGoPayWAPhoneForAPI(); phone != "" {
-			return &pb.GoPayUserWAPhoneResponse{Success: true, UserId: stateKey, WaPhone: phone}, nil
-		}
-	}
 	if result.RowsAffected == 0 {
 		return &pb.GoPayUserWAPhoneResponse{Success: true, UserId: stateKey}, nil
 	}
-	return &pb.GoPayUserWAPhoneResponse{Success: true, UserId: stateKey, WaPhone: normalizeIndonesiaPhoneForAPI(profile.WAPhone)}, nil
-}
-
-func configuredGoPayWAPhoneForAPI() string {
-	return normalizeIndonesiaPhoneForAPI(os.Getenv("GOPAY_WA_PHONE_NUMBER"))
+	return &pb.GoPayUserWAPhoneResponse{
+		Success: true,
+		UserId:  stateKey,
+		WaPhone: normalizeIndonesiaPhoneForAPI(profile.WAPhone),
+		Pin:     strings.TrimSpace(profile.PIN),
+	}, nil
 }
 
 func normalizeIndonesiaPhoneForAPI(phone string) string {

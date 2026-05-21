@@ -56,6 +56,7 @@ type JobEvent struct {
 type GoPayUserProfile struct {
 	StateKey  string `gorm:"primaryKey;column:state_key"`
 	WAPhone   string `gorm:"column:wa_phone"`
+	PIN       string `gorm:"column:pin"`
 	CreatedAt int64  `gorm:"autoCreateTime"`
 	UpdatedAt int64  `gorm:"autoUpdateTime"`
 }

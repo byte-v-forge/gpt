@@ -17,6 +17,8 @@ service GoPayAppWorkflowService {
   rpc GoPayUserClearState(GoPayUserClearStateRequest) returns (GoPayUserClearStateResponse);
   rpc GoPayUserSetWAPhone(GoPayUserSetWAPhoneRequest) returns (GoPayUserWAPhoneResponse);
   rpc GoPayUserGetWAPhone(GoPayUserGetWAPhoneRequest) returns (GoPayUserWAPhoneResponse);
+  rpc GoPayUserCheckPhone(GoPayUserCheckPhoneRequest) returns (GoPayUserCheckPhoneResponse);
+  rpc GoPayUserCheckBalance(GoPayUserCheckBalanceRequest) returns (GoPayUserCheckBalanceResponse);
   rpc GoPayUserAuthStart(GoPayUserAuthStartRequest) returns (GoPayUserAuthStartResponse);
   rpc GoPayUserAuthComplete(GoPayUserAuthCompleteRequest) returns (GoPayUserAuthCompleteResponse);
   rpc GoPayUserChangePhoneStart(GoPayUserChangePhoneStartRequest) returns (GoPayUserChangePhoneStartResponse);
@@ -50,6 +52,12 @@ message EnsureLogonResponse {
 }
 
 message GoPayAppRequest {
+  string phone = 1;
+  string country_code = 2;
+  string pin = 3;
+  string otp_channel = 4;
+  string user_id = 5;
+  string operation = 6; // login/signup/create_pin/check_balance/check_pin/change_phone/provision
 }
 
 message GoPayAppResponse {
@@ -66,7 +74,9 @@ message GoPayPaymentRequest {
   GoPayAddBalance add_balance = 5;
   int32 add_balance_confirm_timeout_seconds = 6;
   string user_id = 7; // local 或 tg:<user_id>；WA 接码来源和 GoPay state 归属用户
-  string wa_phone = 8; // WA 支付注册手机号；为空时使用 user_id 已保存值或本地配置
+  string wa_phone = 8; // WA 支付注册手机号；调用方必须显式传入
+  string pin = 9; // GoPay PIN；需要 PIN 的步骤必须由调用方显式传入
+  string country_code = 10; // 电话区号，例如 "+62"；为空时 provider 使用 GoPay 默认国家区号
 }
 
 message GoPayWAPaymentRequest {
@@ -76,7 +86,9 @@ message GoPayWAPaymentRequest {
   }
   string source_job_id = 2;
   string user_id = 3; // local 或 tg:<user_id>；WA state 归属用户
-  string wa_phone = 4; // WA 支付手机号；为空时使用 user_id 已保存值或本地配置
+  string wa_phone = 4; // WA 支付手机号；调用方必须显式传入
+  string pin = 6; // GoPay PIN；需要 PIN 的步骤必须由调用方显式传入
+  string country_code = 7; // 电话区号，例如 "+62"；为空时 provider 使用 GoPay 默认国家区号
 }
 
 message GoPayPaymentResponse {
@@ -102,6 +114,8 @@ message GoPayPaymentRebindRequest {
   string source_job_id = 1;
   string account_id = 2;
   string user_id = 3;
+  string pin = 4;
+  string country_code = 5;
 }
 
 message GoPayAddBalance {
@@ -181,6 +195,7 @@ message GoPayUserClearStateResponse {
 message GoPayUserSetWAPhoneRequest {
   string user_id = 1;
   string wa_phone = 2;
+  string pin = 3;
 }
 
 message GoPayUserGetWAPhoneRequest {
@@ -192,6 +207,36 @@ message GoPayUserWAPhoneResponse {
   string error_message = 2;
   string user_id = 3;
   string wa_phone = 4;
+  string pin = 5;
+}
+
+message GoPayUserCheckPhoneRequest {
+  string user_id = 1;
+  string phone = 2;
+  string country_code = 3;
+}
+
+message GoPayUserCheckPhoneResponse {
+  bool success = 1;
+  string error_message = 2;
+  bool available = 3;
+  string status = 4;
+}
+
+message GoPayUserCheckBalanceRequest {
+  string user_id = 1;
+}
+
+message GoPayUserCheckBalanceResponse {
+  bool success = 1;
+  string error_message = 2;
+  string stage = 3;
+  string phone = 4;
+  bool token_valid = 5;
+  bool refreshed = 6;
+  int64 balance_amount = 7;
+  bool has_min_balance = 8;
+  string balance_currency = 9;
 }
 
 message GoPayUserAuthStartRequest {
@@ -199,7 +244,7 @@ message GoPayUserAuthStartRequest {
   string phone = 2;
   string country_code = 3;
   string pin = 4;
-  string otp_channel = 5; // sms 或 wa；为空时使用服务默认配置
+  string otp_channel = 5; // sms 或 wa；为空时由 provider 选择当前流程默认通道
 }
 
 message GoPayUserAuthStartResponse {
@@ -235,6 +280,7 @@ message GoPayUserChangePhoneStartRequest {
   string user_id = 1;
   string new_phone = 2;
   string pin = 3;
+  string country_code = 4;
 }
 
 message GoPayUserChangePhoneStartResponse {
@@ -322,6 +368,12 @@ message GoPayUserCreatePinCompleteResponse {
 
 message GoPayAppWorkflowInput {
   string job_id = 1;
+  string phone = 2;
+  string country_code = 3;
+  string pin = 4;
+  string otp_channel = 5;
+  string user_id = 6;
+  string operation = 7;
 }
 
 message GoPayAppWorkflowResult {
@@ -344,17 +396,22 @@ message GoPayAppOTPWorkflowInput {
   string source = 5;
   bool reset_state = 6;
   string state_json = 7;
+  string pin = 8;
+  string country_code = 9;
 }
 
 message GoPayAppChangePhoneWorkflowInput {
   string job_id = 1;
   string state_json = 2;
+  string pin = 3;
+  string country_code = 4;
 }
 
 message GoPayAppDeactivateWorkflowInput {
   string job_id = 1;
   string activation_id = 2;
   string state_json = 3;
+  string pin = 4;
 }
 
 message GoPayPaymentWorkflowInput {
@@ -367,6 +424,8 @@ message GoPayPaymentWorkflowInput {
   int32 add_balance_confirm_timeout_seconds = 7;
   string user_id = 8;
   string wa_phone = 9;
+  string pin = 10;
+  string country_code = 11;
 }
 
 message GoPayWAPaymentWorkflowInput {
@@ -378,6 +437,8 @@ message GoPayWAPaymentWorkflowInput {
   string source_job_id = 3;
   string user_id = 4;
   string wa_phone = 5;
+  string pin = 7;
+  string country_code = 8;
 }
 
 message GoPayPaymentWorkflowResult {
@@ -406,6 +467,8 @@ message GoPayPaymentRebindWorkflowInput {
   string source_job_id = 2;
   string account_id = 3;
   string user_id = 4;
+  string pin = 5;
+  string country_code = 6;
 }
 
 message GoPayPaymentRebindWorkflowResult {
@@ -447,6 +510,8 @@ message GoPayAppChangePhoneStartInput {
   string state_json = 3;
   string activation_id = 4;
   string phone = 5;
+  string pin = 6;
+  string country_code = 7;
 }
 
 message GoPayAppChangePhoneStartOutput {
@@ -583,6 +648,9 @@ message GoPayAppChangePhoneCompleteInput {
   string code = 3;
   int32 failure_count = 4;
   string state_json = 5;
+  string otp_param = 6;
+  string submitted_at_param = 7;
+  int64 issued_after_unix = 8;
 }
 
 message GoPayAppChangePhoneCompleteOutput {
@@ -602,6 +670,7 @@ message GoPayAppDeactivateStartInput {
   string job_id = 1;
   string activation_id = 2;
   string state_json = 3;
+  string pin = 4;
 }
 
 message GoPayAppDeactivateStartOutput {
@@ -617,6 +686,9 @@ message GoPayAppDeactivateCompleteInput {
   string activation_id = 2;
   string code = 3;
   string state_json = 4;
+  string otp_param = 5;
+  string submitted_at_param = 6;
+  int64 issued_after_unix = 7;
 }
 
 message GoPayAppDeactivateCompleteOutput {
@@ -635,6 +707,8 @@ message GoPayAppOTPStartInput {
   string sms_activation_id = 6;
   bool reset_state = 7;
   string state_json = 8;
+  string pin = 9;
+  string country_code = 10;
 }
 
 message GoPayAppCreatePinStartInput {
@@ -643,6 +717,7 @@ message GoPayAppCreatePinStartInput {
   string sms_activation_id = 3;
   string state_json = 4;
   google.protobuf.Struct data = 5;
+  string pin = 6;
 }
 
 message GoPayAppOTPOutput {
@@ -673,6 +748,7 @@ message GoPayAppCreatePinCompleteInput {
   string otp_channel = 7;
   string sms_activation_id = 8;
   string state_json = 9;
+  string pin = 10;
 }
 
 message GoPayAppOTPCompleteInput {
@@ -686,4 +762,5 @@ message GoPayAppOTPCompleteInput {
   string otp_channel = 8;
   string sms_activation_id = 9;
   string state_json = 10;
+  string pin = 11;
 }

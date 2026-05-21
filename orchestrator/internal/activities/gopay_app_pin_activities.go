@@ -44,9 +44,9 @@ func (s *Server) startGoPayAppCreatePin(ctx context.Context, input GoPayAppCreat
 	if err != nil {
 		return output, err
 	}
-	pin := configuredGoPayPIN()
+	pin := strings.TrimSpace(input.GetPin())
 	if pin == "" {
-		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("GOPAY_PIN is required"))
+		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay pin is required"))
 	}
 
 	statusBefore, statusErr := s.goPayStatusForState(ctx, output.GetStateJson())
@@ -198,9 +198,9 @@ func (s *Server) completeGoPayAppCreatePin(ctx context.Context, input GoPayAppCr
 	if err != nil {
 		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, err)
 	}
-	pin := configuredGoPayPIN()
+	pin := strings.TrimSpace(input.GetPin())
 	if pin == "" {
-		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("GOPAY_PIN is required"))
+		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay pin is required"))
 	}
 	completeResp, err := s.gopayClient.CreatePinComplete(ctx, &pb.CreatePinCompleteRequest{Otp: otp, Pin: pin, StateJson: output.GetStateJson()})
 	output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(completeResp))

@@ -43,10 +43,7 @@ func (s *Server) startGoPayAppSignup(ctx context.Context, input GoPayAppOTPStart
 	}
 	phone := strings.TrimSpace(input.GetPhone())
 	if phone == "" {
-		phone = configuredGoPayPhone()
-	}
-	if phone == "" {
-		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("GOPAY_PHONE_NUMBER is required"))
+		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay signup phone is required"))
 	}
 
 	statusBefore, statusErr := s.goPayStatusForState(ctx, output.GetStateJson())
@@ -89,7 +86,7 @@ func (s *Server) startGoPayAppSignup(ctx context.Context, input GoPayAppOTPStart
 	startedAt := time.Now().Unix()
 	startResp, err := s.gopayClient.SignupStart(ctx, &pb.SignupStartRequest{
 		Phone:       phone,
-		CountryCode: configuredGoPayCountryCode(),
+		CountryCode: input.GetCountryCode(),
 		OtpChannel:  goPayOTPMethod(otpChannel),
 		StateJson:   output.GetStateJson(),
 	})

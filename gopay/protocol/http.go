@@ -2,13 +2,17 @@ package protocol
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	xproxy "golang.org/x/net/proxy"
 )
 
 type Logger func(context.Context, string, map[string]any)
@@ -112,8 +116,16 @@ func NewHTTPClient(timeout time.Duration, proxyRawURL string) (*http.Client, err
 		switch parsed.Scheme {
 		case "http", "https":
 			transport.Proxy = http.ProxyURL(parsed)
+		case "socks5", "socks5h":
+			dialer, err := xproxy.SOCKS5("tcp", parsed.Host, nil, xproxy.Direct)
+			if err != nil {
+				return nil, err
+			}
+			transport.DialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
+				return dialer.Dial(network, address)
+			}
 		default:
-			return nil, &ConfigError{Field: "proxy_url", Msg: "only http and https proxy URLs are supported by the Go protocol client"}
+			return nil, &ConfigError{Field: "proxy_url", Msg: "only http, https, socks5, and socks5h proxy URLs are supported by the Go protocol client"}
 		}
 	}
 	return &http.Client{Timeout: timeout, Transport: transport}, nil
@@ -215,7 +227,7 @@ func (c *Client) doOnce(ctx context.Context, method string, target *url.URL, req
 		return nil, err
 	}
 	defer resp.Body.Close()
-	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
+	raw, readErr := readResponseBody(resp.Body)
 	if readErr != nil {
 		return nil, readErr
 	}
@@ -226,6 +238,22 @@ func (c *Client) doOnce(ctx context.Context, method string, target *url.URL, req
 		Body:       raw,
 		Payload:    payload,
 	}, nil
+}
+
+func readResponseBody(body io.Reader) ([]byte, error) {
+	raw, err := io.ReadAll(io.LimitReader(body, 8*1024*1024))
+	if err != nil {
+		return nil, err
+	}
+	if bytes.HasPrefix(raw, []byte{0x1f, 0x8b}) {
+		gzipReader, gzipErr := gzip.NewReader(bytes.NewReader(raw))
+		if gzipErr != nil {
+			return nil, gzipErr
+		}
+		defer gzipReader.Close()
+		return io.ReadAll(io.LimitReader(gzipReader, 8*1024*1024))
+	}
+	return raw, nil
 }
 
 func (c *Client) requestURL(path string, query url.Values) (*url.URL, error) {

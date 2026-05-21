@@ -19,7 +19,7 @@ func Run() {
 		log.Fatalf("Failed to initialize GPT service dependencies: %v", err)
 	}
 	defer deps.Close()
-	otpWebhookServer, err := startGoPayOTPWebhookServer(cfg.GoPayOTPWebhookListenAddr, deps.otpRelay)
+	otpWebhookServer, err := startGoPayOTPWebhookServer(cfg.GoPayOTPWebhookListenAddr, deps.otpRelay, deps.accountClient, cfg.MailboxWebhookToken)
 	if err != nil {
 		log.Fatalf("Failed to start GoPay OTP webhook: %v", err)
 	}
@@ -40,6 +40,7 @@ func Run() {
 		Temporal:                             deps.temporal,
 		TaskQueue:                            cfg.WorkflowRuntime.TaskQueue,
 		AccountClient:                        deps.accountClient,
+		MailboxClient:                        deps.mailboxClient,
 		GoPayClient:                          deps.gopayClient,
 		DefaultGoPayAddBalance:               defaultGoPayAddBalance(cfg),
 		DefaultGoPayAddBalances:              defaultGoPayAddBalances(cfg),

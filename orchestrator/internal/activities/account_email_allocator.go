@@ -11,7 +11,7 @@ import (
 const accountEmailAllocatorLimit int32 = 500
 
 type AccountEmailAllocator interface {
-	Allocate(ctx context.Context, accountID string, excludes []string, useSplitStrategy bool) (string, error)
+	Allocate(ctx context.Context, accountID string, excludes []string, strategy pb.AccountEmailStrategy) (string, error)
 }
 
 type accountDBEmailAllocator struct {
@@ -32,13 +32,17 @@ func NewAccountEmailAllocator(accountClient pb.AccountDatabaseServiceClient) Acc
 	return defaultAccountEmailAllocator(nil, accountClient)
 }
 
-func (a *accountDBEmailAllocator) Allocate(ctx context.Context, accountID string, excludes []string, useSplitStrategy bool) (string, error) {
+func (a *accountDBEmailAllocator) Allocate(ctx context.Context, accountID string, excludes []string, strategy pb.AccountEmailStrategy) (string, error) {
 	if a == nil || a.accountClient == nil {
 		return "", fmt.Errorf("email allocator is not configured")
 	}
 	accountID = strings.TrimSpace(accountID)
 	if accountID == "" {
 		return "", fmt.Errorf("account_id is required for email allocation")
+	}
+	strategy = normalizeEmailStrategy(strategy)
+	if strategy == pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_EXPLICIT {
+		return "", fmt.Errorf("explicit email strategy requires an email")
 	}
 
 	excludeSet := normalizedSet(excludes)
@@ -61,7 +65,7 @@ func (a *accountDBEmailAllocator) Allocate(ctx context.Context, accountID string
 		}
 	}
 
-	if useSplitStrategy {
+	if strategyAllowsAlias(strategy) {
 		for _, allocation := range available {
 			if !eligibleAvailableAliasAllocation(allocation, excludeSet) {
 				continue
@@ -96,6 +100,17 @@ func (a *accountDBEmailAllocator) Allocate(ctx context.Context, accountID string
 	}
 
 	return "", fmt.Errorf("no available GPT email allocation")
+}
+
+func normalizeEmailStrategy(strategy pb.AccountEmailStrategy) pb.AccountEmailStrategy {
+	if strategy == pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_UNSPECIFIED {
+		return pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_OUTLOOK_ALIAS
+	}
+	return strategy
+}
+
+func strategyAllowsAlias(strategy pb.AccountEmailStrategy) bool {
+	return normalizeEmailStrategy(strategy) == pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_OUTLOOK_ALIAS
 }
 
 func (a *accountDBEmailAllocator) listAllocations(ctx context.Context, status string, splittableOnly bool) ([]*pb.GPTEmailAllocation, error) {

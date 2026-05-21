@@ -4,6 +4,7 @@ package orchestrator;
 
 import "google/protobuf/struct.proto";
 import "account_db.proto";
+import "mailbox_service.proto";
 
 option go_package = "./;pb";
 
@@ -12,13 +13,37 @@ service AccountWorkflowService {
   rpc RegisterAccount(RegisterAccountRequest) returns (RegisterAccountResponse);
   rpc LoginAccount(LoginAccountRequest) returns (LoginAccountResponse);
   rpc RegisterAndActivateAccount(RegisterAndActivateAccountRequest) returns (RegisterAndActivateAccountResponse);
+  rpc FetchAccountMailbox(FetchAccountMailboxRequest) returns (FetchAccountMailboxResponse);
+  rpc SyncAccountMailboxes(SyncAccountMailboxesRequest) returns (SyncAccountMailboxesResponse);
+}
+
+enum AccountEmailStrategy {
+  ACCOUNT_EMAIL_STRATEGY_UNSPECIFIED = 0;
+  ACCOUNT_EMAIL_STRATEGY_EXPLICIT = 1;
+  ACCOUNT_EMAIL_STRATEGY_OUTLOOK_PRIMARY = 2;
+  ACCOUNT_EMAIL_STRATEGY_OUTLOOK_ALIAS = 3;
+}
+
+enum RegisterOTPMode {
+  REGISTER_OTP_MODE_UNSPECIFIED = 0;
+  REGISTER_OTP_MODE_AUTO = 1;
+  REGISTER_OTP_MODE_MANUAL = 2;
+}
+
+message RegisterOTPOptions {
+  RegisterOTPMode mode = 1;
+  optional bool auto_resend = 2;
+  int32 first_wait_seconds = 3;
+  int32 timeout_seconds = 4;
 }
 
 message AccountSpec {
   string account_id = 1;
   string email = 2;
   string password = 3;
-  optional bool use_split_strategy = 4;
+  reserved 4;
+  reserved "use_split_strategy";
+  AccountEmailStrategy email_strategy = 5;
 }
 
 message AccountRef {
@@ -37,12 +62,41 @@ message CreateGPTAccountRequest {
   string email = 1;
   string password = 2;
   string account_id = 3;
-  optional bool use_split_strategy = 4;
+  reserved 4;
+  reserved "use_split_strategy";
+  AccountEmailStrategy email_strategy = 5;
 }
 
 message CreateGPTAccountResponse {
   accountdb.Account account = 1;
   string error_message = 2;
+}
+
+message FetchAccountMailboxRequest {
+  string account_id = 1;
+  int32 limit_per_mailbox = 2;
+}
+
+message FetchAccountMailboxResponse {
+  accountdb.Account account = 1;
+  mailbox.FetchMailboxInboxesResponse inbox = 2;
+  string error_message = 3;
+}
+
+message SyncAccountMailboxesRequest {
+  int32 limit_per_mailbox = 1;
+  int32 account_limit = 2;
+}
+
+message SyncAccountMailboxesResponse {
+  bool success = 1;
+  string error_message = 2;
+  int32 account_count = 3;
+  int32 mailbox_count = 4;
+  int32 synced_count = 5;
+  int32 failed_count = 6;
+  int32 message_count = 7;
+  int64 max_message_at_unix = 8;
 }
 
 message PersistRegisteredInput {
@@ -93,6 +147,24 @@ message BrowserAuthCompleteInput {
   string otp_source = 8;
 }
 
+message BrowserAuthResendOTPInput {
+  string job_id = 1;
+  string account_id = 2;
+  string flow_id = 3;
+  string mode = 4;
+}
+
+message BrowserAuthResendOTPOutput {
+  string flow_id = 1;
+  string email = 2;
+  bool success = 3;
+  string error_message = 4;
+  int64 otp_issued_after_unix = 5;
+  int64 otp_request_started_at_unix_ms = 6;
+  int32 otp_timeout_seconds = 7;
+  google.protobuf.Struct data = 8;
+}
+
 message BrowserAuthWaitInput {
   string job_id = 1;
   string account_id = 2;
@@ -132,7 +204,10 @@ message RegisterAccountRequest {
   reserved 3, 4, 5;
   reserved "first_name", "last_name", "dob";
   string account_id = 6;
-  optional bool use_split_strategy = 7;
+  reserved 7;
+  reserved "use_split_strategy";
+  AccountEmailStrategy email_strategy = 8;
+  RegisterOTPOptions otp_options = 9;
 }
 
 message RegisterAccountResponse {
@@ -156,11 +231,16 @@ message LoginAccountResponse {
 }
 
 message RegisterAndActivateAccountRequest {
-  reserved 1, 2, 3, 4, 5, 8, 9, 10;
+  reserved 1, 2, 3, 4, 5, 8, 9, 10, 12;
+  reserved "use_split_strategy";
   string email = 6;
   string password = 7;
   string account_id = 11;
-  optional bool use_split_strategy = 12;
+  AccountEmailStrategy email_strategy = 13;
+  RegisterOTPOptions otp_options = 14;
+  string gopay_phone = 15;
+  string gopay_country_code = 16;
+  string gopay_pin = 17;
 }
 
 message RegisterAndActivateAccountResponse {
@@ -179,6 +259,7 @@ message RegisterAndActivateAccountResponse {
 message RegisterAccountWorkflowInput {
   string job_id = 1;
   AccountSpec account = 2;
+  RegisterOTPOptions otp_options = 3;
 }
 
 message RegisterAccountWorkflowResult {
@@ -205,6 +286,10 @@ message LoginSessionWorkflowResult {
 message RegisterAndActivateWorkflowInput {
   string job_id = 1;
   AccountSpec account = 2;
+  RegisterOTPOptions otp_options = 3;
+  string gopay_phone = 4;
+  string gopay_country_code = 5;
+  string gopay_pin = 6;
 }
 
 message RegisterAndActivateWorkflowResult {

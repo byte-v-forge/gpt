@@ -27,10 +27,10 @@ func (s *Server) GoPayAppDeactivateStartActivity(ctx context.Context, input GoPa
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		pin := configuredGoPayPIN()
+		pin := strings.TrimSpace(input.GetPin())
 		if pin == "" {
 			s.finishSMSActivation(ctx, input.GetActivationId())
-			err := fmt.Errorf("GOPAY_PIN is required")
+			err := fmt.Errorf("gopay pin is required")
 			data["error_message"] = err.Error()
 			return data, err
 		}
@@ -88,13 +88,22 @@ func (s *Server) GoPayAppDeactivateCompleteActivity(ctx context.Context, input G
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		if strings.TrimSpace(input.GetCode()) == "" {
+		code := strings.TrimSpace(input.GetCode())
+		if code == "" && strings.TrimSpace(input.GetOtpParam()) != "" {
+			var consumeErr error
+			code, consumeErr = s.consumeStoredOTP(ctx, input.GetJobId(), input.GetOtpParam(), input.GetSubmittedAtParam(), input.GetIssuedAfterUnix())
+			if consumeErr != nil {
+				data["error_message"] = consumeErr.Error()
+				return data, consumeErr
+			}
+		}
+		if code == "" {
 			s.finishSMSActivation(ctx, input.GetActivationId())
 			err := fmt.Errorf("WaitCode deactivate returned empty code")
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		resp, err := s.gopayClient.DeactivateComplete(ctx, &pb.DeactivateCompleteRequest{Otp: input.GetCode(), StateJson: output.GetStateJson()})
+		resp, err := s.gopayClient.DeactivateComplete(ctx, &pb.DeactivateCompleteRequest{Otp: code, StateJson: output.GetStateJson()})
 		output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(resp))
 		data["deactivate_complete"] = deactivateCompleteData(resp)
 		if err != nil {

@@ -22,6 +22,7 @@ type Config struct {
 	Temporal                             temporalclient.Client
 	TaskQueue                            string
 	AccountClient                        pb.AccountDatabaseServiceClient
+	MailboxClient                        pb.MailboxServiceClient
 	GoPayClient                          pb.GopayAppServiceClient
 	DefaultGoPayAddBalance               *pb.GoPayAddBalance
 	DefaultGoPayAddBalances              map[string]*pb.GoPayAddBalance
@@ -41,6 +42,7 @@ type Server struct {
 	temporal                             temporalclient.Client
 	taskQueue                            string
 	accountClient                        pb.AccountDatabaseServiceClient
+	mailboxClient                        pb.MailboxServiceClient
 	gopayClient                          pb.GopayAppServiceClient
 	defaultGoPayAddBalance               *pb.GoPayAddBalance
 	defaultGoPayAddBalances              map[string]*pb.GoPayAddBalance
@@ -48,6 +50,7 @@ type Server struct {
 }
 
 type ManualOTPSignal = pb.ManualOTPSignal
+type OTPResendSignal = pb.OTPResendSignal
 type ManualAddBalanceSignal = pb.ManualAddBalanceSignal
 
 const (
@@ -72,6 +75,7 @@ const (
 	registrationOTPParam       = "registration_otp"
 	paymentOTPParam            = "payment_otp"
 	manualOTPSignalName        = contracts.ManualOTPSignalName
+	otpResendSignalName        = contracts.OTPResendSignalName
 	manualAddBalanceSignalName = contracts.ManualAddBalanceSignalName
 	registrationOTPSubmit      = "registration_otp_submitted_at_unix"
 	paymentOTPSubmit           = "payment_otp_submitted_at_unix"
@@ -90,6 +94,7 @@ func NewServer(cfg Config) *Server {
 		temporal:                             cfg.Temporal,
 		taskQueue:                            cfg.TaskQueue,
 		accountClient:                        cfg.AccountClient,
+		mailboxClient:                        cfg.MailboxClient,
 		gopayClient:                          cfg.GoPayClient,
 		defaultGoPayAddBalance:               cfg.DefaultGoPayAddBalance,
 		defaultGoPayAddBalances:              cloneGoPayAddBalanceMap(cfg.DefaultGoPayAddBalances),

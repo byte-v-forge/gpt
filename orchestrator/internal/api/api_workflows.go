@@ -19,7 +19,7 @@ func (s *Server) CreateGPTAccount(ctx context.Context, req *pb.CreateGPTAccountR
 	}
 	email := strings.TrimSpace(req.GetEmail())
 	if email == "" {
-		allocated, err := activities.NewAccountEmailAllocator(s.accountClient).Allocate(ctx, accountID, nil, requestUsesSplitStrategy(req.UseSplitStrategy, req.GetUseSplitStrategy()))
+		allocated, err := activities.NewAccountEmailAllocator(s.accountClient).Allocate(ctx, accountID, nil, requestEmailStrategy(req.GetEmailStrategy()))
 		if err != nil {
 			return &pb.CreateGPTAccountResponse{ErrorMessage: err.Error()}, nil
 		}
@@ -49,11 +49,12 @@ func (s *Server) RegisterAccount(ctx context.Context, req *pb.RegisterAccountReq
 	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionRegister, jobID)), workflows.RegisterAccountWorkflow, workflows.RegisterAccountWorkflowInput{
 		JobId: jobID,
 		Account: &workflows.AccountSpec{
-			AccountId:        accountID,
-			Email:            req.GetEmail(),
-			Password:         req.GetPassword(),
-			UseSplitStrategy: req.UseSplitStrategy,
+			AccountId:     accountID,
+			Email:         req.GetEmail(),
+			Password:      req.GetPassword(),
+			EmailStrategy: requestEmailStrategy(req.GetEmailStrategy()),
 		},
+		OtpOptions: req.GetOtpOptions(),
 	})
 	if err != nil {
 		return nil, err
@@ -65,10 +66,13 @@ func (s *Server) ActivateAccount(ctx context.Context, req *pb.ActivateAccountReq
 	jobID := uuid.NewString()
 	var result workflows.ActivateAccountWorkflowResult
 	run, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionActivate, jobID)), workflows.ActivateAccountWorkflow, workflows.ActivateAccountWorkflowInput{
-		JobId:       jobID,
-		AccountId:   strings.TrimSpace(req.GetAccountId()),
-		SourceJobId: req.GetJobId(),
-		Action:      actionActivate,
+		JobId:            jobID,
+		AccountId:        strings.TrimSpace(req.GetAccountId()),
+		SourceJobId:      req.GetJobId(),
+		Action:           actionActivate,
+		GopayPhone:       req.GetGopayPhone(),
+		GopayCountryCode: req.GetGopayCountryCode(),
+		GopayPin:         req.GetGopayPin(),
 	})
 	if err != nil {
 		return nil, err
@@ -90,9 +94,12 @@ func (s *Server) AutopayAccount(ctx context.Context, req *pb.ActivateAccountRequ
 	jobID := uuid.NewString()
 	var result workflows.AutoPayWorkflowResult
 	run, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionAutopay, jobID)), workflows.AutoPayWorkflow, workflows.AutoPayWorkflowInput{
-		JobId:       jobID,
-		AccountId:   strings.TrimSpace(req.GetAccountId()),
-		SourceJobId: req.GetJobId(),
+		JobId:            jobID,
+		AccountId:        strings.TrimSpace(req.GetAccountId()),
+		SourceJobId:      req.GetJobId(),
+		GopayPhone:       req.GetGopayPhone(),
+		GopayCountryCode: req.GetGopayCountryCode(),
+		GopayPin:         req.GetGopayPin(),
 	})
 	if err != nil {
 		return nil, err
@@ -145,7 +152,13 @@ func (s *Server) ProbeAccount(ctx context.Context, req *pb.ProbeAccountRequest) 
 func (s *Server) RunGoPayApp(ctx context.Context, req *pb.GoPayAppRequest) (*pb.GoPayAppResponse, error) {
 	jobID := uuid.NewString()
 	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionGoPayApp, jobID)), workflows.GoPayAppWorkflow, workflows.GoPayAppWorkflowInput{
-		JobId: jobID,
+		JobId:       jobID,
+		Phone:       strings.TrimSpace(req.GetPhone()),
+		CountryCode: strings.TrimSpace(req.GetCountryCode()),
+		Pin:         strings.TrimSpace(req.GetPin()),
+		OtpChannel:  strings.TrimSpace(req.GetOtpChannel()),
+		UserId:      strings.TrimSpace(req.GetUserId()),
+		Operation:   strings.TrimSpace(req.GetOperation()),
 	})
 	if err != nil {
 		return &pb.GoPayAppResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
@@ -180,6 +193,8 @@ func (s *Server) RunGoPayPayment(ctx context.Context, req *pb.GoPayPaymentReques
 		AddBalanceConfirmTimeoutSeconds: addBalanceConfirmTimeoutSeconds,
 		UserId:                          strings.TrimSpace(req.GetUserId()),
 		WaPhone:                         strings.TrimSpace(req.GetWaPhone()),
+		Pin:                             strings.TrimSpace(req.GetPin()),
+		CountryCode:                     strings.TrimSpace(req.GetCountryCode()),
 	})
 	if err != nil {
 		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
@@ -194,6 +209,8 @@ func (s *Server) RunGoPayWAPayment(ctx context.Context, req *pb.GoPayWAPaymentRe
 		SourceJobId: strings.TrimSpace(req.GetSourceJobId()),
 		UserId:      strings.TrimSpace(req.GetUserId()),
 		WaPhone:     strings.TrimSpace(req.GetWaPhone()),
+		Pin:         strings.TrimSpace(req.GetPin()),
+		CountryCode: strings.TrimSpace(req.GetCountryCode()),
 	}
 	if accessToken := strings.TrimSpace(req.GetAccessToken()); accessToken != "" {
 		input.Payer = &pb.GoPayWAPaymentWorkflowInput_AccessToken{AccessToken: accessToken}
@@ -218,6 +235,8 @@ func (s *Server) RetryGoPayPaymentRebind(ctx context.Context, req *pb.GoPayPayme
 		SourceJobId: sourceJobID,
 		AccountId:   strings.TrimSpace(req.GetAccountId()),
 		UserId:      strings.TrimSpace(req.GetUserId()),
+		Pin:         strings.TrimSpace(req.GetPin()),
+		CountryCode: strings.TrimSpace(req.GetCountryCode()),
 	})
 	if err != nil {
 		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
@@ -405,11 +424,15 @@ func (s *Server) RegisterAndActivateAccount(ctx context.Context, req *pb.Registe
 	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionRegisterAndActivate, jobID)), workflows.RegisterAndActivateWorkflow, workflows.RegisterAndActivateWorkflowInput{
 		JobId: jobID,
 		Account: &workflows.AccountSpec{
-			AccountId:        accountID,
-			Email:            req.GetEmail(),
-			Password:         req.GetPassword(),
-			UseSplitStrategy: req.UseSplitStrategy,
+			AccountId:     accountID,
+			Email:         req.GetEmail(),
+			Password:      req.GetPassword(),
+			EmailStrategy: requestEmailStrategy(req.GetEmailStrategy()),
 		},
+		OtpOptions:       req.GetOtpOptions(),
+		GopayPhone:       req.GetGopayPhone(),
+		GopayCountryCode: req.GetGopayCountryCode(),
+		GopayPin:         req.GetGopayPin(),
 	})
 	if err != nil {
 		return nil, err
@@ -425,9 +448,9 @@ func workflowIDForAction(action string, jobID string) string {
 	return workflowID
 }
 
-func requestUsesSplitStrategy(value *bool, effective bool) bool {
-	if value == nil {
-		return true
+func requestEmailStrategy(strategy pb.AccountEmailStrategy) pb.AccountEmailStrategy {
+	if strategy == pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_UNSPECIFIED {
+		return pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_OUTLOOK_ALIAS
 	}
-	return effective
+	return strategy
 }

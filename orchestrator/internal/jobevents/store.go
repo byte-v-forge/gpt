@@ -26,15 +26,9 @@ type Store struct {
 	cancel context.CancelFunc
 }
 
-type Filter struct {
-	JobIDs       []string
-	AfterEventID int64
-	Limit        int
-}
-
 type broker struct {
 	mu   sync.Mutex
-	subs map[chan struct{}]struct{}
+	subs map[chan *pb.JobEvent]struct{}
 }
 
 func NewStore(database *gorm.DB, dsn string) *Store {
@@ -42,7 +36,7 @@ func NewStore(database *gorm.DB, dsn string) *Store {
 	store := &Store{
 		db:     database,
 		dsn:    dsn,
-		broker: &broker{subs: map[chan struct{}]struct{}{}},
+		broker: &broker{subs: map[chan *pb.JobEvent]struct{}{}},
 		cancel: cancel,
 	}
 	go store.listen(ctx)
@@ -97,44 +91,23 @@ func (s *Store) PublishSnapshot(ctx context.Context, eventType string, snapshot 
 	if err := s.notify(ctx, row.EventID); err != nil {
 		log.Printf("[orchestrator] notify job event failed event=%d job=%s: %v", row.EventID, jobID, err)
 	}
-	s.broker.publish()
+	s.broker.publish(event)
 	return event, nil
 }
 
-func (s *Store) List(ctx context.Context, filter Filter) ([]*pb.JobEvent, error) {
+func (s *Store) Get(ctx context.Context, eventID int64) (*pb.JobEvent, error) {
 	if s == nil {
 		return nil, nil
 	}
-	limit := filter.Limit
-	if limit <= 0 || limit > 500 {
-		limit = 500
-	}
-	query := s.db.WithContext(ctx).Model(&db.JobEvent{})
-	if filter.AfterEventID > 0 {
-		query = query.Where("event_id > ?", filter.AfterEventID)
-	}
-	if len(filter.JobIDs) > 0 {
-		query = query.Where("job_id IN ?", compactStrings(filter.JobIDs))
-	}
-
-	var rows []db.JobEvent
-	if err := query.Order("event_id ASC").Limit(limit).Find(&rows).Error; err != nil {
+	var row db.JobEvent
+	if err := s.db.WithContext(ctx).First(&row, "event_id = ?", eventID).Error; err != nil {
 		return nil, err
 	}
-	events := make([]*pb.JobEvent, 0, len(rows))
-	for i := range rows {
-		event, err := rowToProto(&rows[i])
-		if err != nil {
-			log.Printf("[orchestrator] decode job event failed event=%d job=%s: %v", rows[i].EventID, rows[i].JobID, err)
-			continue
-		}
-		events = append(events, event)
-	}
-	return events, nil
+	return rowToProto(&row)
 }
 
-func (s *Store) Subscribe(ctx context.Context) (<-chan struct{}, func()) {
-	ch := make(chan struct{}, 1)
+func (s *Store) Subscribe(ctx context.Context) (<-chan *pb.JobEvent, func()) {
+	ch := make(chan *pb.JobEvent, 32)
 	s.broker.subscribe(ch)
 	cancel := func() {
 		s.broker.unsubscribe(ch)
@@ -182,10 +155,20 @@ func (s *Store) listenOnce(ctx context.Context) error {
 		return err
 	}
 	for {
-		if _, err := conn.WaitForNotification(ctx); err != nil {
+		notification, err := conn.WaitForNotification(ctx)
+		if err != nil {
 			return err
 		}
-		s.broker.publish()
+		eventID, err := strconv.ParseInt(strings.TrimSpace(notification.Payload), 10, 64)
+		if err != nil || eventID <= 0 {
+			continue
+		}
+		event, err := s.Get(ctx, eventID)
+		if err != nil {
+			log.Printf("[orchestrator] load job event failed event=%d: %v", eventID, err)
+			continue
+		}
+		s.broker.publish(event)
 	}
 }
 
@@ -210,30 +193,13 @@ func rowToProto(row *db.JobEvent) (*pb.JobEvent, error) {
 	}, nil
 }
 
-func compactStrings(values []string) []string {
-	out := make([]string, 0, len(values))
-	seen := map[string]struct{}{}
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
-
-func (b *broker) subscribe(ch chan struct{}) {
+func (b *broker) subscribe(ch chan *pb.JobEvent) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.subs[ch] = struct{}{}
 }
 
-func (b *broker) unsubscribe(ch chan struct{}) {
+func (b *broker) unsubscribe(ch chan *pb.JobEvent) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if _, ok := b.subs[ch]; ok {
@@ -242,12 +208,12 @@ func (b *broker) unsubscribe(ch chan struct{}) {
 	}
 }
 
-func (b *broker) publish() {
+func (b *broker) publish(event *pb.JobEvent) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for ch := range b.subs {
 		select {
-		case ch <- struct{}{}:
+		case ch <- event:
 		default:
 		}
 	}

@@ -40,7 +40,7 @@ func DataObject(payload JSONMap) JSONMap {
 	if payload == nil {
 		return JSONMap{}
 	}
-	if data, ok := payload["data"].(map[string]any); ok && data != nil {
+	if data, ok := objectAt(payload["data"]); ok && data != nil {
 		return data
 	}
 	return payload
@@ -49,7 +49,7 @@ func DataObject(payload JSONMap) JSONMap {
 func StringAt(value any, path ...string) string {
 	current := value
 	for _, key := range path {
-		obj, ok := current.(map[string]any)
+		obj, ok := objectAt(current)
 		if !ok {
 			return ""
 		}
@@ -64,6 +64,17 @@ func StringAt(value any, path ...string) string {
 		return ""
 	default:
 		return fmt.Sprint(typed)
+	}
+}
+
+func objectAt(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return typed, typed != nil
+	case JSONMap:
+		return map[string]any(typed), typed != nil
+	default:
+		return nil, false
 	}
 }
 

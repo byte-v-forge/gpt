@@ -68,6 +68,7 @@ func (s *Server) waitEmailOTP(ctx context.Context, input OTPWaitInput) (OTPWaitO
 		EmailAddress:    email,
 		TimeoutSeconds:  timeoutSeconds,
 		IssuedAfterUnix: input.GetIssuedAfterUnix(),
+		SignalKind:      pb.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP,
 	})
 	if err != nil {
 		data["error_message"] = err.Error()
@@ -104,6 +105,14 @@ func (s *Server) waitEmailOTP(ctx context.Context, input OTPWaitInput) (OTPWaitO
 func extractOTPFromEmailMessage(message *pb.EmailInboxMessage) string {
 	if message == nil {
 		return ""
+	}
+	if signal := message.GetPrimarySignal(); signal.GetKind() == pb.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP && signal.GetCode() != "" {
+		return normalizeOTP(signal.GetCode())
+	}
+	for _, signal := range message.GetSignals() {
+		if signal.GetKind() == pb.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP && signal.GetCode() != "" {
+			return normalizeOTP(signal.GetCode())
+		}
 	}
 	combined := strings.Join([]string{
 		message.GetSubject(),

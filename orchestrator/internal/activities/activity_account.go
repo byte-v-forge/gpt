@@ -86,7 +86,7 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 	email := spec.Email
 	if strings.TrimSpace(email) == "" {
 		var err error
-		email, err = s.acquireEmail(ctx, spec.GetAccountId(), nil, accountUsesSplitStrategy(spec))
+		email, err = s.acquireEmail(ctx, spec.GetAccountId(), nil, accountEmailStrategy(spec))
 		if err != nil {
 			return AccountRef{}, err
 		}
@@ -113,12 +113,12 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 	return accountRef(resp.GetAccount()), nil
 }
 
-func (s *Server) acquireEmail(ctx context.Context, accountID string, excludes []string, useSplitStrategy bool) (string, error) {
+func (s *Server) acquireEmail(ctx context.Context, accountID string, excludes []string, strategy pb.AccountEmailStrategy) (string, error) {
 	allocator := s.emailAllocator
 	if allocator == nil {
 		allocator = defaultAccountEmailAllocator(nil, s.accountClient)
 	}
-	email, err := allocator.Allocate(ctx, accountID, excludes, useSplitStrategy)
+	email, err := allocator.Allocate(ctx, accountID, excludes, strategy)
 	if err != nil {
 		return "", err
 	}
@@ -129,11 +129,11 @@ func (s *Server) acquireEmail(ctx context.Context, accountID string, excludes []
 	return email, nil
 }
 
-func accountUsesSplitStrategy(spec *pb.AccountSpec) bool {
-	if spec == nil || spec.UseSplitStrategy == nil {
-		return true
+func accountEmailStrategy(spec *pb.AccountSpec) pb.AccountEmailStrategy {
+	if spec == nil || spec.GetEmailStrategy() == pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_UNSPECIFIED {
+		return pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_OUTLOOK_ALIAS
 	}
-	return spec.GetUseSplitStrategy()
+	return spec.GetEmailStrategy()
 }
 
 func (s *Server) ResolveAccountFromJobActivity(ctx context.Context, input ResolveAccountInput) (AccountRef, error) {

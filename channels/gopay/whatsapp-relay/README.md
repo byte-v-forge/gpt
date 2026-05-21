@@ -11,13 +11,13 @@ GoPay 场景使用的 Android OTP 通知转发器，把包含 OTP 的通知 POST
 }
 ```
 
-服务端地址填现有 GPT/Web API 暴露的 OTP 提交 URL，例如：
+服务端地址填 byte-v-forge webhook ingress 暴露的 OTP 提交 URL，例如：
 
 ```text
-http://192.168.0.115:8081/local/gopay
+http://webhook.byte-v-forge.192.168.0.126.nip.io:30080/local/gopay
 ```
 
-Telegram 用户来源使用 `http://192.168.0.115:8081/tg:<user_id>/gopay`。
+Telegram 用户来源使用 `http://webhook.byte-v-forge.192.168.0.126.nip.io:30080/tg:<user_id>/gopay`。
 
 ## 构建
 
@@ -29,7 +29,7 @@ cd channels/gopay/whatsapp-relay
 也可以在构建时写入默认 webhook：
 
 ```bash
-./gradlew assembleDebug -PdefaultWebhookUrl=http://192.168.0.115:8081/local/gopay
+./gradlew assembleDebug -PdefaultWebhookUrl=http://webhook.byte-v-forge.192.168.0.126.nip.io:30080/local/gopay
 ```
 
 APK 输出：

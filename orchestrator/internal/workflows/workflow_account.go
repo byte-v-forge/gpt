@@ -70,18 +70,20 @@ func RegisterAccountWorkflow(ctx workflow.Context, input RegisterAccountWorkflow
 	}
 	if browser.GetOtpRequired() {
 		setWorkflowProgress(ctx, progress, stepRegisterAccountOTPWait)
-		otpInput := OTPWaitInput{
-			JobId:            input.GetJobId(),
-			Target:           &pb.OTPWaitInput_Email{Email: &pb.OTPWaitEmailTarget{Email: browser.GetEmail()}},
-			TimeoutSeconds:   browser.GetOtpTimeoutSeconds(),
+		otp, otpIssuedAfter, err := waitForBrowserRegistrationOTP(ctx, retryCtx, browserCtx, registrationOTPWaitOptions{
+			JobID:            input.GetJobId(),
+			AccountID:        account.GetAccountId(),
+			FlowID:           start.GetFlowId(),
+			Email:            browser.GetEmail(),
 			IssuedAfterUnix:  browser.GetOtpIssuedAfterUnix(),
+			TimeoutSeconds:   browser.GetOtpTimeoutSeconds(),
+			Policy:           input.GetOtpOptions(),
 			OtpParam:         registrationOTPParam,
 			SubmittedAtParam: registrationOTPSubmittedAtParam,
-		}
-		otp, err := waitForOTPInStep(ctx, retryCtx, stepRegisterAccountOTPWait, otpInput)
+		})
 		if err != nil {
 			_ = workflow.ExecuteActivity(retryCtx, browserAuthCancelActivityName, BrowserAuthCancelInput{FlowId: start.GetFlowId(), Mode: browserAuthModeRegister}).Get(ctx, nil)
-			return failRegisterWorkflow(ctx, retryCtx, result, input.GetJobId(), stepRegisterAccountOTPWait, statusFailedRetryable, false, true, err, otpWaitStepResultData(otpInput, otp)), nil
+			return failRegisterWorkflow(ctx, retryCtx, result, input.GetJobId(), stepRegisterAccountOTPWait, statusFailedRetryable, false, true, err, otpWaitStepResultData(registrationEmailOTPWaitInput(input.GetJobId(), browser.GetEmail(), browser.GetOtpTimeoutSeconds(), otpIssuedAfter), otp)), nil
 		}
 		setWorkflowProgress(ctx, progress, stepRegisterAccountComplete)
 		if err := workflow.ExecuteActivity(browserCtx, browserAuthCompleteActivityName, BrowserAuthCompleteInput{
@@ -91,7 +93,7 @@ func RegisterAccountWorkflow(ctx workflow.Context, input RegisterAccountWorkflow
 			Mode:               browserAuthModeRegister,
 			OtpParam:           registrationOTPParam,
 			SubmittedAtParam:   registrationOTPSubmittedAtParam,
-			OtpIssuedAfterUnix: browser.GetOtpIssuedAfterUnix(),
+			OtpIssuedAfterUnix: otpIssuedAfter,
 			OtpSource:          otp.GetSource(),
 		}).Get(ctx, &register); err != nil {
 			status, recoverable, retryable := registerFailurePolicy(err)
@@ -113,7 +115,10 @@ func RegisterAccountWorkflow(ctx workflow.Context, input RegisterAccountWorkflow
 		JobId:  input.GetJobId(),
 		Result: register.GetData(),
 	}).Get(ctx, nil)
-	startRegisteredAccountProbeSideEffects(ctx, input.GetJobId(), account.GetAccountId())
+	if register.GetSessionToken() != "" || register.GetAccessToken() != "" ||
+		workflow.GetVersion(ctx, "register-skip-probe-without-session", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		startRegisteredAccountProbeSideEffects(ctx, input.GetJobId(), account.GetAccountId())
+	}
 	setWorkflowProgressSucceeded(ctx, progress)
 
 	result.SessionToken = register.GetSessionToken()
@@ -309,18 +314,20 @@ func RegisterAndActivateWorkflow(ctx workflow.Context, input RegisterAndActivate
 	}
 	if browser.GetOtpRequired() {
 		setWorkflowProgress(ctx, progress, stepRegisterAccountOTPWait)
-		otpInput := OTPWaitInput{
-			JobId:            input.GetJobId(),
-			Target:           &pb.OTPWaitInput_Email{Email: &pb.OTPWaitEmailTarget{Email: browser.GetEmail()}},
-			TimeoutSeconds:   browser.GetOtpTimeoutSeconds(),
+		otp, otpIssuedAfter, err := waitForBrowserRegistrationOTP(ctx, retryCtx, browserCtx, registrationOTPWaitOptions{
+			JobID:            input.GetJobId(),
+			AccountID:        account.GetAccountId(),
+			FlowID:           start.GetFlowId(),
+			Email:            browser.GetEmail(),
 			IssuedAfterUnix:  browser.GetOtpIssuedAfterUnix(),
+			TimeoutSeconds:   browser.GetOtpTimeoutSeconds(),
+			Policy:           input.GetOtpOptions(),
 			OtpParam:         registrationOTPParam,
 			SubmittedAtParam: registrationOTPSubmittedAtParam,
-		}
-		otp, err := waitForOTPInStep(ctx, retryCtx, stepRegisterAccountOTPWait, otpInput)
+		})
 		if err != nil {
 			_ = workflow.ExecuteActivity(retryCtx, browserAuthCancelActivityName, BrowserAuthCancelInput{FlowId: start.GetFlowId(), Mode: browserAuthModeRegister}).Get(ctx, nil)
-			return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepRegisterAccountOTPWait, statusFailedRetryable, false, true, err, otpWaitStepResultData(otpInput, otp)), nil
+			return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepRegisterAccountOTPWait, statusFailedRetryable, false, true, err, otpWaitStepResultData(registrationEmailOTPWaitInput(input.GetJobId(), browser.GetEmail(), browser.GetOtpTimeoutSeconds(), otpIssuedAfter), otp)), nil
 		}
 		setWorkflowProgress(ctx, progress, stepRegisterAccountComplete)
 		if err := workflow.ExecuteActivity(browserCtx, browserAuthCompleteActivityName, BrowserAuthCompleteInput{
@@ -330,7 +337,7 @@ func RegisterAndActivateWorkflow(ctx workflow.Context, input RegisterAndActivate
 			Mode:               browserAuthModeRegister,
 			OtpParam:           registrationOTPParam,
 			SubmittedAtParam:   registrationOTPSubmittedAtParam,
-			OtpIssuedAfterUnix: browser.GetOtpIssuedAfterUnix(),
+			OtpIssuedAfterUnix: otpIssuedAfter,
 			OtpSource:          otp.GetSource(),
 		}).Get(ctx, &register); err != nil {
 			status, recoverable, retryable := registerFailurePolicy(err)
@@ -348,32 +355,139 @@ func RegisterAndActivateWorkflow(ctx workflow.Context, input RegisterAndActivate
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), "", statusFailedRecoverable, true, false, err, registerData()), nil
 	}
 
+	loginSessionData := map[string]any{}
+	if register.GetSessionToken() == "" && register.GetAccessToken() == "" &&
+		workflow.GetVersion(ctx, "register-and-activate-login-after-tokenless-register", workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		var startLogin BrowserAuthStartOutput
+		setWorkflowProgress(ctx, progress, stepLoginSessionStart)
+		if err := workflow.ExecuteActivity(browserCtx, browserAuthStartActivityName, BrowserAuthStartInput{
+			JobId:     input.GetJobId(),
+			AccountId: account.GetAccountId(),
+			Mode:      browserAuthModeLogin,
+		}).Get(ctx, &startLogin); err != nil {
+			combined := map[string]any{"register_account": registerData(), "login_session": protoDataMap(startLogin.GetData())}
+			return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepLoginSessionStart, statusFailedRetryable, false, true, err, combined), nil
+		}
+
+		login := LoginSessionActivityOutput{}
+		if completed := startLogin.GetResult(); completed != nil {
+			login = LoginSessionActivityOutput{
+				SessionToken: completed.GetSessionToken(),
+				AccessToken:  completed.GetAccessToken(),
+				DeviceId:     completed.GetDeviceId(),
+				Data:         completed.GetData(),
+			}
+		}
+		var loginBrowser BrowserAuthWaitOutput
+		if startLogin.GetResult() == nil {
+			setWorkflowProgress(ctx, progress, stepLoginSessionBrowser)
+			if err := workflow.ExecuteActivity(browserCtx, browserAuthWaitActivityName, BrowserAuthWaitInput{
+				JobId:     input.GetJobId(),
+				AccountId: account.GetAccountId(),
+				FlowId:    startLogin.GetFlowId(),
+				Mode:      browserAuthModeLogin,
+				Email:     startLogin.GetEmail(),
+			}).Get(ctx, &loginBrowser); err != nil {
+				_ = workflow.ExecuteActivity(retryCtx, browserAuthCancelActivityName, BrowserAuthCancelInput{FlowId: startLogin.GetFlowId(), Mode: browserAuthModeLogin}).Get(ctx, nil)
+				combined := map[string]any{"register_account": registerData(), "login_session": protoDataMap(loginBrowser.GetData())}
+				return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepLoginSessionBrowser, statusFailedRetryable, false, true, err, combined), nil
+			}
+			if completed := loginBrowser.GetResult(); completed != nil {
+				login = LoginSessionActivityOutput{
+					SessionToken: completed.GetSessionToken(),
+					AccessToken:  completed.GetAccessToken(),
+					DeviceId:     completed.GetDeviceId(),
+					Data:         completed.GetData(),
+				}
+			}
+		}
+		if loginBrowser.GetOtpRequired() {
+			setWorkflowProgress(ctx, progress, stepLoginSessionOTPWait)
+			otpInput := OTPWaitInput{
+				JobId:            input.GetJobId(),
+				Target:           &pb.OTPWaitInput_Email{Email: &pb.OTPWaitEmailTarget{Email: loginBrowser.GetEmail()}},
+				TimeoutSeconds:   loginBrowser.GetOtpTimeoutSeconds(),
+				IssuedAfterUnix:  loginBrowser.GetOtpIssuedAfterUnix(),
+				OtpParam:         registrationOTPParam,
+				SubmittedAtParam: registrationOTPSubmittedAtParam,
+			}
+			otp, err := waitForOTPInStep(ctx, retryCtx, stepLoginSessionOTPWait, otpInput)
+			if err != nil {
+				_ = workflow.ExecuteActivity(retryCtx, browserAuthCancelActivityName, BrowserAuthCancelInput{FlowId: startLogin.GetFlowId(), Mode: browserAuthModeLogin}).Get(ctx, nil)
+				combined := map[string]any{"register_account": registerData(), "login_session": otpWaitStepResultData(otpInput, otp)}
+				return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepLoginSessionOTPWait, statusFailedRetryable, false, true, err, combined), nil
+			}
+			var completed RegisterActivityOutput
+			setWorkflowProgress(ctx, progress, stepLoginSessionComplete)
+			if err := workflow.ExecuteActivity(browserCtx, browserAuthCompleteActivityName, BrowserAuthCompleteInput{
+				JobId:              input.GetJobId(),
+				AccountId:          account.GetAccountId(),
+				FlowId:             startLogin.GetFlowId(),
+				Mode:               browserAuthModeLogin,
+				OtpParam:           registrationOTPParam,
+				SubmittedAtParam:   registrationOTPSubmittedAtParam,
+				OtpIssuedAfterUnix: loginBrowser.GetOtpIssuedAfterUnix(),
+				OtpSource:          otp.GetSource(),
+			}).Get(ctx, &completed); err != nil {
+				combined := map[string]any{"register_account": registerData(), "login_session": protoDataMap(completed.GetData())}
+				return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepLoginSessionComplete, statusFailedRetryable, false, true, err, combined), nil
+			}
+			login = LoginSessionActivityOutput{
+				SessionToken: completed.GetSessionToken(),
+				AccessToken:  completed.GetAccessToken(),
+				DeviceId:     completed.GetDeviceId(),
+				Data:         completed.GetData(),
+			}
+		}
+		loginSessionData = protoDataMap(login.GetData())
+		if login.GetSessionToken() == "" && login.GetAccessToken() == "" {
+			combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData}
+			err := fmt.Errorf("registered account has no browser session; login session did not return session_token or access_token")
+			return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepLoginSessionComplete, statusFailedRetryable, false, true, err, combined), nil
+		}
+		if err := workflow.ExecuteActivity(retryCtx, persistRegisteredActivityName, PersistRegisteredInput{
+			AccountId:    account.GetAccountId(),
+			SessionToken: login.GetSessionToken(),
+			AccessToken:  login.GetAccessToken(),
+		}).Get(ctx, nil); err != nil {
+			combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData}
+			return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), "", statusFailedRecoverable, true, false, err, combined), nil
+		}
+		register.SessionToken = login.GetSessionToken()
+		register.AccessToken = login.GetAccessToken()
+		register.DeviceId = login.GetDeviceId()
+	}
+
 	var probe ProbePlusTrialActivityOutput
 	setWorkflowProgress(ctx, progress, stepProbePlusTrial)
 	if err := workflow.ExecuteActivity(atomicCtx, probePlusTrialActivityName, ProbePlusTrialActivityInput{
 		JobId:     input.GetJobId(),
 		AccountId: account.GetAccountId(),
 	}).Get(ctx, &probe); err != nil {
-		combined := map[string]any{"register_account": registerData(), "probe_plus_trial": protoDataMap(probe.GetData())}
+		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData())}
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, err, combined), nil
 	}
 	if !probe.GetChecked() {
-		combined := map[string]any{"register_account": registerData(), "probe_plus_trial": protoDataMap(probe.GetData())}
+		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData())}
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, fmt.Errorf("plus trial eligibility is unknown"), combined), nil
 	}
 	if !probe.GetPlusTrialEligible() && !probe.GetPlusActive() {
-		combined := map[string]any{"register_account": registerData(), "probe_plus_trial": protoDataMap(probe.GetData())}
+		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData())}
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedFinal, false, false, fmt.Errorf("account is not plus trial eligible"), combined), nil
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
-	logon, err := runGoPayAppAuthChild(ctx, input.GetJobId(), goPayAppOTPOptions{})
+	logon, err := runGoPayAppAuthChild(ctx, input.GetJobId(), goPayAppOTPOptions{
+		Phone:       input.GetGopayPhone(),
+		CountryCode: input.GetGopayCountryCode(),
+		Pin:         input.GetGopayPin(),
+	})
 	if err != nil {
-		combined := map[string]any{"register_account": registerData(), "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}
+		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, combined), nil
 	}
 	if !logon.GetAccountTokenReady() {
-		combined := map[string]any{"register_account": registerData(), "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}
+		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after login"), combined), nil
 	}
 
@@ -388,14 +502,16 @@ func RegisterAndActivateWorkflow(ctx workflow.Context, input RegisterAndActivate
 		CheckoutUrl:       probe.GetCheckoutUrl(),
 		CheckoutSessionId: probe.GetCheckoutSessionId(),
 		StateJson:         logon.GetStateJson(),
+		Pin:               input.GetGopayPin(),
+		CountryCode:       input.GetGopayCountryCode(),
 	})
 	if err != nil {
-		combined := map[string]any{"register_account": registerData(), "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
+		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
 		combined["gopay_login"] = protoDataMap(logon.GetData())
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayPayment, statusFailedRetryable, false, true, err, combined), nil
 	}
 
-	combined := map[string]any{"register_account": registerData(), "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
+	combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
 	if err := workflow.ExecuteActivity(retryCtx, persistActivatedActivityName, PersistActivatedInput{
 		AccountId:         account.GetAccountId(),
 		SessionToken:      register.GetSessionToken(),

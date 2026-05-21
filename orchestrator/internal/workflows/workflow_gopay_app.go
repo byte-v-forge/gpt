@@ -3,9 +3,20 @@ package workflows
 import (
 	"fmt"
 	pb "orchestrator/pb"
+	"strings"
 	"time"
 
 	"go.temporal.io/sdk/workflow"
+)
+
+const (
+	goPayAppWorkflowOperationProvision = "provision"
+	goPayAppWorkflowOperationLogin     = "login"
+	goPayAppWorkflowOperationSignup    = "signup"
+	goPayAppWorkflowOperationCreatePIN = "create_pin"
+	goPayAppWorkflowOperationCheckBal  = "check_balance"
+	goPayAppWorkflowOperationCheckPIN  = "check_pin"
+	goPayAppWorkflowOperationChange    = "change_phone"
 )
 
 type goPayAppOTPOptions struct {
@@ -15,9 +26,16 @@ type goPayAppOTPOptions struct {
 	Source          string
 	ResetState      bool
 	StateJSON       string
+	Pin             string
+	CountryCode     string
 }
 
 func GoPayAppWorkflow(ctx workflow.Context, input GoPayAppWorkflowInput) (GoPayAppWorkflowResult, error) {
+	operation := normalizeGoPayAppWorkflowOperation(input.GetOperation())
+	if operation != goPayAppWorkflowOperationProvision {
+		return runGoPayAppUserOperationWorkflow(ctx, input, operation)
+	}
+
 	progress := newWorkflowProgress(ctx, "GoPayAppWorkflow", input.GetJobId())
 	result := GoPayAppWorkflowResult{JobId: input.GetJobId()}
 	defer func() {
@@ -35,9 +53,16 @@ func GoPayAppWorkflow(ctx workflow.Context, input GoPayAppWorkflowInput) (GoPayA
 	}
 
 	stateJSON := "{}"
+	opts := goPayAppOTPOptions{
+		Phone:       input.GetPhone(),
+		OTPChannel:  input.GetOtpChannel(),
+		Pin:         input.GetPin(),
+		CountryCode: input.GetCountryCode(),
+		StateJSON:   stateJSON,
+	}
 	combined := map[string]any{}
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
-	login, err := runGoPayAppAuthChild(ctx, input.GetJobId(), goPayAppOTPOptions{StateJSON: stateJSON})
+	login, err := runGoPayAppAuthChild(ctx, input.GetJobId(), opts)
 	stateJSON = login.GetStateJson()
 	if err != nil {
 		combined["login"] = protoDataMap(login.GetData())
@@ -46,7 +71,8 @@ func GoPayAppWorkflow(ctx workflow.Context, input GoPayAppWorkflowInput) (GoPayA
 	combined["login"] = protoDataMap(login.GetData())
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppChangePhone)
-	changePhone, err := runGoPayAppChangePhoneChild(ctx, input.GetJobId(), stateJSON)
+	opts.StateJSON = stateJSON
+	changePhone, err := runGoPayAppChangePhoneChild(ctx, input.GetJobId(), stateJSON, opts)
 	stateJSON = changePhone.GetStateJson()
 	if err != nil {
 		combined["change_phone"] = protoDataMap(changePhone.GetData())
@@ -57,7 +83,8 @@ func GoPayAppWorkflow(ctx workflow.Context, input GoPayAppWorkflowInput) (GoPayA
 	result.ChangePhoneComplete = changePhone.GetChangePhoneComplete()
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppDeactivate)
-	deactivate, err := runGoPayAppDeactivateChild(ctx, input.GetJobId(), changePhone.GetActivationId(), stateJSON)
+	opts.StateJSON = stateJSON
+	deactivate, err := runGoPayAppDeactivateChild(ctx, input.GetJobId(), changePhone.GetActivationId(), stateJSON, opts)
 	stateJSON = deactivate.GetStateJson()
 	if err != nil {
 		combined["deactivate"] = protoDataMap(deactivate.GetData())
@@ -67,7 +94,8 @@ func GoPayAppWorkflow(ctx workflow.Context, input GoPayAppWorkflowInput) (GoPayA
 	result.DeactivateComplete = deactivate.GetDeactivateComplete()
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppSignup)
-	signup, err := runGoPayAppSignupChild(ctx, input.GetJobId(), goPayAppOTPOptions{StateJSON: stateJSON}, 0)
+	opts.StateJSON = stateJSON
+	signup, err := runGoPayAppSignupChild(ctx, input.GetJobId(), opts, 0)
 	stateJSON = signup.GetStateJson()
 	if err != nil {
 		combined["signup"] = protoDataMap(signup.GetData())
@@ -77,7 +105,8 @@ func GoPayAppWorkflow(ctx workflow.Context, input GoPayAppWorkflowInput) (GoPayA
 	result.SignupComplete = signup.GetSignupComplete()
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppCreatePin)
-	createPin, err := runGoPayAppCreatePinChild(ctx, input.GetJobId(), goPayAppOTPOptions{StateJSON: stateJSON})
+	opts.StateJSON = stateJSON
+	createPin, err := runGoPayAppCreatePinChild(ctx, input.GetJobId(), opts)
 	stateJSON = createPin.GetStateJson()
 	if err != nil {
 		combined["create_pin"] = protoDataMap(createPin.GetData())
@@ -96,7 +125,171 @@ func GoPayAppWorkflow(ctx workflow.Context, input GoPayAppWorkflowInput) (GoPayA
 	setWorkflowProgressSucceeded(ctx, progress)
 	return result, nil
 }
-func runGoPayAppChangePhone(ctx workflow.Context, activityCtx workflow.Context, jobID string, stateJSON string) (GoPayAppStepOutput, error) {
+
+func runGoPayAppUserOperationWorkflow(ctx workflow.Context, input GoPayAppWorkflowInput, operation string) (GoPayAppWorkflowResult, error) {
+	progress := newWorkflowProgress(ctx, "GoPayAppWorkflow", input.GetJobId())
+	result := GoPayAppWorkflowResult{JobId: input.GetJobId()}
+	defer func() {
+		finishWorkflowProgressOnError(ctx, progress, result.GetErrorMessage())
+	}()
+
+	retryCtx := workflow.WithActivityOptions(ctx, retryableActivityOptions(30*time.Second, 5))
+	userID := strings.TrimSpace(input.GetUserId())
+	if userID == "" {
+		userID = goPayLocalSource
+	}
+	params := map[string]string{
+		"operation": operation,
+		"user_id":   userID,
+	}
+	if phone := strings.TrimSpace(input.GetPhone()); phone != "" {
+		params["phone"] = phone
+	}
+
+	setWorkflowProgress(ctx, progress, "create_job")
+	if err := workflow.ExecuteActivity(retryCtx, createJobActivityName, CreateJobInput{
+		JobId:  input.GetJobId(),
+		Action: actionGoPayApp,
+		Params: params,
+	}).Get(ctx, nil); err != nil {
+		result.ErrorMessage = err.Error()
+		return result, nil
+	}
+
+	var stored GoPayAppStateActivityOutput
+	setWorkflowProgress(ctx, progress, "load_gopay_state")
+	if err := workflow.ExecuteActivity(retryCtx, goPayAppLoadStateActivityName, GoPayAppStateActivityInput{
+		JobId:  input.GetJobId(),
+		UserId: userID,
+		Reason: "gopay_app_" + operation,
+	}).Get(ctx, &stored); err != nil {
+		combined := map[string]any{"load_state": protoDataMap(stored.GetData()), "operation": operation, "user_id": userID}
+		return failGoPayAppWorkflow(ctx, retryCtx, result, input.GetJobId(), "load_gopay_state", statusFailedRetryable, false, true, err, combined), nil
+	}
+
+	stateJSON := strings.TrimSpace(stored.GetStateJson())
+	if stateJSON == "" {
+		stateJSON = "{}"
+	}
+	opts := goPayAppOTPOptions{
+		Phone:       input.GetPhone(),
+		OTPChannel:  input.GetOtpChannel(),
+		Source:      userID,
+		StateJSON:   stateJSON,
+		Pin:         input.GetPin(),
+		CountryCode: input.GetCountryCode(),
+	}
+	combined := map[string]any{"load_state": protoDataMap(stored.GetData()), "operation": operation, "user_id": userID}
+	stepName := goPayAppWorkflowOperationStep(operation)
+	setWorkflowProgress(ctx, progress, stepName)
+
+	out, err := runGoPayAppWorkflowOperationChild(ctx, input.GetJobId(), operation, opts)
+	combined[operation] = protoDataMap(out.GetData())
+	if nextStateJSON := strings.TrimSpace(out.GetStateJson()); nextStateJSON != "" {
+		stateJSON = nextStateJSON
+	}
+	if saveErr := workflow.ExecuteActivity(retryCtx, goPayAppSaveStateActivityName, GoPayAppStateActivityInput{
+		JobId:     input.GetJobId(),
+		UserId:    userID,
+		StateJson: stateJSON,
+		Reason:    "gopay_app_" + operation,
+	}).Get(ctx, nil); saveErr != nil && err == nil {
+		err = saveErr
+	}
+	if err != nil {
+		return failGoPayAppWorkflow(ctx, retryCtx, result, input.GetJobId(), stepName, statusFailedRetryable, false, true, err, combined), nil
+	}
+
+	result.AccountTokenReady = out.GetAccountTokenReady()
+	result.SignupComplete = out.GetSignupComplete()
+	result.SignupPinComplete = out.GetSignupPinComplete()
+	result.ChangePhoneComplete = out.GetChangePhoneComplete()
+	result.ActivationId = out.GetActivationId()
+	result.Success = true
+	_ = workflow.ExecuteActivity(retryCtx, markJobSucceededActivityName, JobSuccessInput{
+		JobId:  input.GetJobId(),
+		Result: protoData(combined),
+	}).Get(ctx, nil)
+	setWorkflowProgressSucceeded(ctx, progress)
+	return result, nil
+}
+
+func runGoPayAppWorkflowOperationChild(ctx workflow.Context, jobID string, operation string, opts goPayAppOTPOptions) (*GoPayAppStepOutput, error) {
+	switch operation {
+	case goPayAppWorkflowOperationLogin:
+		return runGoPayAppEnsureTokenChild(ctx, jobID, opts)
+	case goPayAppWorkflowOperationCheckBal, goPayAppWorkflowOperationCheckPIN:
+		return runGoPayAppEnsureTokenChild(ctx, jobID, opts)
+	case goPayAppWorkflowOperationSignup:
+		return runGoPayAppSignupChild(ctx, jobID, opts, 0)
+	case goPayAppWorkflowOperationCreatePIN:
+		return runGoPayAppCreatePinChild(ctx, jobID, opts)
+	case goPayAppWorkflowOperationChange:
+		return runGoPayAppUserChangePhone(ctx, jobID, opts)
+	default:
+		return &GoPayAppStepOutput{}, fmt.Errorf("unsupported gopay app operation: %s", operation)
+	}
+}
+
+func normalizeGoPayAppWorkflowOperation(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", goPayAppWorkflowOperationProvision, "full":
+		return goPayAppWorkflowOperationProvision
+	case "auth", "logon", goPayAppWorkflowOperationLogin:
+		return goPayAppWorkflowOperationLogin
+	case "balance", "check-balance", goPayAppWorkflowOperationCheckBal:
+		return goPayAppWorkflowOperationCheckBal
+	case "check-pin", "pin_check", goPayAppWorkflowOperationCheckPIN:
+		return goPayAppWorkflowOperationCheckPIN
+	case "register", goPayAppWorkflowOperationSignup:
+		return goPayAppWorkflowOperationSignup
+	case "pin", "set_pin", "create-pin", goPayAppWorkflowOperationCreatePIN:
+		return goPayAppWorkflowOperationCreatePIN
+	case "change", "rebind", "change-phone", goPayAppWorkflowOperationChange:
+		return goPayAppWorkflowOperationChange
+	default:
+		return strings.ToLower(strings.TrimSpace(value))
+	}
+}
+
+func goPayAppWorkflowOperationStep(operation string) string {
+	switch operation {
+	case goPayAppWorkflowOperationLogin:
+		return stepGoPayAppLogin
+	case goPayAppWorkflowOperationCheckBal, goPayAppWorkflowOperationCheckPIN:
+		return stepGoPayAppLogin
+	case goPayAppWorkflowOperationSignup:
+		return stepGoPayAppSignup
+	case goPayAppWorkflowOperationCreatePIN:
+		return stepGoPayAppCreatePin
+	case goPayAppWorkflowOperationChange:
+		return stepGoPayAppChangePhone
+	default:
+		return "gopay_app_" + operation
+	}
+}
+
+func runGoPayAppUserChangePhone(ctx workflow.Context, jobID string, opts goPayAppOTPOptions) (*GoPayAppStepOutput, error) {
+	combined := map[string]any{}
+	token, err := runGoPayAppEnsureTokenChild(ctx, jobID, opts)
+	combined["ensure_token"] = protoDataMap(token.GetData())
+	stateJSON := strings.TrimSpace(token.GetStateJson())
+	if stateJSON == "" {
+		stateJSON = opts.StateJSON
+	}
+	if err != nil {
+		token.Data = protoData(combined)
+		return token, err
+	}
+	changeOpts := opts
+	changeOpts.StateJSON = stateJSON
+	change, err := runGoPayAppChangePhoneChild(ctx, jobID, stateJSON, changeOpts)
+	combined["change_phone"] = protoDataMap(change.GetData())
+	change.Data = protoData(combined)
+	return change, err
+}
+
+func runGoPayAppChangePhone(ctx workflow.Context, activityCtx workflow.Context, jobID string, stateJSON string, pin string, countryCode string) (GoPayAppStepOutput, error) {
 	var failureCount int32
 	var last GoPayAppStepOutput
 	for {
@@ -127,6 +320,8 @@ func runGoPayAppChangePhone(ctx workflow.Context, activityCtx workflow.Context, 
 			StateJson:    stateJSON,
 			ActivationId: number.GetActivationId(),
 			Phone:        number.GetPhone(),
+			Pin:          pin,
+			CountryCode:  countryCode,
 		}).Get(ctx, &start); err != nil {
 			return GoPayAppStepOutput{
 				ActivationId: start.GetActivationId(),
@@ -148,11 +343,15 @@ func runGoPayAppChangePhone(ctx workflow.Context, activityCtx workflow.Context, 
 		}
 
 		for otpAttempt := int32(0); otpAttempt <= start.GetOtpRetryAttempts(); otpAttempt++ {
+			issuedAfterUnix := workflow.Now(ctx).Unix()
 			wait, err := waitForOTP(ctx, OTPWaitInput{
-				JobId:          jobID,
-				StepName:       stepGoPayAppChangePhoneSMSWait,
-				Target:         &pb.OTPWaitInput_Sms{Sms: &pb.OTPWaitSMSTarget{ActivationId: start.GetActivationId()}},
-				TimeoutSeconds: start.GetOtpTimeoutSeconds(),
+				JobId:            jobID,
+				StepName:         stepGoPayAppChangePhoneSMSWait,
+				Target:           &pb.OTPWaitInput_Sms{Sms: &pb.OTPWaitSMSTarget{ActivationId: start.GetActivationId()}},
+				TimeoutSeconds:   start.GetOtpTimeoutSeconds(),
+				IssuedAfterUnix:  issuedAfterUnix,
+				OtpParam:         paymentOTPParam,
+				SubmittedAtParam: paymentOTPSubmittedAtParam,
 			})
 			if err != nil {
 				_ = workflow.ExecuteActivity(activityCtx, goPayAppSMSCancelBeforeRotationActivityName, GoPayAppSMSActivationInput{
@@ -166,11 +365,14 @@ func runGoPayAppChangePhone(ctx workflow.Context, activityCtx workflow.Context, 
 			if wait.GetFound() {
 				var complete GoPayAppChangePhoneCompleteOutput
 				err = workflow.ExecuteActivity(activityCtx, goPayAppChangePhoneCompleteActivityName, GoPayAppChangePhoneCompleteInput{
-					JobId:        jobID,
-					ActivationId: start.GetActivationId(),
-					Code:         wait.GetCode(),
-					FailureCount: failureCount,
-					StateJson:    stateJSON,
+					JobId:            jobID,
+					ActivationId:     start.GetActivationId(),
+					Code:             wait.GetCode(),
+					FailureCount:     failureCount,
+					StateJson:        stateJSON,
+					OtpParam:         paymentOTPParam,
+					SubmittedAtParam: paymentOTPSubmittedAtParam,
+					IssuedAfterUnix:  issuedAfterUnix,
 				}).Get(ctx, &complete)
 				last = goPayAppStepFromChangePhoneComplete(complete)
 				stateJSON = last.GetStateJson()
@@ -246,12 +448,13 @@ func goPayAppStepFromChangePhoneComplete(output GoPayAppChangePhoneCompleteOutpu
 		StateJson:           output.GetStateJson(),
 	}
 }
-func runGoPayAppDeactivate(ctx workflow.Context, activityCtx workflow.Context, jobID, activationID, stateJSON string) (GoPayAppStepOutput, error) {
+func runGoPayAppDeactivate(ctx workflow.Context, activityCtx workflow.Context, jobID, activationID, stateJSON string, pin string) (GoPayAppStepOutput, error) {
 	var start GoPayAppDeactivateStartOutput
 	if err := workflow.ExecuteActivity(activityCtx, goPayAppDeactivateStartActivityName, GoPayAppDeactivateStartInput{
 		JobId:        jobID,
 		ActivationId: activationID,
 		StateJson:    stateJSON,
+		Pin:          pin,
 	}).Get(ctx, &start); err != nil {
 		return GoPayAppStepOutput{ActivationId: activationID, Data: start.GetData(), StateJson: start.GetStateJson()}, err
 	}
@@ -260,11 +463,15 @@ func runGoPayAppDeactivate(ctx workflow.Context, activityCtx workflow.Context, j
 		return GoPayAppStepOutput{ActivationId: activationID, Data: start.GetData(), StateJson: stateJSON}, fmt.Errorf("gopay deactivate did not request OTP")
 	}
 
+	issuedAfterUnix := workflow.Now(ctx).Unix()
 	wait, err := waitForOTP(ctx, OTPWaitInput{
-		JobId:          jobID,
-		StepName:       stepGoPayAppDeactivateSMSWait,
-		Target:         &pb.OTPWaitInput_Sms{Sms: &pb.OTPWaitSMSTarget{ActivationId: activationID}},
-		TimeoutSeconds: start.GetTimeoutSeconds(),
+		JobId:            jobID,
+		StepName:         stepGoPayAppDeactivateSMSWait,
+		Target:           &pb.OTPWaitInput_Sms{Sms: &pb.OTPWaitSMSTarget{ActivationId: activationID}},
+		TimeoutSeconds:   start.GetTimeoutSeconds(),
+		IssuedAfterUnix:  issuedAfterUnix,
+		OtpParam:         paymentOTPParam,
+		SubmittedAtParam: paymentOTPSubmittedAtParam,
 	})
 	if err != nil {
 		_ = workflow.ExecuteActivity(activityCtx, goPayAppSMSFinishActivityName, GoPayAppSMSActivationInput{
@@ -290,10 +497,13 @@ func runGoPayAppDeactivate(ctx workflow.Context, activityCtx workflow.Context, j
 
 	var complete GoPayAppDeactivateCompleteOutput
 	err = workflow.ExecuteActivity(activityCtx, goPayAppDeactivateCompleteActivityName, GoPayAppDeactivateCompleteInput{
-		JobId:        jobID,
-		ActivationId: activationID,
-		Code:         wait.GetCode(),
-		StateJson:    stateJSON,
+		JobId:            jobID,
+		ActivationId:     activationID,
+		Code:             wait.GetCode(),
+		StateJson:        stateJSON,
+		OtpParam:         paymentOTPParam,
+		SubmittedAtParam: paymentOTPSubmittedAtParam,
+		IssuedAfterUnix:  issuedAfterUnix,
 	}).Get(ctx, &complete)
 	return goPayAppStepFromDeactivateComplete(complete), err
 }
@@ -316,6 +526,8 @@ func runGoPayAppSignup(ctx workflow.Context, activityCtx workflow.Context, cance
 		SmsActivationId: opts.SMSActivationID,
 		ResetState:      opts.ResetState,
 		StateJson:       opts.StateJSON,
+		Pin:             opts.Pin,
+		CountryCode:     opts.CountryCode,
 	}).Get(ctx, &start); err != nil {
 		return goPayAppStepFromOTP(start), err
 	}
@@ -343,6 +555,8 @@ func runGoPayAppSignup(ctx workflow.Context, activityCtx workflow.Context, cance
 			OtpChannel:      startChannel,
 			SmsActivationId: opts.SMSActivationID,
 			StateJson:       start.GetStateJson(),
+			Pin:             opts.Pin,
+			CountryCode:     opts.CountryCode,
 		}).Get(ctx, &retry); err != nil {
 			return goPayAppStepFromOTP(retry), err
 		}
@@ -389,6 +603,7 @@ func runGoPayAppSignup(ctx workflow.Context, activityCtx workflow.Context, cance
 		OtpChannel:       startChannel,
 		SmsActivationId:  opts.SMSActivationID,
 		StateJson:        start.GetStateJson(),
+		Pin:              opts.Pin,
 	}).Get(ctx, &completed); err != nil {
 		return goPayAppStepFromOTP(completed), err
 	}
@@ -418,6 +633,8 @@ func runGoPayAppEnsureTokenAvailable(ctx workflow.Context, activityCtx workflow.
 			OtpChannel:      opts.OTPChannel,
 			SmsActivationId: opts.SMSActivationID,
 			StateJson:       stateJSON,
+			Pin:             opts.Pin,
+			CountryCode:     opts.CountryCode,
 		}).Get(ctx, &last); err != nil {
 			return goPayAppStepFromOTP(last), err
 		}
@@ -446,6 +663,7 @@ func runGoPayAppEnsureTokenAvailable(ctx workflow.Context, activityCtx workflow.
 			OtpChannel:       startChannel,
 			SmsActivationId:  opts.SMSActivationID,
 			StateJson:        stateJSON,
+			Pin:              opts.Pin,
 		}).Get(ctx, &last); err != nil {
 			return goPayAppStepFromOTP(last), err
 		}
@@ -484,6 +702,7 @@ func runGoPayAppCreatePin(ctx workflow.Context, activityCtx workflow.Context, ca
 		OtpChannel:      opts.OTPChannel,
 		SmsActivationId: opts.SMSActivationID,
 		StateJson:       opts.StateJSON,
+		Pin:             opts.Pin,
 	}).Get(ctx, &start); err != nil {
 		return goPayAppStepFromOTP(start), err
 	}
@@ -532,6 +751,7 @@ func runGoPayAppCreatePin(ctx workflow.Context, activityCtx workflow.Context, ca
 			Data:            start.GetData(),
 			SmsActivationId: opts.SMSActivationID,
 			StateJson:       start.GetStateJson(),
+			Pin:             opts.Pin,
 		}).Get(ctx, &retry); err != nil {
 			return goPayAppStepFromOTP(retry), err
 		}
@@ -552,6 +772,7 @@ func runGoPayAppCreatePin(ctx workflow.Context, activityCtx workflow.Context, ca
 		OtpChannel:       startChannel,
 		SmsActivationId:  opts.SMSActivationID,
 		StateJson:        start.GetStateJson(),
+		Pin:              opts.Pin,
 	}).Get(ctx, &completed); err != nil {
 		return goPayAppStepFromOTP(completed), err
 	}

@@ -23,9 +23,10 @@ func (s *Server) GoPayUserChangePhoneStart(ctx context.Context, req *pb.GoPayUse
 		return &pb.GoPayUserChangePhoneStartResponse{ErrorMessage: err.Error()}, nil
 	}
 	resp, err := s.gopayClient.ChangePhoneStart(ctx, &pb.ChangePhoneStartRequest{
-		NewPhone:  req.GetNewPhone(),
-		Pin:       req.GetPin(),
-		StateJson: stateJSON,
+		NewPhone:    req.GetNewPhone(),
+		Pin:         req.GetPin(),
+		CountryCode: req.GetCountryCode(),
+		StateJson:   stateJSON,
 	})
 	if err == nil {
 		err = s.saveGoPayAppStateForUser(ctx, stateKey, resp.GetStateJson())

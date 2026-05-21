@@ -35,13 +35,13 @@ func GoPayAppEnsureTokenWorkflow(ctx workflow.Context, input *GoPayAppOTPWorkflo
 
 func GoPayAppChangePhoneWorkflow(ctx workflow.Context, input *GoPayAppChangePhoneWorkflowInput) (*GoPayAppStepOutput, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(30*time.Minute))
-	out, err := runGoPayAppChangePhone(ctx, activityCtx, input.GetJobId(), input.GetStateJson())
+	out, err := runGoPayAppChangePhone(ctx, activityCtx, input.GetJobId(), input.GetStateJson(), input.GetPin(), input.GetCountryCode())
 	return &out, err
 }
 
 func GoPayAppDeactivateWorkflow(ctx workflow.Context, input *GoPayAppDeactivateWorkflowInput) (*GoPayAppStepOutput, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(30*time.Minute))
-	out, err := runGoPayAppDeactivate(ctx, activityCtx, input.GetJobId(), input.GetActivationId(), input.GetStateJson())
+	out, err := runGoPayAppDeactivate(ctx, activityCtx, input.GetJobId(), input.GetActivationId(), input.GetStateJson(), input.GetPin())
 	return &out, err
 }
 
@@ -71,21 +71,24 @@ func runGoPayAppEnsureTokenChild(ctx workflow.Context, jobID string, opts goPayA
 	return out, err
 }
 
-func runGoPayAppChangePhoneChild(ctx workflow.Context, jobID string, stateJSON string) (*GoPayAppStepOutput, error) {
+func runGoPayAppChangePhoneChild(ctx workflow.Context, jobID string, stateJSON string, opts goPayAppOTPOptions) (*GoPayAppStepOutput, error) {
 	out := &GoPayAppStepOutput{}
 	err := executeGoPayChildWorkflow(ctx, goPayAppChangePhoneChildWorkflowName, "gopay-change-phone", GoPayAppChangePhoneWorkflow, &GoPayAppChangePhoneWorkflowInput{
-		JobId:     jobID,
-		StateJson: stateJSON,
+		JobId:       jobID,
+		StateJson:   stateJSON,
+		Pin:         opts.Pin,
+		CountryCode: opts.CountryCode,
 	}, &out)
 	return out, err
 }
 
-func runGoPayAppDeactivateChild(ctx workflow.Context, jobID, activationID, stateJSON string) (*GoPayAppStepOutput, error) {
+func runGoPayAppDeactivateChild(ctx workflow.Context, jobID, activationID, stateJSON string, opts goPayAppOTPOptions) (*GoPayAppStepOutput, error) {
 	out := &GoPayAppStepOutput{}
 	err := executeGoPayChildWorkflow(ctx, goPayAppDeactivateChildWorkflowName, "gopay-deactivate", GoPayAppDeactivateWorkflow, &GoPayAppDeactivateWorkflowInput{
 		JobId:        jobID,
 		ActivationId: activationID,
 		StateJson:    stateJSON,
+		Pin:          opts.Pin,
 	}, &out)
 	return out, err
 }
@@ -178,6 +181,8 @@ func goPayAppOTPWorkflowInput(jobID string, opts goPayAppOTPOptions) *GoPayAppOT
 		Source:          opts.Source,
 		ResetState:      opts.ResetState,
 		StateJson:       opts.StateJSON,
+		Pin:             opts.Pin,
+		CountryCode:     opts.CountryCode,
 	}
 }
 
@@ -189,6 +194,8 @@ func goPayAppOTPOptionsFromChildInput(input *GoPayAppOTPWorkflowInput) goPayAppO
 		Source:          input.GetSource(),
 		ResetState:      input.GetResetState(),
 		StateJSON:       input.GetStateJson(),
+		Pin:             input.GetPin(),
+		CountryCode:     input.GetCountryCode(),
 	}
 }
 

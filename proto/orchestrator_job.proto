@@ -118,11 +118,19 @@ message ListJobsRequest {
   string status = 2;
   string action = 3;
   string account_id = 4;
+  JobListCursor before = 5;
 }
 
 message ListJobsResponse {
   repeated JobSnapshot snapshots = 1;
   string error_message = 2;
+  JobListCursor next = 3;
+  bool has_more = 4;
+}
+
+message JobListCursor {
+  int64 updated_at = 1;
+  string job_id = 2;
 }
 
 message WatchJobRequest {

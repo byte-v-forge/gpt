@@ -125,7 +125,7 @@ func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, e
 		return map[string]any{"success": false, "error": err.Error()}
 	}
 	if initResp.StatusCode != http.StatusOK {
-		return map[string]any{"success": false, "error": apiError("signup otp initiate failed", initResp), "raw_json": safeJSON(initResp.Payload)}
+		return map[string]any{"success": false, "error": apiError("signup otp initiate failed", initResp), "method": method, "raw_json": safeJSON(initResp.Payload)}
 	}
 	otpToken := otpTokenFrom(initResp.Data())
 	if otpToken == "" {

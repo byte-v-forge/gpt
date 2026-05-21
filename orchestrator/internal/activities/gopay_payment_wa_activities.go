@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"orchestrator/db"
 )
 
 func (s *Server) GoPayResolveWAPhoneActivity(ctx context.Context, input GoPayResolveWAPhoneInput) (GoPayResolveWAPhoneOutput, error) {
@@ -22,8 +24,19 @@ func (s *Server) GoPayResolveWAPhoneActivity(ctx context.Context, input GoPayRes
 			return data, err
 		}
 
-		phone := normalizeIndonesiaPhone(input.GetWaPhone())
-		data["request_phone_present"] = phone != ""
+		profilePhone, profileErr := s.loadGoPayProfileWAPhone(ctx, userID)
+		if profileErr != nil {
+			data["profile_error_message"] = profileErr.Error()
+		}
+		requestPhone := normalizeIndonesiaPhone(input.GetWaPhone())
+		phone := firstNonEmpty(profilePhone, requestPhone)
+		data["profile_phone_present"] = profilePhone != ""
+		data["request_phone_present"] = requestPhone != ""
+		if profilePhone != "" {
+			data["phone_source"] = "profile"
+		} else if requestPhone != "" {
+			data["phone_source"] = "request"
+		}
 		if phone == "" {
 			err := fmt.Errorf("wa_phone is required for WA GoPay payment")
 			data["error_message"] = err.Error()
@@ -36,6 +49,21 @@ func (s *Server) GoPayResolveWAPhoneActivity(ctx context.Context, input GoPayRes
 	})
 	output.Data = protoData(data)
 	return output, err
+}
+
+func (s *Server) loadGoPayProfileWAPhone(ctx context.Context, userID string) (string, error) {
+	if s == nil || s.db == nil {
+		return "", fmt.Errorf("orchestrator db not configured")
+	}
+	var profile db.GoPayUserProfile
+	result := s.db.WithContext(ctx).Where("state_key = ?", userID).Limit(1).Find(&profile)
+	if result.Error != nil {
+		return "", fmt.Errorf("load gopay profile: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return "", nil
+	}
+	return normalizeIndonesiaPhone(profile.WAPhone), nil
 }
 
 func (s *Server) GoPayAppLoadStateActivity(ctx context.Context, input GoPayAppStateActivityInput) (GoPayAppStateActivityOutput, error) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net"
@@ -83,7 +84,8 @@ func WithHeader(key, value string) Option {
 		if key == "" {
 			return &ConfigError{Field: "header", Msg: "key is empty"}
 		}
-		client.defaultHeaders.Set(key, value)
+		deleteHeader(client.defaultHeaders, key)
+		client.defaultHeaders[key] = []string{value}
 		return nil
 	}
 }
@@ -107,6 +109,8 @@ func NewHTTPClient(timeout time.Duration, proxyRawURL string) (*http.Client, err
 		timeout = 30 * time.Second
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.ForceAttemptHTTP2 = false
+	transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
 	proxyRawURL = strings.TrimSpace(proxyRawURL)
 	if proxyRawURL != "" {
 		parsed, err := url.Parse(proxyRawURL)
@@ -211,17 +215,8 @@ func (c *Client) doOnce(ctx context.Context, method string, target *url.URL, req
 	if err != nil {
 		return nil, err
 	}
-	for key, values := range c.defaultHeaders {
-		for _, value := range values {
-			httpReq.Header.Add(key, value)
-		}
-	}
-	for key, values := range request.Headers {
-		httpReq.Header.Del(key)
-		for _, value := range values {
-			httpReq.Header.Add(key, value)
-		}
-	}
+	copyHeadersExact(httpReq.Header, c.defaultHeaders)
+	copyHeadersExact(httpReq.Header, request.Headers)
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, err
@@ -238,6 +233,21 @@ func (c *Client) doOnce(ctx context.Context, method string, target *url.URL, req
 		Body:       raw,
 		Payload:    payload,
 	}, nil
+}
+
+func copyHeadersExact(dst, src http.Header) {
+	for key, values := range src {
+		deleteHeader(dst, key)
+		dst[key] = append([]string(nil), values...)
+	}
+}
+
+func deleteHeader(headers http.Header, key string) {
+	for existing := range headers {
+		if strings.EqualFold(existing, key) {
+			delete(headers, existing)
+		}
+	}
 }
 
 func readResponseBody(body io.Reader) ([]byte, error) {

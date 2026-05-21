@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
 func (s *Server) completeLogin(ctx context.Context, state stateMap, otp string) error {
@@ -38,7 +36,7 @@ func (s *Server) completeLogin(ctx context.Context, state stateMap, otp string) 
 	if verifyResp.StatusCode != http.StatusOK {
 		return fmt.Errorf("%s", apiError("2fa verify failed", verifyResp))
 	}
-	verificationToken := protocol.StringAt(verifyResp.Data(), "verification_token")
+	verificationToken := verificationTokenFrom(verifyResp.Data())
 	if verificationToken == "" {
 		return fmt.Errorf("2fa verification_token missing")
 	}
@@ -129,7 +127,7 @@ func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, e
 	if initResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("signup otp initiate failed", initResp), "raw_json": safeJSON(initResp.Payload)}
 	}
-	otpToken := protocol.StringAt(initResp.Data(), "otp_token")
+	otpToken := otpTokenFrom(initResp.Data())
 	if otpToken == "" {
 		return map[string]any{"success": false, "error": "signup otp_token missing", "raw_json": safeJSON(initResp.Payload)}
 	}
@@ -169,7 +167,7 @@ func (s *Server) retrySignupOTP(ctx context.Context, state stateMap) map[string]
 	if resp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("signup otp retry failed", resp), "raw_json": safeJSON(resp.Payload)}
 	}
-	if newToken := protocol.StringAt(resp.Data(), "otp_token"); newToken != "" {
+	if newToken := otpTokenFrom(resp.Data()); newToken != "" {
 		state["_signup_otp_token"] = newToken
 	}
 	now := time.Now().Unix()
@@ -218,7 +216,7 @@ func (s *Server) completeSignup(ctx context.Context, state stateMap, otp string)
 	if verifyResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("signup otp verify failed", verifyResp), "raw_json": safeJSON(verifyResp.Payload)}
 	}
-	verificationToken := protocol.StringAt(verifyResp.Data(), "verification_token")
+	verificationToken := verificationTokenFrom(verifyResp.Data())
 	if verificationToken == "" {
 		return map[string]any{"success": false, "error": "signup verification_token missing", "raw_json": safeJSON(verifyResp.Payload)}
 	}

@@ -28,7 +28,7 @@ func (s *Server) getQrID(ctx context.Context, state stateMap) map[string]any {
 	if resp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("users/profile failed", resp)}
 	}
-	qrID := protocol.StringAt(resp.Data(), "qr_id")
+	qrID := stringForAnyKey(resp.Data(), "qr_id", "qrId")
 	if qrID == "" {
 		return map[string]any{"success": false, "error": "qr_id not found in response: " + compactErrorDetail(resp.Payload)}
 	}

@@ -161,7 +161,7 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	if initResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("login pin initiate failed", initResp)}
 	}
-	challengeID := protocol.StringAt(initResp.Data(), "challenge_id")
+	challengeID := challengeIDFrom(initResp.Data())
 	if challengeID == "" {
 		shape := responseShape(initResp)
 		return map[string]any{"success": false, "error": "pin challenge_id missing: " + safeJSON(shape), "response_shape": shape}
@@ -180,7 +180,7 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	if pinResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("pin token failed", pinResp)}
 	}
-	validationJWT := protocol.StringAt(pinResp.Data(), "token")
+	validationJWT := stringForAnyKey(pinResp.Data(), "token")
 	if validationJWT == "" {
 		return map[string]any{"success": false, "error": "pin validation token missing"}
 	}
@@ -196,7 +196,7 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	if verifyResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("login pin verify failed", verifyResp)}
 	}
-	verificationToken := protocol.StringAt(verifyResp.Data(), "verification_token")
+	verificationToken := verificationTokenFrom(verifyResp.Data())
 	if verificationToken == "" {
 		return map[string]any{"success": false, "error": "1fa verification_token missing"}
 	}
@@ -207,8 +207,8 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	if accountResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("accountlist failed", accountResp)}
 	}
-	accountID := firstAccountID(accountResp.Data()["account_list"])
-	oneFAToken := protocol.StringAt(accountResp.Data(), "1fa_token")
+	accountID := firstAccountID(accountListFrom(accountResp.Data()))
+	oneFAToken := oneFATokenFrom(accountResp.Data())
 	if accountID == "" || oneFAToken == "" {
 		return map[string]any{"success": false, "error": "account_id or 1fa_token missing"}
 	}
@@ -225,7 +225,7 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 		s.persistLoginReady(state, tokenResp.Data(), normalized)
 		return map[string]any{"success": true, "ready": true, "otp_sent": false}
 	}
-	twoFAToken := protocol.StringAt(tokenResp.Data(), "2fa_token")
+	twoFAToken := twoFATokenFrom(tokenResp.Data())
 	verificationID = verificationIDFrom(tokenResp.Data())
 	if tokenResp.StatusCode != http.StatusForbidden || twoFAToken == "" || verificationID == "" {
 		return map[string]any{"success": false, "error": apiError("token exchange failed", tokenResp)}
@@ -251,7 +251,7 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	if otpResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("2fa otp initiate failed", otpResp)}
 	}
-	otpToken := protocol.StringAt(otpResp.Data(), "otp_token")
+	otpToken := otpTokenFrom(otpResp.Data())
 	if otpToken == "" {
 		return map[string]any{"success": false, "error": "2fa otp_token missing"}
 	}

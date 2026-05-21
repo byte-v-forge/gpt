@@ -280,8 +280,18 @@ func DecodePaymentOptionToken(token string) (map[string]any, error) {
 
 func ExtractChallenge(response *protocol.Response) (string, string, error) {
 	data := response.Data()
-	challengeID := protocol.StringAt(data, "challenge", "action", "value", "challenge_id")
-	clientID := protocol.StringAt(data, "challenge", "action", "value", "client_id")
+	challengeID := firstNonEmpty(
+		protocol.StringAt(data, "challenge", "action", "value", "challenge_id"),
+		protocol.StringAt(data, "challenge", "value", "challenge_id"),
+		protocol.StringAt(data, "challenge_id"),
+		stringAtAnyKey(data, "challenge_id", "challengeId"),
+	)
+	clientID := firstNonEmpty(
+		protocol.StringAt(data, "challenge", "action", "value", "client_id"),
+		protocol.StringAt(data, "challenge", "value", "client_id"),
+		protocol.StringAt(data, "client_id"),
+		stringAtAnyKey(data, "client_id", "clientId"),
+	)
 	if challengeID == "" || clientID == "" {
 		return "", "", fmt.Errorf("capture challenge missing")
 	}
@@ -290,11 +300,51 @@ func ExtractChallenge(response *protocol.Response) (string, string, error) {
 
 func ExtractPinToken(response *protocol.Response) (string, error) {
 	data := response.Data()
-	token := protocol.StringAt(data, "token")
+	token := firstNonEmpty(protocol.StringAt(data, "token"), stringAtAnyKey(data, "pin_token", "pinToken", "token"))
 	if token == "" {
 		return "", fmt.Errorf("pin token missing")
 	}
 	return token, nil
+}
+
+func stringAtAnyKey(value any, keys ...string) string {
+	wanted := map[string]struct{}{}
+	for _, key := range keys {
+		wanted[normalizeJSONKey(key)] = struct{}{}
+	}
+	var walk func(any) string
+	walk = func(current any) string {
+		if obj, ok := current.(map[string]any); ok {
+			for key, item := range obj {
+				if _, ok := wanted[normalizeJSONKey(key)]; ok {
+					if text := strings.TrimSpace(fmt.Sprint(item)); text != "" && text != "<nil>" {
+						return text
+					}
+				}
+			}
+			for _, item := range obj {
+				if text := walk(item); text != "" {
+					return text
+				}
+			}
+		}
+		if items, ok := current.([]any); ok {
+			for _, item := range items {
+				if text := walk(item); text != "" {
+					return text
+				}
+			}
+		}
+		return ""
+	}
+	return walk(value)
+}
+
+func normalizeJSONKey(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	value = strings.ReplaceAll(value, "_", "")
+	value = strings.ReplaceAll(value, "-", "")
+	return value
 }
 
 func OrderAmount(order map[string]any) int64 {

@@ -21,7 +21,7 @@ func (s *Server) deactivateStart(ctx context.Context, state stateMap, pin string
 	profile, _ := client.Get(ctx, customerBaseURL+"/v1/users/profile")
 	pinSetup := false
 	if profile != nil && profile.StatusCode == http.StatusOK {
-		pinSetup = anyBool(profile.Data()["is_pin_setup"])
+		pinSetup = boolForAnyKey(profile.Data(), "is_pin_setup", "isPinSetup")
 	} else if strings.TrimSpace(pin) != "" {
 		pinSetup = true
 	}
@@ -37,8 +37,8 @@ func (s *Server) deactivateStart(ctx context.Context, state stateMap, pin string
 		if challenge.StatusCode != http.StatusOK {
 			return map[string]any{"success": false, "error": apiError("deactivation challenge failed", challenge)}
 		}
-		challengeID := protocol.StringAt(challenge.Data(), "challenge_id")
-		clientID := protocol.StringAt(challenge.Data(), "client_id")
+		challengeID := challengeIDFrom(challenge.Data())
+		clientID := clientIDFrom(challenge.Data())
 		if challengeID == "" || clientID == "" {
 			shape := responseShape(challenge)
 			return map[string]any{"success": false, "error": "deactivation challenge missing id: " + safeJSON(shape), "response_shape": shape}

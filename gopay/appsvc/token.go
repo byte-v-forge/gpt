@@ -128,17 +128,22 @@ func (s *Server) verifyAccessToken(ctx context.Context, state stateMap) map[stri
 	}
 	if resp.StatusCode == http.StatusOK {
 		data := resp.Data()
-		phone := firstNonEmpty(protocol.StringAt(data, "phone"), protocol.StringAt(data, "number"))
-		if phone != "" {
-			state["phone"] = normalizePhone(phone, "")
+		if profile := gojekCustomerProfile(data); len(profile) > 0 {
+			s.syncProfileFields(state, profile, "")
+		} else {
+			phone := firstNonEmpty(protocol.StringAt(data, "phone"), protocol.StringAt(data, "number"))
+			if phone != "" {
+				state["phone"] = normalizePhone(phone, "")
+			}
 		}
-		if anyBool(data["is_pin_setup"]) {
+		pinSetup := boolForAnyKey(data, "is_pin_setup", "isPinSetup")
+		if pinSetup {
 			state["pin_setup_at"] = time.Now().Unix()
 		}
 		state["stage"] = "ready"
 		state["ready_at"] = time.Now().Unix()
 		delete(state, "last_error")
-		return map[string]any{"success": true, "status": 200, "phone": stateString(state, "phone"), "pin_setup": anyBool(data["is_pin_setup"])}
+		return map[string]any{"success": true, "status": 200, "phone": stateString(state, "phone"), "pin_setup": pinSetup}
 	}
 	return map[string]any{"success": false, "status": resp.StatusCode, "error": apiError("profile failed", resp)}
 }

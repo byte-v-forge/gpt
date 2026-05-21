@@ -136,37 +136,33 @@ func (c *Client) headers(method string, rawURL string, body []byte, extra http.H
 	setBaseHeaders(headers, c.device, xM1, hasBody)
 
 	if host == "accounts.goto-products.com" {
-		headers = appHeaders(c.device, xM1, hasBody)
-		headers.Set("X-CVSDK-Version", envDefault("GOPAY_CVSDK_VERSION", defaultCVSDKVersion))
+		headers = gotoAuthHeaders(c.device, xM1, hasBody)
 	} else if host == "api.gojekapi.com" && (gojekActivityPaths[path] || gojekAppHeaderPaths[path]) {
 		headers = appHeaders(c.device, xM1, hasBody)
 	} else if host == "customer.gopayapi.com" && (isGopayCustomerLinkPath(path) || isGopayCustomerAppHeaderPath(path) || (method == http.MethodGet && gopayCustomerSlimGetPaths[path])) {
 		headers = appHeaders(c.device, xM1, hasBody)
 	} else {
-		headers.Set("User-uuid", c.device.UserUUID)
-		headers.Set("X-DeviceToken", c.device.DeviceToken)
-		headers.Set("X-Location", c.device.Location)
-		headers.Set("X-Location-Accuracy", c.device.LocationAccuracy)
-		headers.Set("Gojek-Country-Code", c.device.GojekCountryCode)
-		headers.Set("X-Dark-Mode", "false")
+		setHeader(headers, "User-uuid", c.device.UserUUID)
+		setHeader(headers, "X-DeviceToken", c.device.DeviceToken)
+		setHeader(headers, "X-Location", c.device.Location)
+		setHeader(headers, "X-Location-Accuracy", c.device.LocationAccuracy)
+		setHeader(headers, "Gojek-Country-Code", c.device.GojekCountryCode)
+		setHeader(headers, "X-Dark-Mode", "false")
 	}
 	if path == "/api/v1/users/pin/tokens" {
-		headers.Set("Sdk-Version", c.device.AppVersion)
-		headers.Set("X-Biometric", "")
-		headers.Set("X-Verification", "PIN")
+		setHeader(headers, "Sdk-Version", c.device.AppVersion)
+		setHeader(headers, "X-Biometric", "")
+		setHeader(headers, "X-Verification", "PIN")
 	}
 	if c.token != "" {
 		if strings.HasPrefix(c.token, "Bearer ") {
-			headers.Set("Authorization", c.token)
+			setHeader(headers, "Authorization", c.token)
 		} else {
-			headers.Set("Authorization", "Bearer "+c.token)
+			setHeader(headers, "Authorization", "Bearer "+c.token)
 		}
 	}
 	for key, values := range extra {
-		headers.Del(key)
-		for _, value := range values {
-			headers.Add(key, value)
-		}
+		setHeaderValues(headers, key, values)
 	}
 	signToken := headers.Get("Authorization")
 	if signToken == "" {
@@ -176,67 +172,118 @@ func (c *Client) headers(method string, rawURL string, body []byte, extra http.H
 	if err != nil {
 		return nil, err
 	}
-	headers.Set("X-E1", signature.XE1)
-	headers.Set("X-E3", signature.BodyMD5)
+	setHeader(headers, "X-E1", signature.XE1)
+	setHeader(headers, "X-E3", signature.BodyMD5)
 	return headers, nil
 }
 
+func setHeader(headers http.Header, key, value string) {
+	deleteHeader(headers, key)
+	headers[key] = []string{value}
+}
+
+func setHeaderValues(headers http.Header, key string, values []string) {
+	deleteHeader(headers, key)
+	headers[key] = append([]string(nil), values...)
+}
+
+func deleteHeader(headers http.Header, key string) {
+	for existing := range headers {
+		if strings.EqualFold(existing, key) {
+			delete(headers, existing)
+		}
+	}
+}
+
 func setBaseHeaders(headers http.Header, device DeviceFingerprint, xM1 string, hasBody bool) {
-	headers.Set("X-AppVersion", device.AppVersion)
-	headers.Set("X-AppId", device.AppID)
-	headers.Set("X-AppType", device.AppType)
-	headers.Set("Accept", "application/json")
-	headers.Set("User-Agent", device.UserAgent)
-	headers.Set("D1", device.D1)
-	headers.Set("X-Session-ID", device.SessionID)
-	headers.Set("X-Platform", device.Platform)
-	headers.Set("X-UniqueId", device.UniqueID)
-	headers.Set("X-User-Type", device.UserType)
-	headers.Set("X-DeviceOS", device.DeviceOS)
-	headers.Set("X-PhoneMake", device.PhoneMake)
-	headers.Set("X-PushTokenType", "FCM")
-	headers.Set("X-PhoneModel", device.PhoneModel)
-	headers.Set("Accept-Language", defaultAcceptLanguage)
-	headers.Set("X-User-Locale", defaultUserLocale)
-	headers.Set("X-M1", xM1)
-	headers.Set("X-E2", device.XE2)
-	headers.Set("AdjTs", device.AdjTS)
+	setHeader(headers, "X-AppVersion", device.AppVersion)
+	setHeader(headers, "X-AppId", device.AppID)
+	setHeader(headers, "X-AppType", device.AppType)
+	setHeader(headers, "Accept", "application/json")
+	setHeader(headers, "User-Agent", device.UserAgent)
+	setHeader(headers, "D1", device.D1)
+	setHeader(headers, "X-Session-ID", device.SessionID)
+	setHeader(headers, "X-Platform", device.Platform)
+	setHeader(headers, "X-UniqueId", device.UniqueID)
+	setHeader(headers, "X-User-Type", device.UserType)
+	setHeader(headers, "X-DeviceOS", device.DeviceOS)
+	setHeader(headers, "X-PhoneMake", device.PhoneMake)
+	setHeader(headers, "X-PushTokenType", "FCM")
+	setHeader(headers, "X-PhoneModel", device.PhoneModel)
+	setHeader(headers, "Accept-Language", defaultAcceptLanguage)
+	setHeader(headers, "X-User-Locale", defaultUserLocale)
+	setHeader(headers, "X-M1", xM1)
+	setHeader(headers, "X-E2", device.XE2)
+	setHeader(headers, "AdjTs", device.AdjTS)
 	if hasBody {
-		headers.Set("Content-Type", "application/json")
+		setHeader(headers, "Content-Type", "application/json")
 	}
 }
 
 func appHeaders(device DeviceFingerprint, xM1 string, hasBody bool) http.Header {
 	headers := http.Header{}
-	headers.Set("Accept-Encoding", "gzip")
-	headers.Set("Gojek-Service-Area", "1")
-	headers.Set("Country-Code", device.GojekCountryCode)
-	headers.Set("X-AppVersion", device.AppVersion)
-	headers.Set("X-M1", xM1)
-	headers.Set("Gojek-Country-Code", device.GojekCountryCode)
-	headers.Set("X-Request-ID", newTimeUUIDString())
-	headers.Set("X-UniqueId", device.UniqueID)
-	headers.Set("X-PhoneMake", device.PhoneMake)
-	headers.Set("X-Help-Version", device.AppVersion)
-	headers.Set("X-Location", device.Location)
-	headers.Set("X-Location-Accuracy", device.LocationAccuracy)
-	headers.Set("X-DeviceOS", device.DeviceOS)
-	headers.Set("X-User-Type", device.UserType)
-	headers.Set("User-Agent", device.UserAgent)
-	headers.Set("X-AppId", device.AppID)
-	headers.Set("Gojek-Timezone", envDefault("GOPAY_TIMEZONE", defaultTimezone))
-	headers.Set("X-AuthSDK-Version", envDefault("GOPAY_AUTHSDK_VERSION", defaultAuthSDKVersion))
-	headers.Set("X-AppType", device.AppType)
-	headers.Set("X-User-Locale", envDefault("GOPAY_USER_LOCALE", defaultUserLocale))
-	headers.Set("X-DeviceToken", device.DeviceToken)
-	headers.Set("X-E2", device.XE2)
-	headers.Set("X-CVSDK-Version", envDefault("GOPAY_CVSDK_VERSION", defaultCVSDKVersion))
-	headers.Set("Accept-Language", envDefault("GOPAY_ACCEPT_LANGUAGE", defaultAcceptLanguage))
-	headers.Set("Transaction-ID", device.TransactionID)
-	headers.Set("X-PhoneModel", device.PhoneModel)
-	headers.Set("X-Platform", device.Platform)
+	setHeader(headers, "Accept-Encoding", "gzip")
+	setHeader(headers, "Gojek-Service-Area", "1")
+	setHeader(headers, "Country-Code", device.GojekCountryCode)
+	setHeader(headers, "X-AppVersion", device.AppVersion)
+	setHeader(headers, "X-M1", xM1)
+	setHeader(headers, "Gojek-Country-Code", device.GojekCountryCode)
+	setHeader(headers, "X-Request-ID", newTimeUUIDString())
+	setHeader(headers, "X-UniqueId", device.UniqueID)
+	setHeader(headers, "X-PhoneMake", device.PhoneMake)
+	setHeader(headers, "X-Help-Version", device.AppVersion)
+	setHeader(headers, "X-Location", device.Location)
+	setHeader(headers, "X-Location-Accuracy", device.LocationAccuracy)
+	setHeader(headers, "X-DeviceOS", device.DeviceOS)
+	setHeader(headers, "X-User-Type", device.UserType)
+	setHeader(headers, "User-Agent", device.UserAgent)
+	setHeader(headers, "X-AppId", device.AppID)
+	setHeader(headers, "Gojek-Timezone", envDefault("GOPAY_TIMEZONE", defaultTimezone))
+	setHeader(headers, "X-AuthSDK-Version", envDefault("GOPAY_AUTHSDK_VERSION", defaultAuthSDKVersion))
+	setHeader(headers, "X-AppType", device.AppType)
+	setHeader(headers, "X-User-Locale", envDefault("GOPAY_USER_LOCALE", defaultUserLocale))
+	setHeader(headers, "X-DeviceToken", device.DeviceToken)
+	setHeader(headers, "X-E2", device.XE2)
+	setHeader(headers, "X-CVSDK-Version", envDefault("GOPAY_CVSDK_VERSION", defaultCVSDKVersion))
+	setHeader(headers, "Accept-Language", envDefault("GOPAY_ACCEPT_LANGUAGE", defaultAcceptLanguage))
+	setHeader(headers, "Transaction-ID", device.TransactionID)
+	setHeader(headers, "X-PhoneModel", device.PhoneModel)
+	setHeader(headers, "X-Platform", device.Platform)
 	if hasBody {
-		headers.Set("Content-Type", "application/json")
+		setHeader(headers, "Content-Type", "application/json")
+	}
+	return headers
+}
+
+func gotoAuthHeaders(device DeviceFingerprint, xM1 string, hasBody bool) http.Header {
+	headers := http.Header{}
+	setHeader(headers, "Accept-Encoding", "gzip")
+	setHeader(headers, "X-CVSDK-Version", envDefault("GOPAY_CVSDK_VERSION", defaultCVSDKVersion))
+	setHeader(headers, "Gojek-Service-Area", "1")
+	setHeader(headers, "X-Request-ID", newTimeUUIDString())
+	setHeader(headers, "Country-Code", device.GojekCountryCode)
+	setHeader(headers, "X-AppVersion", device.AppVersion)
+	setHeader(headers, "X-M1", xM1)
+	setHeader(headers, "Gojek-Country-Code", device.GojekCountryCode)
+	setHeader(headers, "X-UniqueId", device.UniqueID)
+	setHeader(headers, "X-PhoneMake", device.PhoneMake)
+	setHeader(headers, "X-Help-Version", device.AppVersion)
+	setHeader(headers, "User-Agent", device.UserAgent)
+	setHeader(headers, "X-DeviceOS", device.DeviceOS)
+	setHeader(headers, "X-User-Type", device.UserType)
+	setHeader(headers, "X-AppId", device.AppID)
+	setHeader(headers, "Gojek-Timezone", envDefault("GOPAY_TIMEZONE", defaultTimezone))
+	setHeader(headers, "X-AuthSDK-Version", envDefault("GOPAY_AUTHSDK_VERSION", defaultAuthSDKVersion))
+	setHeader(headers, "X-AppType", device.AppType)
+	setHeader(headers, "X-User-Locale", envDefault("GOPAY_USER_LOCALE", defaultUserLocale))
+	setHeader(headers, "X-DeviceToken", device.DeviceToken)
+	setHeader(headers, "X-E2", device.XE2)
+	setHeader(headers, "Accept-Language", envDefault("GOPAY_ACCEPT_LANGUAGE", defaultAcceptLanguage))
+	setHeader(headers, "Transaction-ID", device.TransactionID)
+	setHeader(headers, "X-PhoneModel", device.PhoneModel)
+	setHeader(headers, "X-Platform", device.Platform)
+	if hasBody {
+		setHeader(headers, "Content-Type", "application/json")
 	}
 	return headers
 }

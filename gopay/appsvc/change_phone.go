@@ -64,7 +64,7 @@ func (s *Server) changePhoneStart(ctx context.Context, state stateMap, pin, newP
 	if resp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("pin submit failed", resp)}
 	}
-	otpToken := protocol.StringAt(resp.Data(), "otp_token")
+	otpToken := otpTokenFrom(resp.Data())
 	if otpToken == "" {
 		return map[string]any{"success": false, "error": "otp_token missing"}
 	}
@@ -72,7 +72,7 @@ func (s *Server) changePhoneStart(ctx context.Context, state stateMap, pin, newP
 	state["_change_phone"] = phone
 	state["_change_otp_token"] = otpToken
 	state["_change_otp_sent_at"] = now
-	state["_change_otp_expires_at"] = now + firstNonZero(anyInt(resp.Data()["expires_in"]), 300)
+	state["_change_otp_expires_at"] = now + firstNonZero(intForAnyKey(resp.Data(), "expires_in", "otp_expires_in"), 300)
 	state["stage"] = "change_phone_otp_pending"
 	deleteKeys(state, "_checked_change_phone", "_checked_change_phone_status", "last_error")
 	return map[string]any{"success": true, "new_phone": phone, "otp_sent": true}
@@ -95,14 +95,14 @@ func (s *Server) changePhoneRetry(ctx context.Context, state stateMap) map[strin
 	if resp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("otp retry failed", resp)}
 	}
-	newToken := protocol.StringAt(resp.Data(), "otp_token")
+	newToken := otpTokenFrom(resp.Data())
 	if newToken == "" {
 		return map[string]any{"success": false, "error": "retry otp_token missing"}
 	}
 	now := time.Now().Unix()
 	state["_change_otp_token"] = newToken
 	state["_change_otp_sent_at"] = now
-	state["_change_otp_expires_at"] = now + firstNonZero(anyInt(resp.Data()["otp_expires_in"]), 300)
+	state["_change_otp_expires_at"] = now + firstNonZero(intForAnyKey(resp.Data(), "otp_expires_in", "expires_in"), 300)
 	state["stage"] = "change_phone_otp_pending"
 	delete(state, "last_error")
 	return map[string]any{"success": true, "otp_sent": true}
@@ -148,13 +148,42 @@ func (s *Server) loadGojekProfile(ctx context.Context, client anyClient) (map[st
 	if resp.StatusCode != http.StatusOK {
 		return nil, apiError("customer profile failed", resp)
 	}
-	for _, key := range []string{"data", "raw"} {
-		container := nestedMap(resp.Payload[key])
-		if customer := nestedMap(container["customer"]); len(customer) > 0 {
-			return customer, ""
+	for _, candidate := range []any{resp.Data(), resp.Payload} {
+		if profile := gojekCustomerProfile(candidate); len(profile) > 0 {
+			return profile, ""
 		}
 	}
 	return nil, "customer profile missing"
+}
+
+func gojekCustomerProfile(value any) map[string]any {
+	obj, ok := jsonObject(value)
+	if !ok {
+		return nil
+	}
+	for _, key := range []string{"customer", "profile", "user"} {
+		if profile := nestedMap(obj[key]); len(profile) > 0 {
+			return profile
+		}
+	}
+	for _, key := range []string{"data", "raw"} {
+		if profile := gojekCustomerProfile(obj[key]); len(profile) > 0 {
+			return profile
+		}
+	}
+	if looksLikeProfile(obj) {
+		return obj
+	}
+	return nil
+}
+
+func looksLikeProfile(value map[string]any) bool {
+	for _, key := range []string{"name", "email", "phone", "number", "profile_image_url", "profileImageUrl"} {
+		if anyString(value[key]) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) syncProfileFields(state stateMap, profile map[string]any, countryCode string) {

@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
 func (s *Server) startSignupPIN(ctx context.Context, state stateMap, pin, otpChannel string) map[string]any {
@@ -28,8 +26,8 @@ func (s *Server) startSignupPIN(ctx context.Context, state stateMap, pin, otpCha
 		return map[string]any{"success": false, "error": err.Error()}
 	}
 	profile, _ := client.Get(ctx, customerBaseURL+"/v1/users/profile")
-	if profile != nil && profile.StatusCode == http.StatusOK && anyBool(profile.Data()["is_pin_setup"]) {
-		phone = firstNonEmpty(protocol.StringAt(profile.Data(), "phone"), protocol.StringAt(profile.Data(), "number"), phone)
+	if profile != nil && profile.StatusCode == http.StatusOK && boolForAnyKey(profile.Data(), "is_pin_setup", "isPinSetup") {
+		phone = firstNonEmpty(stringForAnyKey(profile.Data(), "phone", "number"), phone)
 		state["phone"] = normalizePhone(phone, "")
 		state["stage"] = "ready"
 		state["pin_setup_at"] = time.Now().Unix()
@@ -87,7 +85,7 @@ func (s *Server) startSignupPIN(ctx context.Context, state stateMap, pin, otpCha
 	if initResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("pin otp initiate failed", initResp)}
 	}
-	otpToken := protocol.StringAt(initResp.Data(), "otp_token")
+	otpToken := otpTokenFrom(initResp.Data())
 	if otpToken == "" {
 		return map[string]any{"success": false, "error": "pin otp_token missing"}
 	}
@@ -128,7 +126,7 @@ func (s *Server) retrySignupPIN(ctx context.Context, state stateMap) map[string]
 	if resp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("pin otp retry failed", resp)}
 	}
-	newToken := protocol.StringAt(resp.Data(), "otp_token")
+	newToken := otpTokenFrom(resp.Data())
 	if newToken == "" {
 		return map[string]any{"success": false, "error": "pin retry otp_token missing"}
 	}
@@ -174,7 +172,7 @@ func (s *Server) completeSignupPIN(ctx context.Context, state stateMap, otp, pin
 	if verifyResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("pin otp verify failed", verifyResp)}
 	}
-	verificationToken := protocol.StringAt(verifyResp.Data(), "verification_token")
+	verificationToken := verificationTokenFrom(verifyResp.Data())
 	if verificationToken == "" {
 		return map[string]any{"success": false, "error": "pin verification_token missing"}
 	}

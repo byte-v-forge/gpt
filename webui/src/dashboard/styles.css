@@ -123,24 +123,10 @@
 .accountCardEmail {
   min-width: 0;
   width: 100%;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
-  align-items: center;
-  gap: 6px;
-}
-
-.accountCardEmail > span {
-  min-width: 0;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.inlineCopyAction {
-  width: 24px;
-  height: 24px;
-  min-height: 24px;
-  flex: 0 0 auto;
 }
 
 .runningOtpActions,
@@ -152,19 +138,26 @@
   margin: 0;
 }
 
-.accountChannelTag {
-  max-width: 92px;
+.accountMetaTag {
+  max-width: 126px;
   height: 25px;
-  border: 1px solid #c7d2fe;
+  border: 1px solid var(--border-soft);
   border-radius: 999px;
   padding: 0 8px;
   display: inline-flex;
   align-items: center;
-  color: #4338ca;
-  background: #eef2ff;
+  gap: 5px;
+  color: #475569;
+  background: #f8fafc;
   font-size: 12px;
   font-weight: 750;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 }
+
+.accountMetaTag em { color: var(--muted-foreground); font-style: normal; font-weight: 650; }
+.accountMetaTag strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accountMetaTag.good { color: var(--success); background: var(--success-soft); border-color: #bfe7cc; }
+.accountMetaTag.neutral { color: #475569; background: #f8fafc; border-color: #e2e8f0; }
+.accountChannelTag { max-width: 118px; color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
+.accountPhoneTag { max-width: 92px; }

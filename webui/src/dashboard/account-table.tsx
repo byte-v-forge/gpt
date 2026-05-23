@@ -1,6 +1,5 @@
-import { Copy, FileKey, KeyRound, Play, Zap } from 'lucide-react';
+import { FileKey, KeyRound, Play, Zap } from 'lucide-react';
 import {
-  IconActionButton,
   RecordActionButtons,
   RecordActions,
   RecordCard,
@@ -13,19 +12,20 @@ import type { RowActionDescriptor } from '@/dashboard/module-kit';
 import { maskEmail } from '@/dashboard/modules/mailbox/sdk';
 import {
   accountActivationChannel,
+  accountCodexPhoneState,
   canGoPayPayment,
   canLoginSession,
   canRefreshAccessToken,
   canRegister,
   isUserAlreadyExistsAccount
 } from './account-utils';
-import { AccountChannelTag, AccountSignalBadge, PaymentChannelIcon } from './account-badges';
+import { AccountChannelTag, AccountCodexPhoneTag, AccountSignalBadge, PaymentChannelIcon } from './account-badges';
 import { AccountRunningWorkflowActions } from './account-otp-actions';
 import { OpenAIIcon } from './brand-icons';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegister, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onCopy, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegister, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
@@ -41,7 +41,6 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
   onCodexOAuthAddPhone: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onRefreshAccessToken: (a: Account) => Promise<void>;
-  onCopy: (label: string, value: string) => void;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
   onConfirmManualPayment: (jobId: string) => Promise<void>;
@@ -55,13 +54,15 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
         const currentWorkflow = runningWorkflowByAccountID.get(account.account_id);
         const refreshingAccessToken = refreshingAccessTokenIds.has(account.account_id);
         const activationChannel = accountActivationChannel(account, jobs);
+        const phoneState = accountCodexPhoneState(account, jobs);
         return (
           <RecordCard key={account.account_id} selected={selected === account.account_id} onClick={() => onSelect(account)}>
             <RecordMain>
               <RecordTop>
-                <AccountCardIdentity account={account} showSecrets={showSecrets} onCopy={onCopy} />
+                <AccountCardIdentity account={account} showSecrets={showSecrets} />
                 <div className="accountCardTags">
                   <AccountSignalBadge account={account} compact />
+                  <AccountCodexPhoneTag state={phoneState} />
                   <AccountChannelTag channel={activationChannel} />
                 </div>
               </RecordTop>
@@ -91,31 +92,16 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
   );
 }
 
-function AccountCardIdentity({ account, showSecrets, onCopy }: {
+function AccountCardIdentity({ account, showSecrets }: {
   account: Account;
   showSecrets: boolean;
-  onCopy: (label: string, value: string) => void;
 }) {
   const email = account.email || '-';
   const displayEmail = showSecrets ? email : maskEmail(email);
   return (
     <RecordIdentity
       icon={<OpenAIIcon size={15} />}
-      title={(
-        <span className="accountCardEmail">
-          <span title={displayEmail}>{displayEmail}</span>
-          <IconActionButton
-            className="inlineCopyAction"
-            label="复制邮箱"
-            icon={<Copy size={13} />}
-            disabled={!account.email}
-            onClick={(event) => {
-              event.stopPropagation();
-              onCopy('邮箱', account.email);
-            }}
-          />
-        </span>
-      )}
+      title={<span className="accountCardEmail" title={displayEmail}>{displayEmail}</span>}
     />
   );
 }

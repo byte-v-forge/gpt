@@ -44,7 +44,6 @@ export type GptAccountsViewProps = {
   onConfirmManualPayment: (jobId: string) => Promise<void>;
   onSelectAddBalance: (jobId: string, method: ConcreteGoPayAddBalanceMethod) => Promise<void>;
   onConfirmAddBalance: (jobId: string) => Promise<void>;
-  onCopy: (label: string, value: string) => void;
 };
 
 export function GptAccountsView(props: GptAccountsViewProps) {
@@ -81,7 +80,6 @@ export function GptAccountsView(props: GptAccountsViewProps) {
           onConfirmManualPayment={props.onConfirmManualPayment}
           onSelectAddBalance={props.onSelectAddBalance}
           onConfirmAddBalance={props.onConfirmAddBalance}
-          onCopy={props.onCopy}
         />
       </div>
     </section>

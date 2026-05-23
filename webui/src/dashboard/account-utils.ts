@@ -1,4 +1,4 @@
-import { objectValue, stringValue } from '@/dashboard/module-kit';
+import { numberValue, objectValue, stringValue } from '@/dashboard/module-kit';
 import { goPayPaymentChannelLabel, paymentChannelValue } from './gopay-utils';
 import { statusText } from './labels';
 import type { Account, Job } from './types';
@@ -27,6 +27,48 @@ export function accountActivationChannel(account: Account, jobs: Job[]) {
   if (latestPaymentJob.action === 'GOPAY_QRIS_PAYMENT_ACTIVATE') return 'QRIS';
   if (latestPaymentJob.action === 'GOPAY_WA_PAYMENT') return '纯Gopay-WA';
   return goPayPaymentChannelLabel(paymentChannelValue(stringValue(objectValue(latestPaymentJob.result).otp_channel)));
+}
+
+
+export type AccountCodexPhoneState = {
+  confirmed: boolean;
+  label: string;
+  title: string;
+};
+
+export function accountCodexPhoneState(account: Account, jobs: Job[]): AccountCodexPhoneState {
+  const accountState = account as Account & { codex_phone_confirmed?: boolean; codex_phone_label?: string };
+  if (accountState.codex_phone_confirmed === true) {
+    return codexPhoneState(true, stringValue(accountState.codex_phone_label));
+  }
+  const latest = jobs
+    .filter((job) => job.account_id === account.account_id && job.action === 'CODEX_OAUTH_ADD_PHONE')
+    .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+  for (const job of latest) {
+    const result = objectValue(job.result);
+    const confirmed = boolResult(result.add_phone_confirmed);
+    if (confirmed === true) {
+      return codexPhoneState(true, stringValue(result.phone_label) || stringValue(result.label), numberValue(result.phone_reuse_count), numberValue(result.phone_reuse_limit));
+    }
+    if (job.status === 'SUCCEEDED' && confirmed === false) {
+      return { confirmed: false, label: '未加手机', title: 'OAuth 已完成，但该账号未出现 add phone' };
+    }
+  }
+  return { confirmed: false, label: '未加手机', title: '未确认 add phone' };
+}
+
+function codexPhoneState(confirmed: boolean, label = '', reuseCount = 0, reuseLimit = 0): AccountCodexPhoneState {
+  const suffix = label ? ` · ${label}` : '';
+  const reuse = reuseLimit > 0 ? ` · ${reuseCount || 0}/${reuseLimit}` : '';
+  return { confirmed, label: confirmed ? '已加手机' : '未加手机', title: `${confirmed ? '已完成 add phone' : '未确认 add phone'}${suffix}${reuse}` };
+}
+
+function boolResult(value: unknown) {
+  if (value === true || value === false) return value;
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (['true', '1', 'yes'].includes(normalized)) return true;
+  if (['false', '0', 'no'].includes(normalized)) return false;
+  return null;
 }
 
 export function canProbeAccount(account: Account) {

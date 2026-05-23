@@ -1,14 +1,15 @@
-import { canonicalUiEmail, maskEmail, normalizeUiEmail } from '@/dashboard/modules/mailbox/sdk';
+import { canonicalUiEmail, mailboxProviderValue, maskEmail, normalizeUiEmail } from '@/dashboard/modules/mailbox/sdk';
 import type { Account, AccountMailboxContext, GPTEmailAllocation, LatestOtp, Mailbox } from './types';
 
 export function mailboxContextForEmail(mailboxes: Mailbox[], allocations: GPTEmailAllocation[], account: Account): AccountMailboxContext {
   const accountEmail = normalizeUiEmail(account.email);
-  const mailbox = mailboxes.find((item) => normalizeUiEmail(item.email_address) === accountEmail);
   const allocation = allocationForEmail(allocations, accountEmail);
   const primaryEmail = normalizeUiEmail(account.primary_mailbox_email || allocation?.primary_email || canonicalUiEmail(accountEmail));
+  const mailbox = mailboxes.find((item) => [accountEmail, primaryEmail].includes(normalizeUiEmail(item.email_address)));
   return {
     account_email: accountEmail,
     primary_email: primaryEmail,
+    provider: mailbox?.provider || '',
     is_split: !!accountEmail && !!primaryEmail && accountEmail !== primaryEmail,
     known: !!mailbox || !!allocation
   };
@@ -22,7 +23,7 @@ export function accountInboxHint(email: string, context: AccountMailboxContext |
 }
 
 export function canFetchAccountInbox(account: Account, context: AccountMailboxContext | null) {
-  return !!normalizeUiEmail(account.email) && (!!normalizeUiEmail(account.primary_mailbox_email) || !!context?.known);
+  return !!normalizeUiEmail(account.email) && !!context?.known && mailboxProviderValue(context.provider) === 'outlook';
 }
 
 export function latestOtpFromAccount(account: Account): LatestOtp | null {

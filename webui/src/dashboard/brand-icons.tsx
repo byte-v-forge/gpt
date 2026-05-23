@@ -2,6 +2,10 @@ export function OpenAIIcon({ size = 18 }: { size?: number }) {
   return <BrandIcon brand="openai" size={size} />;
 }
 
+export function CodexIcon({ size = 18 }: { size?: number }) {
+  return <OpenAIIcon size={size} />;
+}
+
 export function BrandIcon({ brand, size = 18 }: { brand: 'openai' | 'gopay' | 'whatsapp'; size?: number }) {
   if (brand === 'openai') return <OpenAIBrandIcon size={size} />;
   if (brand === 'gopay') return <GoPayWordmarkIcon size={size} />;

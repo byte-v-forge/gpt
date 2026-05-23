@@ -1,15 +1,14 @@
-import { FileKey, Inbox, KeyRound, Search, Trash2, Zap } from 'lucide-react';
-import { ActionButtonGroup, KVList } from '@/dashboard/module-kit';
-import type { ActionButtonDescriptor, KVDescriptor } from '@/dashboard/module-kit';
-import { MailboxOtpPanel, maskEmail } from '@/dashboard/modules/mailbox/sdk';
+import { KVList } from '@/dashboard/module-kit';
+import type { KVDescriptor } from '@/dashboard/module-kit';
+import { maskEmail } from '@/dashboard/modules/mailbox/sdk';
 import {
   formatUnix,
   mask
 } from '@/dashboard/module-kit';
-import { AccountSignalBadge, PaymentChannelIcon } from './account-badges';
+import { AccountSignalBadge } from './account-badges';
+import { AccountDetailActions } from './account-detail-actions';
 import { ActivationChannelEditor, TokenEditor } from './account-detail-editors';
-import { accountInboxHint, canFetchAccountInbox } from './account-mail-utils';
-import { accountSignalText, canGoPayPayment, canLoginSession, canProbeAccount, canRefreshAccessToken, loginActionHint, loginActionLabel, probeAccountHint } from './account-utils';
+import { canFetchAccountInbox } from './account-mail-utils';
 import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
 
 export function AccountDetails({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, activationChannel, onCopy, onFetchInbox, onSessionSave, onAccessSave, onActivationChannelSave, onProbeAccount, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onDelete }: {
@@ -34,69 +33,6 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
   onDelete: (account: Account) => Promise<void>;
 }) {
   const canFetchOTP = canFetchAccountInbox(account, mailboxContext);
-  const accountActions: ActionButtonDescriptor[] = [{
-    id: 'gopay-wa-payment',
-    visible: canGoPayPayment(account),
-    label: '纯WA支付',
-    hint: '只走 GoPay WA 链接支付，不执行 GoPay App 注册/登录/加余额',
-    icon: <span className="activationPaymentIcon"><Zap size={13} /><PaymentChannelIcon channel="wa" /></span>,
-    className: 'activationAction',
-    disabled: busy,
-    onClick: () => onGoPayPayment(account, 'wa'),
-  }, {
-    id: 'codex-oauth-add-phone',
-    visible: canLoginSession(account),
-    label: '生成 auth.json',
-    hint: '自动 OAuth 登录，必要时完成加手机号，产出 auth.json',
-    icon: <FileKey size={14} />,
-    disabled: busy,
-    onClick: () => onCodexOAuthAddPhone(account),
-  }, {
-    id: 'refresh-access-token',
-    visible: canRefreshAccessToken(account),
-    label: refreshingAccessToken ? '获取中' : '自动获取 Access Token',
-    hint: '使用当前 Session 自动获取 Access Token',
-    icon: <KeyRound size={14} />,
-    disabled: busy || refreshingAccessToken,
-    onClick: () => void onRefreshAccessToken(account),
-  }, {
-    id: 'login-session',
-    visible: canLoginSession(account),
-    label: loginActionLabel(account),
-    hint: loginActionHint(account),
-    icon: <KeyRound size={14} />,
-    disabled: busy,
-    onClick: () => onLogin(account),
-  }, {
-    id: 'probe-account',
-    label: '探测账号',
-    hint: probeAccountHint(account),
-    icon: <Search size={14} />,
-    disabled: busy || !canProbeAccount(account),
-    onClick: () => onProbeAccount(account),
-  }, {
-    id: 'fetch-otp',
-    visible: canFetchOTP,
-    label: inboxLoading ? '拉取中' : '拉取 OTP',
-    hint: accountInboxHint(account.email, mailboxContext, showSecrets),
-    icon: <Inbox size={14} />,
-    disabled: busy || inboxLoading,
-    onClick: () => void onFetchInbox(account),
-  }, {
-    id: 'delete-account',
-    label: '删除账号',
-    hint: '删除当前账号记录',
-    icon: <Trash2 size={14} />,
-    variant: 'destructive',
-    disabled: busy,
-    onClick: () => void onDelete(account),
-  }];
-  const summaryFields: KVDescriptor[] = [{
-    id: 'account-status',
-    label: '账号结果',
-    value: accountSignalText(account),
-    copyValue: account.status || '-',
-  }];
   const credentialFields: KVDescriptor[] = [{
     id: 'email',
     label: '邮箱',
@@ -112,6 +48,16 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
     copyDisabled: !account.password,
     masked: !showSecrets,
     mono: true,
+  }];
+  const otpFields: KVDescriptor[] = [{
+    id: 'latest-otp',
+    label: '最新 OTP',
+    value: showSecrets ? (latestOtp?.otp || '-') : mask(latestOtp?.otp || ''),
+    copyValue: latestOtp?.otp || '',
+    copyDisabled: !latestOtp?.otp,
+    copyHint: '暂无 OTP',
+    mono: true,
+    visible: canFetchOTP || !!latestOtp,
   }];
   const codexAuthFields: KVDescriptor[] = [{
     id: 'codex-auth-json',
@@ -142,12 +88,10 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
     <div className="details">
       <section>
         <div className="sectionTitle">
-          <h3>账号</h3>
-          <ActionButtonGroup className="sectionActions" actions={accountActions} />
+          <h3>账号 <AccountSignalBadge account={account} compact /></h3>
         </div>
-        {(canFetchOTP || latestOtp) && <MailboxOtpPanel latestOtp={latestOtp} showSecrets={showSecrets} loading={inboxLoading} compact onCopy={onCopy} />}
-        <AccountSignalBadge account={account} />
-        <KVList items={summaryFields} onCopy={onCopy} />
+        <AccountDetailActions account={account} showSecrets={showSecrets} busy={busy} inboxLoading={inboxLoading} refreshingAccessToken={refreshingAccessToken} mailboxContext={mailboxContext} canFetchOTP={canFetchOTP} onFetchInbox={onFetchInbox} onProbeAccount={onProbeAccount} onLogin={onLogin} onCodexOAuthAddPhone={onCodexOAuthAddPhone} onGoPayPayment={onGoPayPayment} onRefreshAccessToken={onRefreshAccessToken} onDelete={onDelete} />
+        <KVList items={otpFields} onCopy={onCopy} />
         <ActivationChannelEditor account={account} activationChannel={activationChannel} onSave={onActivationChannelSave} />
         <KVList items={credentialFields} onCopy={onCopy} />
         <TokenEditor label="Session" field="session_token" account={account} showSecrets={showSecrets} onCopy={onCopy} onSave={onSessionSave} />

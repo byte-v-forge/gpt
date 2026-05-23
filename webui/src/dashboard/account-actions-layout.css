@@ -166,6 +166,18 @@
   gap: 8px;
 }
 
+.accountHeaderActions {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
+
+.detailOtpCode em {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-style: normal;
+  white-space: nowrap;
+}
+
 .paymentChannelIcon {
   min-width: 31px;
   display: inline-flex;

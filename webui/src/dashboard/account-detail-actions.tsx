@@ -1,5 +1,5 @@
 import { Bug, Copy, Inbox, KeyRound, RefreshCw, Search, Trash2 } from 'lucide-react';
-import { ActionButtonGroup, Button, buttonHint, mask } from '@/dashboard/module-kit';
+import { ActionButtonGroup, Button, buttonHint, formatUnix, mask } from '@/dashboard/module-kit';
 import type { ActionButtonDescriptor } from '@/dashboard/module-kit';
 import { PaymentChannelIcon } from './account-badges';
 import { CodexIcon } from './brand-icons';
@@ -8,31 +8,41 @@ import { canGoPayPayment, canLoginSession, canProbeAccount, canRefreshAccessToke
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
 
-export function AccountDetailActions({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, canFetchOTP, onCopy, onFetchInbox, onProbeAccount, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onDelete }: {
+export function AccountPrimaryActions({ account, busy, refreshingAccessToken, onProbeAccount, onLogin, onCodexOAuthAddPhone, onRefreshAccessToken }: {
+  account: Account;
+  busy: boolean;
+  refreshingAccessToken: boolean;
+  onProbeAccount: (account: Account) => void;
+  onLogin: (account: Account) => void;
+  onCodexOAuthAddPhone: (account: Account) => void;
+  onRefreshAccessToken: (account: Account) => Promise<void>;
+}) {
+  return (
+    <ActionButtonGroup
+      className="sectionActions accountHeaderActions"
+      actions={accountActions(account, busy, refreshingAccessToken, onLogin, onRefreshAccessToken, onCodexOAuthAddPhone, onProbeAccount)}
+    />
+  );
+}
+
+export function AccountDetailActions({ account, showSecrets, busy, inboxLoading, mailboxContext, latestOtp, canFetchOTP, onCopy, onFetchInbox, onGoPayPayment, onDelete }: {
   account: Account;
   showSecrets: boolean;
   busy: boolean;
   inboxLoading: boolean;
-  refreshingAccessToken: boolean;
   mailboxContext: AccountMailboxContext | null;
   latestOtp: LatestOtp | null;
   canFetchOTP: boolean;
   onCopy: (label: string, value: string) => void;
   onFetchInbox: (account: Account) => Promise<void>;
-  onProbeAccount: (account: Account) => void;
-  onLogin: (account: Account) => void;
-  onCodexOAuthAddPhone: (account: Account) => void;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
-  onRefreshAccessToken: (account: Account) => Promise<void>;
   onDelete: (account: Account) => Promise<void>;
 }) {
-  const accountRow = accountActions(account, busy, refreshingAccessToken, onLogin, onRefreshAccessToken, onCodexOAuthAddPhone, onProbeAccount);
   const otpRow = mailboxActions(account, showSecrets, busy, inboxLoading, mailboxContext, canFetchOTP, onFetchInbox);
   const channelRow = channelActions(account, busy, onGoPayPayment);
   const dangerRow = dangerActions(account, busy, onDelete);
   return (
     <div className="detailActionRows">
-      {hasVisibleAction(accountRow) && <ActionRow actions={accountRow} />}
       {(canFetchOTP || latestOtp) && (
         <div className="detailActionRow">
           <span className="detailActionLabel">OTP</span>
@@ -66,6 +76,7 @@ function LatestOTPValue({ latestOtp, showSecrets, onCopy }: {
   return (
     <span className={`detailOtpCode${code ? '' : ' empty'}`}>
       <strong>{code ? (showSecrets ? code : mask(code)) : '暂无 OTP'}</strong>
+      {code && <em>{formatUnix(latestOtp?.received_at_unix || 0)}</em>}
       <Button className="copyButton detailOtpCopy" {...buttonHint('复制 OTP')} disabled={!code} onClick={() => onCopy('OTP', code)}>
         <Copy size={14} />
       </Button>

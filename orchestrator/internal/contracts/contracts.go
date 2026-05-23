@@ -13,7 +13,9 @@ const (
 	ActionGoPayPaymentRebind       = "GOPAY_PAYMENT_REBIND"
 	ActionProbeAccount             = "PROBE_ACCOUNT"
 	ActionLoginSession             = "LOGIN_SESSION"
+	ActionCodexOAuth               = "CODEX_OAUTH"
 	ActionCodexOAuthAddPhone       = "CODEX_OAUTH_ADD_PHONE"
+	ActionCodexOAuthBatchAddPhone  = "CODEX_OAUTH_BATCH_ADD_PHONE"
 	ActionRegisterAndActivate      = "REGISTER_AND_ACTIVATE"
 )
 
@@ -113,8 +115,12 @@ func WorkflowID(action string, jobID string) (string, bool) {
 		return "probe-" + jobID, true
 	case ActionLoginSession:
 		return "login-session-" + jobID, true
+	case ActionCodexOAuth:
+		return "codex-oauth-" + jobID, true
 	case ActionCodexOAuthAddPhone:
 		return "codex-oauth-add-phone-" + jobID, true
+	case ActionCodexOAuthBatchAddPhone:
+		return "codex-oauth-batch-add-phone-" + jobID, true
 	case ActionRegisterAndActivate:
 		return "register-activate-" + jobID, true
 	default:

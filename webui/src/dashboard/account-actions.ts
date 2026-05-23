@@ -90,6 +90,27 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     }
   }
 
+
+  async function runCodexOAuthBatchAddPhone(accounts: Account[]) {
+    if (!accounts.length) {
+      toast.showError('没有未加手机账号');
+      return;
+    }
+    setWorking(true);
+    try {
+      const accountIds = accounts.map((account) => account.account_id).filter(Boolean);
+      const resp = await api<{ job_id?: string; error_message?: string }>('/api/workflows/codex-oauth-add-phone/batch', {
+        method: 'POST',
+        body: JSON.stringify({ account_ids: accountIds })
+      });
+      toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || `add phone 已提交: ${resp.job_id || 'ok'}`);
+      if (!resp.error_message) await data.invalidate();
+    } catch (err) {
+      toast.showError(err);
+    } finally {
+      setWorking(false);
+    }
+  }
   async function updateAccount(account: Account, payload: Record<string, string>, successText: string) {
     setWorking(true);
     try {
@@ -166,12 +187,11 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     toast.showOK('账号已删除');
     await data.invalidate();
   }
-
   function goPayAppInput() {
     return { phone: goPayProfile.data?.wa_phone || '', country_code: '+62', pin: goPayProfile.data?.pin || '' };
   }
 
-  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, syncingMailboxes, refreshing, runWorkflow, runGoPayPayment, submitJobOTP, resendJobOTP, updateAccount, refreshAccessToken, fetchInbox, syncMailboxes, deleteAccount };
+  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, syncingMailboxes, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, submitJobOTP, resendJobOTP, updateAccount, refreshAccessToken, fetchInbox, syncMailboxes, deleteAccount };
 }
 
 function loadGoPayProfile() {

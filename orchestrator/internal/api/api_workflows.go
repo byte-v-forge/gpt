@@ -133,6 +133,23 @@ func (s *Server) LoginAccount(ctx context.Context, req *pb.LoginAccountRequest) 
 	return &pb.LoginAccountResponse{JobId: jobID, Started: true}, nil
 }
 
+func (s *Server) CodexOAuth(ctx context.Context, req *pb.CodexOAuthRequest) (*pb.CodexOAuthResponse, error) {
+	accountID := strings.TrimSpace(req.GetAccountId())
+	if accountID == "" {
+		return &pb.CodexOAuthResponse{ErrorMessage: "account_id is required"}, nil
+	}
+	jobID := uuid.NewString()
+	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionCodexOAuth, jobID)), workflows.CodexOAuthWorkflow, workflows.CodexOAuthWorkflowInput{
+		JobId:     jobID,
+		AccountId: accountID,
+		Label:     strings.TrimSpace(req.GetLabel()),
+	})
+	if err != nil {
+		return &pb.CodexOAuthResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	return &pb.CodexOAuthResponse{JobId: jobID, Started: true}, nil
+}
+
 func (s *Server) CodexOAuthAddPhone(ctx context.Context, req *pb.CodexOAuthAddPhoneRequest) (*pb.CodexOAuthAddPhoneResponse, error) {
 	accountID := strings.TrimSpace(req.GetAccountId())
 	if accountID == "" {
@@ -149,6 +166,38 @@ func (s *Server) CodexOAuthAddPhone(ctx context.Context, req *pb.CodexOAuthAddPh
 		return &pb.CodexOAuthAddPhoneResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
 	}
 	return &pb.CodexOAuthAddPhoneResponse{JobId: jobID, Started: true}, nil
+}
+
+func (s *Server) CodexOAuthBatchAddPhone(ctx context.Context, req *pb.CodexOAuthBatchAddPhoneRequest) (*pb.CodexOAuthBatchAddPhoneResponse, error) {
+	accountIDs := compactAccountIDs(req.GetAccountIds())
+	if len(accountIDs) == 0 {
+		return &pb.CodexOAuthBatchAddPhoneResponse{ErrorMessage: "account_ids is required"}, nil
+	}
+	jobID := uuid.NewString()
+	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionCodexOAuthBatchAddPhone, jobID)), workflows.CodexOAuthBatchAddPhoneWorkflow, workflows.CodexOAuthBatchAddPhoneWorkflowInput{
+		JobId:         jobID,
+		AccountIds:    accountIDs,
+		Label:         strings.TrimSpace(req.GetLabel()),
+		MaxReuseCount: req.GetMaxReuseCount(),
+	})
+	if err != nil {
+		return &pb.CodexOAuthBatchAddPhoneResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	return &pb.CodexOAuthBatchAddPhoneResponse{JobId: jobID, Started: true}, nil
+}
+
+func compactAccountIDs(values []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		accountID := strings.TrimSpace(value)
+		if accountID == "" || seen[accountID] {
+			continue
+		}
+		seen[accountID] = true
+		out = append(out, accountID)
+	}
+	return out
 }
 
 func (s *Server) ProbeAccount(ctx context.Context, req *pb.ProbeAccountRequest) (*pb.ProbeAccountResponse, error) {

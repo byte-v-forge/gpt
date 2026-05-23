@@ -31,6 +31,9 @@ message Account {
   int64 mailbox_latest_otp_received_at_unix = 24;
   string codex_auth_json = 25;
   int64 codex_auth_updated_at_unix = 26;
+  optional bool codex_phone_confirmed = 27;
+  string codex_phone_label = 28;
+  int64 codex_phone_updated_at_unix = 29;
 }
 
 message CreateAccountRequest {

@@ -36,12 +36,10 @@ export type AccountCodexPhoneState = {
   title: string;
 };
 
-export function accountCodexPhoneState(account: Account, jobs: Job[], confirmedOverride?: boolean): AccountCodexPhoneState {
-  if (typeof confirmedOverride === 'boolean') return codexPhoneState(confirmedOverride);
+export function accountCodexPhoneState(account: Account, jobs: Job[]): AccountCodexPhoneState {
   const accountState = account as Account & { codex_phone_confirmed?: boolean; codex_phone_label?: string };
-  if (accountState.codex_phone_confirmed === true) {
-    return codexPhoneState(true, stringValue(accountState.codex_phone_label));
-  }
+  if (accountState.codex_phone_confirmed === true) return codexPhoneState(true, stringValue(accountState.codex_phone_label));
+  if (accountState.codex_phone_confirmed === false) return codexPhoneState(false, stringValue(accountState.codex_phone_label));
   const latest = jobs
     .filter((job) => job.account_id === account.account_id && job.action === 'CODEX_OAUTH_ADD_PHONE')
     .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));

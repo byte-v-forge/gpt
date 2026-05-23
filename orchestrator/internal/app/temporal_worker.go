@@ -28,7 +28,9 @@ func temporalWorkerSpec(taskQueue string, s *activities.Server) workflowruntime.
 			{Name: "GoPayPaymentRebindWorkflow", Definition: workflows.GoPayPaymentRebindWorkflow},
 			{Name: "ProbeAccountWorkflow", Definition: workflows.ProbeAccountWorkflow},
 			{Name: "LoginSessionWorkflow", Definition: workflows.LoginSessionWorkflow},
+			{Name: "CodexOAuthWorkflow", Definition: workflows.CodexOAuthWorkflow},
 			{Name: "CodexOAuthAddPhoneWorkflow", Definition: workflows.CodexOAuthAddPhoneWorkflow},
+			{Name: "CodexOAuthBatchAddPhoneWorkflow", Definition: workflows.CodexOAuthBatchAddPhoneWorkflow},
 			{Name: "RegisterAndActivateWorkflow", Definition: workflows.RegisterAndActivateWorkflow},
 		},
 		Activities: []workflowruntime.ActivityDefinition{

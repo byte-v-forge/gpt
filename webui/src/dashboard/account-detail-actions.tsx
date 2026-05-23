@@ -115,10 +115,10 @@ function accountActions(account: Account, busy: boolean, refreshing: boolean, on
     disabled: busy || refreshing,
     onClick: () => void onRefresh(account),
   }, {
-    id: 'codex-oauth-add-phone',
+    id: 'codex-oauth',
     visible: canLoginSession(account),
     label: '获取 auth.json',
-    hint: '自动 OAuth 登录，必要时完成加手机号，产出 auth.json',
+    hint: '自动 OAuth 登录并产出 auth.json；遇到 add phone 页面会停下报错',
     icon: <CodexIcon size={14} />,
     disabled: busy,
     onClick: () => onAuth(account),

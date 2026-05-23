@@ -669,6 +669,15 @@ func updateMap(account *pb.Account) map[string]interface{} {
 		updates["codex_auth_json"] = value
 		updates["codex_auth_updated_at_unix"] = updatedAt
 	}
+	if account.CodexPhoneConfirmed != nil {
+		updatedAt := account.GetCodexPhoneUpdatedAtUnix()
+		if updatedAt <= 0 {
+			updatedAt = time.Now().Unix()
+		}
+		updates["codex_phone_confirmed"] = account.GetCodexPhoneConfirmed()
+		updates["codex_phone_label"] = strings.TrimSpace(account.GetCodexPhoneLabel())
+		updates["codex_phone_updated_at_unix"] = updatedAt
+	}
 	return updates
 }
 
@@ -702,6 +711,9 @@ func accountToProto(account *db.Account) *pb.Account {
 		MailboxLatestOtpReceivedAtUnix: account.MailboxLatestOTPReceivedAtUnix,
 		CodexAuthJson:                  account.CodexAuthJSON,
 		CodexAuthUpdatedAtUnix:         account.CodexAuthUpdatedAtUnix,
+		CodexPhoneConfirmed:            account.CodexPhoneConfirmed,
+		CodexPhoneLabel:                account.CodexPhoneLabel,
+		CodexPhoneUpdatedAtUnix:        account.CodexPhoneUpdatedAtUnix,
 	}
 }
 

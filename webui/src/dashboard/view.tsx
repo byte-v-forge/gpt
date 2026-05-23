@@ -1,8 +1,7 @@
-import { Eye, EyeOff, RefreshCcw } from 'lucide-react';
+import { Eye, EyeOff, Phone, RefreshCcw } from 'lucide-react';
 import {
-  Button,
-  IconActionButton,
-  PanelHeader
+  PanelHeader,
+  ToolbarIconButton
 } from '@/dashboard/module-kit';
 import type {
   Account,
@@ -13,6 +12,7 @@ import type {
   MailboxDomain
 } from './types';
 import { AccountTable, CreateAccountForm } from './accounts';
+import { accountCodexPhoneState, canLoginSession } from './account-utils';
 import { OpenAIIcon } from './brand-icons';
 import { GoPayActionsPanel } from './gopay-actions';
 import { GoPayStatusCard } from './gopay';
@@ -37,6 +37,7 @@ export type GptAccountsViewProps = {
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (account: Account) => void | Promise<void>;
   onCodexOAuthAddPhone: (account: Account) => void | Promise<void>;
+  onCodexOAuthBatchAddPhone: (accounts: Account[]) => void | Promise<void>;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onRefreshAccessToken: (account: Account) => Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
@@ -47,16 +48,16 @@ export type GptAccountsViewProps = {
 };
 
 export function GptAccountsView(props: GptAccountsViewProps) {
+  const addPhoneAccounts = props.accounts.filter((account) => canLoginSession(account) && !accountCodexPhoneState(account, props.jobs).confirmed);
   return (
     <section className="workspace singlePaneWorkspace">
       <div className="panel">
         <PanelHeader title="GPT账号" icon={<OpenAIIcon size={16} />}>
           <div className="headerControls accountHeaderControls">
             <CreateAccountForm compact domains={props.mailboxDomains} onDone={props.onCreateDone} onError={props.onError} />
-            <Button className="secondaryButton" onClick={() => void props.onSyncMailboxes()} disabled={props.busy || props.mailboxSyncing}>
-              <RefreshCcw size={15} /> {props.mailboxSyncing ? '同步中' : '同步邮箱'}
-            </Button>
-            <IconActionButton label={props.showSecrets ? '隐藏敏感信息' : '显示敏感信息'} icon={props.showSecrets ? <EyeOff size={15} /> : <Eye size={15} />} onClick={props.onToggleSecrets} />
+            <ToolbarIconButton label={`add phone · ${addPhoneAccounts.length} 个未加手机账号`} icon={<Phone size={15} />} disabled={props.busy || !addPhoneAccounts.length} onClick={() => void props.onCodexOAuthBatchAddPhone(addPhoneAccounts)} />
+            <ToolbarIconButton label={props.mailboxSyncing ? '同步邮箱中' : '同步邮箱'} icon={<RefreshCcw size={15} />} disabled={props.busy || props.mailboxSyncing} onClick={() => void props.onSyncMailboxes()} />
+            <ToolbarIconButton label={props.showSecrets ? '隐藏敏感信息' : '显示敏感信息'} icon={props.showSecrets ? <EyeOff size={15} /> : <Eye size={15} />} onClick={props.onToggleSecrets} />
           </div>
         </PanelHeader>
         <AccountTable
@@ -101,9 +102,7 @@ export function GoPayLabView(props: GoPayLabViewProps) {
     <section className="workspace singlePaneWorkspace">
       <div className="panel">
         <PanelHeader title="GoPay" icon={<RefreshCcw size={16} />}>
-          <Button className="secondaryButton" onClick={() => void props.onLoadState(true)} disabled={props.loading}>
-            <RefreshCcw size={16} /> {props.loading ? '刷新中' : '刷新 state'}
-          </Button>
+          <ToolbarIconButton label={props.loading ? '刷新 state 中' : '刷新 state'} icon={<RefreshCcw size={16} />} disabled={props.loading} onClick={() => void props.onLoadState(true)} />
         </PanelHeader>
         <GoPayStatusCard state={props.state} currentJob={props.currentJob} loading={props.loading} />
         <GoPayActionsPanel

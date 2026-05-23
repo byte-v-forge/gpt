@@ -16,7 +16,9 @@ const (
 	actionGoPayPaymentRebind       = contracts.ActionGoPayPaymentRebind
 	actionProbeAccount             = contracts.ActionProbeAccount
 	actionLoginSession             = contracts.ActionLoginSession
+	actionCodexOAuth               = contracts.ActionCodexOAuth
 	actionCodexOAuthAddPhone       = contracts.ActionCodexOAuthAddPhone
+	actionCodexOAuthBatchAddPhone  = contracts.ActionCodexOAuthBatchAddPhone
 	actionRegisterAndActivate      = contracts.ActionRegisterAndActivate
 
 	statusRunning           = jobstatus.Running

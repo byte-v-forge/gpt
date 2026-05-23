@@ -49,12 +49,12 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
 }) {
   return (
     <RecordList className="accountsList" emptyText="暂无账号。可以先创建账号，或切换为全部状态查看。">
-      {accounts.map((account, index) => {
+      {accounts.map((account) => {
         const accountBusy = runningAccountIds.has(account.account_id);
         const currentWorkflow = runningWorkflowByAccountID.get(account.account_id);
         const refreshingAccessToken = refreshingAccessTokenIds.has(account.account_id);
         const activationChannel = accountActivationChannel(account, jobs);
-        const phoneState = accountCodexPhoneState(account, jobs, index >= 3);
+        const phoneState = accountCodexPhoneState(account, jobs);
         return (
           <RecordCard key={account.account_id} selected={selected === account.account_id} onClick={() => onSelect(account)}>
             <RecordMain>

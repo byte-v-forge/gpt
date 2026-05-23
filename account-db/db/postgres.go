@@ -36,6 +36,9 @@ type Account struct {
 	MailboxLatestOTPReceivedAtUnix int64
 	CodexAuthJSON                  string `gorm:"column:codex_auth_json"`
 	CodexAuthUpdatedAtUnix         int64  `gorm:"column:codex_auth_updated_at_unix"`
+	CodexPhoneConfirmed            *bool  `gorm:"column:codex_phone_confirmed"`
+	CodexPhoneLabel                string `gorm:"column:codex_phone_label"`
+	CodexPhoneUpdatedAtUnix        int64  `gorm:"column:codex_phone_updated_at_unix"`
 	CreatedAt                      int64  `gorm:"autoCreateTime"`
 	UpdatedAt                      int64  `gorm:"autoUpdateTime"`
 }
@@ -80,6 +83,9 @@ func InitDB() *gorm.DB {
 	}
 	if err := backfillCodexAuthJSONFromRuntimeSecrets(db); err != nil {
 		log.Printf("failed to backfill codex auth json from runtime secrets: %v", err)
+	}
+	if err := backfillCodexPhoneConfirmed(db); err != nil {
+		log.Printf("failed to backfill codex phone state: %v", err)
 	}
 
 	return db
@@ -196,6 +202,24 @@ func backfillGPTEmailAllocationsFromAccounts(db *gorm.DB) error {
 			AND alias_row.primary_email = primary_row.email
 			AND alias_row.is_primary = false
 			AND alias_row.status = 'AVAILABLE'
+	`).Error
+}
+
+func backfillCodexPhoneConfirmed(db *gorm.DB) error {
+	return db.Exec(`
+		WITH ranked AS (
+			SELECT id, row_number() OVER (ORDER BY created_at DESC, id DESC) AS rn
+			FROM accounts
+		)
+		UPDATE accounts
+		SET
+			codex_phone_confirmed = true,
+			codex_phone_label = CASE WHEN COALESCE(codex_phone_label, '') = '' THEN 'backfill-existing' ELSE codex_phone_label END,
+			codex_phone_updated_at_unix = CASE WHEN COALESCE(codex_phone_updated_at_unix, 0) = 0 THEN EXTRACT(EPOCH FROM NOW())::BIGINT ELSE codex_phone_updated_at_unix END
+		FROM ranked
+		WHERE accounts.id = ranked.id
+			AND ranked.rn > 3
+			AND codex_phone_confirmed IS NULL
 	`).Error
 }
 

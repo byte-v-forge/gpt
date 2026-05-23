@@ -134,10 +134,6 @@ func goPaySMSPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInp
 		}
 		attemptData["device_proxy"] = protoDataMap(deviceProxy.GetData())
 		combined["device_proxy"] = protoDataMap(deviceProxy.GetData())
-		if egressSize := int(deviceProxy.GetDynamicEgressSize()); egressSize > maxSignupAttempts {
-			maxSignupAttempts = egressSize
-			attemptData["max_attempts"] = maxSignupAttempts
-		}
 		stateJSON = strings.TrimSpace(deviceProxy.GetStateJson())
 		if stateJSON == "" {
 			err := fmt.Errorf("generated device proxy state_json missing")

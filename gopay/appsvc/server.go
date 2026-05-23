@@ -149,21 +149,49 @@ func (s *Server) proxyForAttempt(attempt int, state stateMap) (string, int, int,
 	if attempt < 1 {
 		attempt = 1
 	}
-	if attempt > len(s.cfg.DynamicEgress) {
-		return "", 0, len(s.cfg.DynamicEgress), fmt.Errorf("GOPAY_DYNAMIC_EGRESS exhausted before login methods succeeded")
+	base := s.proxyIndex(stateString(state, "_gopay_proxy_attempt_base"))
+	if base < 0 {
+		base = s.proxyIndex(stateString(state, "_gopay_proxy"))
 	}
-	current := s.proxyIndex(stateString(state, "_gopay_proxy"))
-	index := 0
-	if current >= 0 && attempt <= 1 {
-		index = current
-	} else if current >= 0 {
-		index = (current + 1) % len(s.cfg.DynamicEgress)
+	if base < 0 {
+		base = 0
+	}
+	index := (base + attempt - 1) % len(s.cfg.DynamicEgress)
+	if state != nil {
+		state["_gopay_proxy_attempt_base"] = s.cfg.DynamicEgress[base]
+	}
+	if state != nil && attempt > 1 && index == base {
+		state["_gopay_proxy_reused_with_rotated_session"] = true
+		state["_gopay_proxy_reuse_attempt"] = attempt
 	}
 	proxyURL := s.cfg.DynamicEgress[index]
 	if state != nil {
 		state["_gopay_proxy"] = proxyURL
 	}
 	return proxyURL, index + 1, len(s.cfg.DynamicEgress), nil
+}
+
+func (s *Server) rotateLoginAttemptIdentity(ctx context.Context, state stateMap) error {
+	if state == nil {
+		return nil
+	}
+	sessionData, err := s.createProxyRuntimeSession(ctx)
+	if err != nil {
+		return err
+	}
+	for key, value := range sessionData {
+		state[key] = value
+	}
+	if len(sessionData) > 0 {
+		state["_proxy_runtime_session_rotated_for_login"] = true
+	}
+	_, rawDevice, err := s.newLogonDevice()
+	if err != nil {
+		return err
+	}
+	state["device"] = rawDevice
+	state["_device_rotated_for_login"] = true
+	return nil
 }
 
 func (s *Server) proxyForState(state stateMap) string {
@@ -281,13 +309,6 @@ func deviceFingerprintForState(state stateMap) string {
 func shortHash(value string) string {
 	hash := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(hash[:])[:12]
-}
-
-func (s *Server) proxyAttemptLimit() int {
-	if len(s.cfg.DynamicEgress) > 0 {
-		return len(s.cfg.DynamicEgress)
-	}
-	return 1
 }
 
 func (s *Server) proxyIndex(value string) int {

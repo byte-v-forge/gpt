@@ -11,6 +11,8 @@ import (
 	gopayapp "github.com/byte-v-forge/gpt/gopay/protocol/app"
 )
 
+const loginMethodsMaxAttempts = 3
+
 var (
 	loginStateKeys = []string{
 		"_login_phone", "_login_country_code", "_login_verification_id",
@@ -72,7 +74,7 @@ func (s *Server) checkPhoneByLoginMethods(ctx context.Context, phone, countryCod
 		return s.checkPhoneResult(proxyState, map[string]any{"success": true, "available": true, "status": "available", "attempts": 1})
 	}
 	if isRateLimited(resp) {
-		return s.checkPhoneResult(proxyState, map[string]any{"success": false, "available": false, "status": "rate_limited", "error": loginMethodsRateLimitedError(1, len(s.cfg.DynamicEgress)), "attempts": 1})
+		return s.checkPhoneResult(proxyState, map[string]any{"success": false, "available": false, "status": "rate_limited", "error": loginMethodsRateLimitedError(), "attempts": 1})
 	}
 	return s.checkPhoneResult(proxyState, map[string]any{"success": false, "available": false, "status": "error", "error": apiError("login methods failed", resp), "attempts": 1})
 }
@@ -91,13 +93,18 @@ func (s *Server) checkPhoneResult(state stateMap, data map[string]any) map[strin
 func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, countryCode, otpChannel string) map[string]any {
 	cc := phoneCountryCode(s.cfg, countryCode)
 	normalized := normalizePhoneWithConfig(s.cfg, phone, cc)
-	attempts := s.proxyAttemptLimit()
+	attempts := loginMethodsMaxAttempts
 	var resp *protocol.Response
 	var client *gopayapp.Client
 	var methods []string
 	var defaultMethod string
 	var verificationID string
 	for attempt := 1; attempt <= attempts; attempt++ {
+		if attempt > 1 {
+			if err := s.rotateLoginAttemptIdentity(ctx, state); err != nil {
+				return map[string]any{"success": false, "error": err.Error()}
+			}
+		}
 		proxyURL, _, _, err := s.proxyForAttempt(attempt, state)
 		if err != nil {
 			return map[string]any{"success": false, "error": err.Error()}
@@ -147,7 +154,7 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 			continue
 		}
 		if isRateLimited(resp) {
-			return map[string]any{"success": false, "error": loginMethodsRateLimitedError(attempts, len(s.cfg.DynamicEgress))}
+			return map[string]any{"success": false, "error": loginMethodsRateLimitedError()}
 		}
 		if loginMethodsInvalidUser(resp) {
 			return map[string]any{"success": false, "not_registered": true, "error": apiError("login methods failed", resp)}

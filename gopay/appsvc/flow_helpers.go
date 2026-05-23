@@ -292,8 +292,8 @@ func retryableGoPayTransportError(err error) bool {
 		strings.Contains(text, "timeout")
 }
 
-func loginMethodsRateLimitedError(attempts, proxyCount int) string {
-	return "GOPAY_DYNAMIC_EGRESS exhausted before login methods succeeded"
+func loginMethodsRateLimitedError() string {
+	return "GoPay login methods still rate limited after identity rotation"
 }
 
 func loginMethodsBackoff(attempt int) time.Duration {

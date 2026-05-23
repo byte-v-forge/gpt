@@ -3,6 +3,16 @@
   min-width: 74px;
 }
 
+.accountsList .recordActions.rowActions {
+  width: 100%;
+  justify-content: flex-start;
+  justify-items: stretch;
+}
+
+.accountsList .recordActions.rowActions > .rowActionsMain {
+  justify-self: stretch;
+}
+
 .splitRowActions {
   width: 100%;
   justify-content: flex-start;

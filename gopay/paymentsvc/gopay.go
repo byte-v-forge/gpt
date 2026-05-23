@@ -39,18 +39,19 @@ func (c *charger) gopayPINHeaders(linking bool) http.Header {
 }
 
 func (c *charger) paymentAttemptHeaders(base http.Header) (http.Header, error) {
-	fingerprint := randomPaymentBrowserFingerprint(c.cfg.BrowserLocale)
-	if c.ext != nil {
-		if err := c.ext.rotateFingerprint(fingerprint); err != nil {
-			return nil, err
-		}
-	}
 	headers := cloneHeader(base)
-	mergeHeader(headers, fingerprint.newAttemptHeaders())
+	mergeHeader(headers, c.paymentFingerprint().newAttemptHeaders())
 	headers.Set("sec-fetch-dest", "empty")
 	headers.Set("sec-fetch-mode", "cors")
 	headers.Set("sec-fetch-site", "same-origin")
 	return headers, nil
+}
+
+func (c *charger) paymentFingerprint() browserFingerprint {
+	if c != nil && c.ext != nil {
+		return c.ext.fingerprint.withFallback(c.cfg.BrowserLocale)
+	}
+	return randomPaymentBrowserFingerprint(defaultBrowserLocale)
 }
 
 func (c *charger) startLinkingUntilOTP(ctx context.Context, snapToken, csID, stripePK, otpChannel string) (map[string]any, error) {
@@ -304,9 +305,8 @@ func (c *charger) midtransCreateCharge(ctx context.Context, snapToken string) (*
 	}
 	var last *httpResult
 	lastErr := ""
-	usedFingerprints := map[string]bool{}
 	for _, body := range attempts {
-		headers, err := c.midtransChargeAttemptHeaders(baseHeaders, usedFingerprints)
+		headers, err := c.midtransChargeAttemptHeaders(baseHeaders)
 		if err != nil {
 			return nil, err
 		}
@@ -335,37 +335,13 @@ func (c *charger) midtransCreateCharge(ctx context.Context, snapToken string) (*
 	return nil, fmt.Errorf("midtrans charge %d: %s", last.status, last.excerpt(500))
 }
 
-func (c *charger) midtransChargeAttemptHeaders(base http.Header, used map[string]bool) (http.Header, error) {
-	fingerprint := c.nextPaymentAttemptFingerprint(used)
-	if c.ext != nil {
-		if err := c.ext.rotateFingerprint(fingerprint); err != nil {
-			return nil, err
-		}
-	}
+func (c *charger) midtransChargeAttemptHeaders(base http.Header) (http.Header, error) {
 	headers := cloneHeader(base)
-	mergeHeader(headers, fingerprint.newAttemptHeaders())
+	mergeHeader(headers, c.paymentFingerprint().newAttemptHeaders())
 	headers.Set("sec-fetch-dest", "empty")
 	headers.Set("sec-fetch-mode", "cors")
 	headers.Set("sec-fetch-site", "same-origin")
 	return headers, nil
-}
-
-func (c *charger) nextPaymentAttemptFingerprint(used map[string]bool) browserFingerprint {
-	var fingerprint browserFingerprint
-	for attempt := 0; attempt < 16; attempt++ {
-		fingerprint = randomPaymentBrowserFingerprint(c.cfg.BrowserLocale)
-		key := fingerprint.TLSProfileName + "|" + fingerprint.UserAgent
-		if used == nil || !used[key] {
-			if used != nil {
-				used[key] = true
-			}
-			return fingerprint
-		}
-	}
-	if used != nil {
-		used[fingerprint.TLSProfileName+"|"+fingerprint.UserAgent] = true
-	}
-	return fingerprint
 }
 
 func (c *charger) gopayPaymentValidate(ctx context.Context, chargeRef string) error {

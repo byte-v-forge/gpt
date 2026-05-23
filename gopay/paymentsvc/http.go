@@ -82,15 +82,6 @@ func (s *httpSession) rebuildClient(fingerprint browserFingerprint) error {
 	return nil
 }
 
-func (s *httpSession) rotateFingerprint(fingerprint browserFingerprint) error {
-	if s == nil {
-		return fmt.Errorf("http session is nil")
-	}
-	fingerprint = fingerprint.withFallback(defaultBrowserLocale)
-	fingerprint.applyBrowserHeaders(s.headers)
-	return s.rebuildClient(fingerprint)
-}
-
 func (s *httpSession) close() {
 	if s != nil && s.client != nil {
 		s.client.CloseIdleConnections()

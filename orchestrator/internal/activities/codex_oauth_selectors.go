@@ -48,6 +48,21 @@ func codexOAuthStageSelectorGroup(timeout time.Duration) *browserautomationv1.Br
 	)
 }
 
+func codexOAuthPostPasswordSelectorGroup(timeout time.Duration) *browserautomationv1.BrowserSelectorGroup {
+	return selectorGroup(timeout,
+		browserAuthLoginOTPSelector(),
+		codexOAuthPhoneInputSelector(),
+		codexOAuthConsentSignalSelector(),
+	)
+}
+
+func codexOAuthPostEmailOTPSelectorGroup(timeout time.Duration) *browserautomationv1.BrowserSelectorGroup {
+	return selectorGroup(timeout,
+		codexOAuthPhoneInputSelector(),
+		codexOAuthConsentSignalSelector(),
+	)
+}
+
 func waitForURLCommand(commandID, pattern string, exact bool, timeout time.Duration, continueOnError bool) *browserautomationv1.BrowserCommand {
 	return &browserautomationv1.BrowserCommand{
 		CommandId:       commandID,

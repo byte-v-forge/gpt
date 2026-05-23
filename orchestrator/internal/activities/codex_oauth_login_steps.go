@@ -87,16 +87,19 @@ func (f *browserAuthFlow) submitCodexOAuthPassword(client browserautomationv1.Br
 		waitForSelectorCommand("wait-password-input", browserAuthLoginPasswordSelector(), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 20*time.Second, false),
 		fillCommand("fill-password", browserAuthLoginPasswordSelector(), password, 10*time.Second, false),
 		clickCommand("click-password-continue", browserAuthEmailSubmitSelector(), 10*time.Second, false),
-		waitForSelectorGroupCommand("wait-post-password", codexOAuthStageSelectorGroup(60*time.Second), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 60*time.Second, true),
+		waitTimeoutCommand("wait-after-password", time.Second),
+		waitForURLCommand("wait-password-callback-url", "http://localhost:*/auth/callback*", false, 5*time.Second, true),
+		waitForSelectorGroupCommand("wait-post-password", codexOAuthPostPasswordSelectorGroup(60*time.Second), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 60*time.Second, true),
 		getPageStateCommand("password-state", true, true, false, 5*time.Second),
 	})
 	if err != nil {
 		return issuedAfter, err
 	}
-	if browserAuthCommandSucceeded(results, "wait-post-password") {
+	state := browserAuthPageStateData(results, "password-state")
+	if browserAuthAnyCommandSucceeded(results, "wait-password-callback-url", "wait-post-password") || browserAuthPageHasAny(state, "/auth/callback") {
 		return issuedAfter, nil
 	}
-	return issuedAfter, browserAuthStepError(f.mode, "password", "next_step_missing", browserAuthPageStateData(results, "password-state"))
+	return issuedAfter, browserAuthStepError(f.mode, "password", "next_step_missing", state)
 }
 
 func (s *Server) waitCodexOAuthEmailOTP(ctx context.Context, _ string, email string, issuedAfter int64) (string, error) {
@@ -130,14 +133,17 @@ func (f *browserAuthFlow) submitCodexOAuthOTP(client browserautomationv1.Browser
 		waitForSelectorCommand("wait-email-otp", browserAuthLoginOTPSelector(), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 20*time.Second, false),
 		fillCommand("fill-email-otp", browserAuthLoginOTPSelector(), otp, 10*time.Second, false),
 		clickCommand("click-email-otp-continue", browserAuthEmailSubmitSelector(), 10*time.Second, false),
-		waitForSelectorGroupCommand("wait-post-email-otp", codexOAuthStageSelectorGroup(60*time.Second), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 60*time.Second, true),
+		waitTimeoutCommand("wait-after-email-otp", time.Second),
+		waitForURLCommand("wait-email-otp-callback-url", "http://localhost:*/auth/callback*", false, 5*time.Second, true),
+		waitForSelectorGroupCommand("wait-post-email-otp", codexOAuthPostEmailOTPSelectorGroup(60*time.Second), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 60*time.Second, true),
 		getPageStateCommand("email-otp-state", true, true, false, 5*time.Second),
 	})
 	if err != nil {
 		return err
 	}
-	if browserAuthCommandSucceeded(results, "wait-post-email-otp") {
+	state := browserAuthPageStateData(results, "email-otp-state")
+	if browserAuthAnyCommandSucceeded(results, "wait-email-otp-callback-url", "wait-post-email-otp") || browserAuthPageHasAny(state, "/auth/callback") {
 		return nil
 	}
-	return browserAuthStepError(f.mode, "email_otp", "next_step_missing", browserAuthPageStateData(results, "email-otp-state"))
+	return browserAuthStepError(f.mode, "email_otp", "next_step_missing", state)
 }

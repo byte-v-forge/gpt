@@ -1,6 +1,7 @@
 package activities
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -18,6 +19,8 @@ func (f *browserAuthFlow) completeCodexOAuthConsentAndCallback(client browseraut
 		}); err != nil {
 			return "", err
 		}
+	} else if stage != "callback" {
+		return "", fmt.Errorf("codex oauth callback stage not ready: %s", stage)
 	}
 	results, err := f.execute(client, cfg, "codex-oauth-callback", []*browserautomationv1.BrowserCommand{
 		waitForURLCommand("wait-callback-url", "http://localhost:*/auth/callback*", false, 90*time.Second, true),

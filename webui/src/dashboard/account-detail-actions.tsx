@@ -25,7 +25,7 @@ export function AccountPrimaryActions({ account, busy, refreshingAccessToken, on
   );
 }
 
-export function AccountDetailActions({ account, showSecrets, busy, inboxLoading, mailboxContext, latestOtp, canFetchOTP, onCopy, onFetchInbox, onGoPayPayment, onDelete }: {
+export function AccountDetailActions({ account, showSecrets, busy, inboxLoading, mailboxContext, latestOtp, canFetchOTP, onCopy, onFetchInbox, onGoPayPayment }: {
   account: Account;
   showSecrets: boolean;
   busy: boolean;
@@ -36,11 +36,9 @@ export function AccountDetailActions({ account, showSecrets, busy, inboxLoading,
   onCopy: (label: string, value: string) => void;
   onFetchInbox: (account: Account) => Promise<void>;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
-  onDelete: (account: Account) => Promise<void>;
 }) {
   const otpRow = mailboxActions(account, showSecrets, busy, inboxLoading, mailboxContext, canFetchOTP, onFetchInbox);
   const channelRow = channelActions(account, busy, onGoPayPayment);
-  const dangerRow = dangerActions(account, busy, onDelete);
   return (
     <div className="detailActionRows">
       {(canFetchOTP || latestOtp) && (
@@ -53,7 +51,18 @@ export function AccountDetailActions({ account, showSecrets, busy, inboxLoading,
         </div>
       )}
       {hasVisibleAction(channelRow) && <ActionRow label="激活" actions={channelRow} />}
-      {hasVisibleAction(dangerRow) && <ActionRow label="危险" actions={dangerRow} />}
+    </div>
+  );
+}
+
+export function AccountDangerActions({ account, busy, onDelete }: {
+  account: Account;
+  busy: boolean;
+  onDelete: (account: Account) => Promise<void>;
+}) {
+  return (
+    <div className="detailActionRows bottomActionRows">
+      <ActionRow label="危险" actions={dangerActions(account, busy, onDelete)} />
     </div>
   );
 }

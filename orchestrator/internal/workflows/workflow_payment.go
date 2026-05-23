@@ -351,45 +351,11 @@ func prepareGoPayPayment(ctx workflow.Context, paymentCtx workflow.Context, inpu
 		return mergeGoPayPaymentPrepareOutput(checkout, link, nil), err
 	}
 	if link.GetRetryableFreshCheckout() {
-		if workflow.GetVersion(ctx, "gopay-payment-fresh-checkout-without-refresh", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
-			input.PreparedFlowId = paymentFlowID(link.GetFlowId(), checkout.GetFlowId())
-			var refresh GoPayPaymentPrepareOutput
-			if err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareRefreshActivityName, input).Get(ctx, &refresh); err != nil {
-				return mergeGoPayPaymentPrepareOutput(checkout, link, &refresh), err
-			}
-			input.PreparedFlowId = paymentFlowID(refresh.GetFlowId(), input.GetPreparedFlowId())
-			input.CheckoutUrl = refresh.GetCheckoutUrl()
-			input.CheckoutSessionId = refresh.GetCheckoutSessionId()
-			var retryLink GoPayPaymentPrepareOutput
-			if err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareLinkActivityName, input).Get(ctx, &retryLink); err != nil {
-				return mergeGoPayPaymentPrepareOutput(refresh, retryLink, nil), err
-			}
-			if retryLink.GetRetryableFreshCheckout() {
-				return mergeGoPayPaymentPrepareOutput(refresh, retryLink, nil), fmt.Errorf("payment prepare link blocked after fresh checkout retry")
-			}
-			return mergeGoPayPaymentPrepareOutput(refresh, retryLink, nil), nil
+		message := strings.TrimSpace(stringMapValue(protoDataMap(link.GetData()), "error_message"))
+		if message == "" {
+			message = "chatgpt approve blocked"
 		}
-
-		cancelGoPayPayment(ctx, paymentCtx, paymentFlowID(link.GetFlowId(), checkout.GetFlowId()))
-		freshInput := input
-		freshInput.PreparedFlowId = ""
-		freshInput.CheckoutUrl = ""
-		freshInput.CheckoutSessionId = ""
-		var freshCheckout GoPayPaymentPrepareOutput
-		if err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareCheckoutActivityName, freshInput).Get(ctx, &freshCheckout); err != nil {
-			return mergeGoPayPaymentPrepareOutputWithExtra(checkout, link, &freshCheckout, "prepare_checkout_retry"), err
-		}
-		input.PreparedFlowId = freshCheckout.GetFlowId()
-		input.CheckoutUrl = freshCheckout.GetCheckoutUrl()
-		input.CheckoutSessionId = freshCheckout.GetCheckoutSessionId()
-		var retryLink GoPayPaymentPrepareOutput
-		if err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareLinkActivityName, input).Get(ctx, &retryLink); err != nil {
-			return mergeGoPayPaymentPrepareOutputWithExtra(freshCheckout, retryLink, nil, ""), err
-		}
-		if retryLink.GetRetryableFreshCheckout() {
-			return mergeGoPayPaymentPrepareOutputWithExtra(freshCheckout, retryLink, nil, ""), fmt.Errorf("payment prepare link blocked after fresh checkout retry")
-		}
-		return mergeGoPayPaymentPrepareOutputWithExtra(freshCheckout, retryLink, nil, ""), nil
+		return mergeGoPayPaymentPrepareOutput(checkout, link, nil), fmt.Errorf("payment prepare link blocked: %s", message)
 	}
 	return mergeGoPayPaymentPrepareOutput(checkout, link, nil), nil
 }

@@ -1,21 +1,23 @@
-import { Bug, Inbox, KeyRound, RefreshCw, Search, Trash2 } from 'lucide-react';
-import { ActionButtonGroup } from '@/dashboard/module-kit';
+import { Bug, Copy, Inbox, KeyRound, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { ActionButtonGroup, Button, buttonHint, mask } from '@/dashboard/module-kit';
 import type { ActionButtonDescriptor } from '@/dashboard/module-kit';
 import { PaymentChannelIcon } from './account-badges';
 import { CodexIcon } from './brand-icons';
 import { accountInboxHint } from './account-mail-utils';
 import { canGoPayPayment, canLoginSession, canProbeAccount, canRefreshAccessToken, loginActionHint, loginActionLabel, probeAccountHint } from './account-utils';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
-import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel } from './types';
+import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
 
-export function AccountDetailActions({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, canFetchOTP, onFetchInbox, onProbeAccount, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onDelete }: {
+export function AccountDetailActions({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, canFetchOTP, onCopy, onFetchInbox, onProbeAccount, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onDelete }: {
   account: Account;
   showSecrets: boolean;
   busy: boolean;
   inboxLoading: boolean;
   refreshingAccessToken: boolean;
   mailboxContext: AccountMailboxContext | null;
+  latestOtp: LatestOtp | null;
   canFetchOTP: boolean;
+  onCopy: (label: string, value: string) => void;
   onFetchInbox: (account: Account) => Promise<void>;
   onProbeAccount: (account: Account) => void;
   onLogin: (account: Account) => void;
@@ -24,29 +26,55 @@ export function AccountDetailActions({ account, showSecrets, busy, inboxLoading,
   onRefreshAccessToken: (account: Account) => Promise<void>;
   onDelete: (account: Account) => Promise<void>;
 }) {
-  const rows = [{
-    title: '账号',
-    actions: accountActions(account, busy, refreshingAccessToken, onLogin, onRefreshAccessToken, onCodexOAuthAddPhone, onProbeAccount),
-  }, {
-    title: 'OTP',
-    actions: mailboxActions(account, showSecrets, busy, inboxLoading, mailboxContext, canFetchOTP, onFetchInbox),
-  }, {
-    title: '渠道',
-    actions: channelActions(account, busy, onGoPayPayment),
-  }, {
-    title: '危险',
-    actions: dangerActions(account, busy, onDelete),
-  }];
+  const accountRow = accountActions(account, busy, refreshingAccessToken, onLogin, onRefreshAccessToken, onCodexOAuthAddPhone, onProbeAccount);
+  const otpRow = mailboxActions(account, showSecrets, busy, inboxLoading, mailboxContext, canFetchOTP, onFetchInbox);
+  const channelRow = channelActions(account, busy, onGoPayPayment);
+  const dangerRow = dangerActions(account, busy, onDelete);
   return (
     <div className="detailActionRows">
-      {rows.map((row) => row.actions.some((action) => action.visible !== false) && (
-        <div className="detailActionRow" key={row.title}>
-          <span className="detailActionLabel">{row.title}</span>
-          <ActionButtonGroup className="sectionActions" actions={row.actions} />
+      {hasVisibleAction(accountRow) && <ActionRow actions={accountRow} />}
+      {(canFetchOTP || latestOtp) && (
+        <div className="detailActionRow">
+          <span className="detailActionLabel">OTP</span>
+          <div className="detailActionContent">
+            <LatestOTPValue latestOtp={latestOtp} showSecrets={showSecrets} onCopy={onCopy} />
+            <ActionButtonGroup className="sectionActions" actions={otpRow} />
+          </div>
         </div>
-      ))}
+      )}
+      {hasVisibleAction(channelRow) && <ActionRow label="激活" actions={channelRow} />}
+      {hasVisibleAction(dangerRow) && <ActionRow label="危险" actions={dangerRow} />}
     </div>
   );
+}
+
+function ActionRow({ label, actions }: { label?: string; actions: ActionButtonDescriptor[] }) {
+  return (
+    <div className={`detailActionRow${label ? '' : ' unlabeled'}`}>
+      {label && <span className="detailActionLabel">{label}</span>}
+      <ActionButtonGroup className="sectionActions" actions={actions} />
+    </div>
+  );
+}
+
+function LatestOTPValue({ latestOtp, showSecrets, onCopy }: {
+  latestOtp: LatestOtp | null;
+  showSecrets: boolean;
+  onCopy: (label: string, value: string) => void;
+}) {
+  const code = latestOtp?.otp || '';
+  return (
+    <span className={`detailOtpCode${code ? '' : ' empty'}`}>
+      <strong>{code ? (showSecrets ? code : mask(code)) : '暂无 OTP'}</strong>
+      <Button className="copyButton detailOtpCopy" {...buttonHint('复制 OTP')} disabled={!code} onClick={() => onCopy('OTP', code)}>
+        <Copy size={14} />
+      </Button>
+    </span>
+  );
+}
+
+function hasVisibleAction(actions: ActionButtonDescriptor[]) {
+  return actions.some((action) => action.visible !== false);
 }
 
 function accountActions(account: Account, busy: boolean, refreshing: boolean, onLogin: (account: Account) => void, onRefresh: (account: Account) => Promise<void>, onAuth: (account: Account) => void, onProbe: (account: Account) => void): ActionButtonDescriptor[] {

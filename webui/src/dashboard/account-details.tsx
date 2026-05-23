@@ -5,13 +5,13 @@ import {
   formatUnix,
   mask
 } from '@/dashboard/module-kit';
-import { AccountSignalBadge } from './account-badges';
+import { AccountChannelTag, AccountSignalBadge } from './account-badges';
 import { AccountDetailActions } from './account-detail-actions';
-import { ActivationChannelEditor, TokenEditor } from './account-detail-editors';
+import { TokenEditor } from './account-detail-editors';
 import { canFetchAccountInbox } from './account-mail-utils';
 import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
 
-export function AccountDetails({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, activationChannel, onCopy, onFetchInbox, onSessionSave, onAccessSave, onActivationChannelSave, onProbeAccount, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onDelete }: {
+export function AccountDetails({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, activationChannel, onCopy, onFetchInbox, onSessionSave, onAccessSave, onProbeAccount, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onDelete }: {
   account: Account;
   showSecrets: boolean;
   busy: boolean;
@@ -24,7 +24,6 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
   onFetchInbox: (account: Account) => Promise<void>;
   onSessionSave: (account: Account, sessionToken: string) => Promise<void>;
   onAccessSave: (account: Account, accessToken: string) => Promise<void>;
-  onActivationChannelSave: (account: Account, activationChannel: string) => Promise<void>;
   onProbeAccount: (account: Account) => void;
   onLogin: (account: Account) => void;
   onCodexOAuthAddPhone: (account: Account) => void;
@@ -48,16 +47,6 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
     copyDisabled: !account.password,
     masked: !showSecrets,
     mono: true,
-  }];
-  const otpFields: KVDescriptor[] = [{
-    id: 'latest-otp',
-    label: '最新 OTP',
-    value: showSecrets ? (latestOtp?.otp || '-') : mask(latestOtp?.otp || ''),
-    copyValue: latestOtp?.otp || '',
-    copyDisabled: !latestOtp?.otp,
-    copyHint: '暂无 OTP',
-    mono: true,
-    visible: canFetchOTP || !!latestOtp,
   }];
   const codexAuthFields: KVDescriptor[] = [{
     id: 'codex-auth-json',
@@ -88,11 +77,9 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
     <div className="details">
       <section>
         <div className="sectionTitle">
-          <h3>账号 <AccountSignalBadge account={account} compact /></h3>
+          <h3>账号 <AccountSignalBadge account={account} compact /><AccountChannelTag channel={activationChannel} /></h3>
         </div>
-        <AccountDetailActions account={account} showSecrets={showSecrets} busy={busy} inboxLoading={inboxLoading} refreshingAccessToken={refreshingAccessToken} mailboxContext={mailboxContext} canFetchOTP={canFetchOTP} onFetchInbox={onFetchInbox} onProbeAccount={onProbeAccount} onLogin={onLogin} onCodexOAuthAddPhone={onCodexOAuthAddPhone} onGoPayPayment={onGoPayPayment} onRefreshAccessToken={onRefreshAccessToken} onDelete={onDelete} />
-        <KVList items={otpFields} onCopy={onCopy} />
-        <ActivationChannelEditor account={account} activationChannel={activationChannel} onSave={onActivationChannelSave} />
+        <AccountDetailActions account={account} showSecrets={showSecrets} busy={busy} inboxLoading={inboxLoading} refreshingAccessToken={refreshingAccessToken} mailboxContext={mailboxContext} latestOtp={latestOtp} canFetchOTP={canFetchOTP} onCopy={onCopy} onFetchInbox={onFetchInbox} onProbeAccount={onProbeAccount} onLogin={onLogin} onCodexOAuthAddPhone={onCodexOAuthAddPhone} onGoPayPayment={onGoPayPayment} onRefreshAccessToken={onRefreshAccessToken} onDelete={onDelete} />
         <KVList items={credentialFields} onCopy={onCopy} />
         <TokenEditor label="Session" field="session_token" account={account} showSecrets={showSecrets} onCopy={onCopy} onSave={onSessionSave} />
         <TokenEditor label="Access" field="access_token" account={account} showSecrets={showSecrets} onCopy={onCopy} onSave={onAccessSave} />

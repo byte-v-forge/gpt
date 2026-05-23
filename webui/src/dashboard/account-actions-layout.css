@@ -74,6 +74,10 @@
   gap: 8px;
 }
 
+.detailActionRow.unlabeled {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .detailActionLabel {
   min-height: 30px;
   display: inline-flex;
@@ -86,6 +90,41 @@
 .detailActionRow .sectionActions {
   width: 100%;
   justify-content: flex-start;
+}
+
+.detailActionContent {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.detailOtpCode {
+  min-height: 30px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 0 0 0 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface-soft);
+}
+
+.detailOtpCode strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.detailOtpCode.empty {
+  color: var(--muted-foreground);
+}
+
+.detailOtpCopy {
+  height: 28px;
+  min-height: 28px;
+  border-radius: 7px;
 }
 
 .detailActionRow button {

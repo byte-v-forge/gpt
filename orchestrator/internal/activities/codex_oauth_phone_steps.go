@@ -9,18 +9,22 @@ import (
 	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
 )
 
-func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Server, jobID string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, data map[string]any) error {
+func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Server, jobID string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, data map[string]any) (bool, error) {
+	if err := validateCodexOAuthSMSCountry(phone.GetCountryIso2()); err != nil {
+		return false, err
+	}
+	countryLabels := codexOAuthPhoneCountryLabels(phone)
 	national := phone.GetPhoneNational()
 	if strings.TrimSpace(national) == "" {
 		national = strings.TrimPrefix(phone.GetPhoneE164(), "+"+phone.GetCountryCallingCode())
 	}
 	if strings.TrimSpace(national) == "" {
-		return fmt.Errorf("sms phone number is empty")
+		return false, fmt.Errorf("sms phone number is empty")
 	}
 	results, err := f.execute(s.browserAutomationClient, s.browserAuthConfig, "codex-oauth-add-phone", []*browserautomationv1.BrowserCommand{
-		selectOptionGroupCommand("select-phone-country", codexOAuthPhoneCountrySelector(), []string{phone.GetCountryIso2()}, []string{"Thailand (+66)", "Thailand"}, nil, 5*time.Second, true),
-		clickCommand("open-phone-country-dropdown", selectorGroup(2*time.Second, roleSelector("button", "United States (+1)", true), roleSelector("button", "Thailand (+66)", true)), 3*time.Second, true),
-		clickCommand("click-phone-country-th", selectorGroup(2*time.Second, roleSelector("option", "Thailand (+66)", true), textSelector("Thailand (+66)", true)), 3*time.Second, true),
+		selectOptionGroupCommand("select-phone-country", codexOAuthPhoneCountrySelector(), []string{phone.GetCountryIso2()}, countryLabels, nil, 5*time.Second, true),
+		clickCommand("open-phone-country-dropdown", codexOAuthPhoneCountryDropdownSelector(), 3*time.Second, true),
+		clickCommand("click-phone-country", codexOAuthPhoneCountryOptionSelector(countryLabels), 3*time.Second, true),
 		waitForSelectorCommand("wait-phone-input", codexOAuthPhoneInputSelector(), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 20*time.Second, false),
 		fillCommand("fill-phone", codexOAuthPhoneInputSelector(), national, 10*time.Second, false),
 		clickCommand("click-phone-continue", browserAuthEmailSubmitSelector(), 10*time.Second, false),
@@ -28,7 +32,7 @@ func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Ser
 		getPageStateCommand("phone-submit-state", true, true, false, 5*time.Second),
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	submitState := browserAuthPageStateData(results, "phone-submit-state")
 	if !browserAuthCommandSucceeded(results, "wait-phone-otp") {
@@ -36,7 +40,7 @@ func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Ser
 		if failure := codexOAuthPhonePageFailureState(submitState); failure != "" {
 			state = failure
 		}
-		return browserAuthStepError(f.mode, "add_phone", state, submitState)
+		return false, browserAuthStepError(f.mode, "add_phone", state, submitState)
 	}
 	if phone.GetReused() {
 		if err := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-additional-"+jobID); err != nil {
@@ -49,17 +53,18 @@ func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Ser
 	if err != nil {
 		data["sms_first_wait_error"] = err.Error()
 		if resendErr := f.resendCodexOAuthPhoneCode(s.browserAutomationClient, s.browserAuthConfig); resendErr != nil {
-			return resendErr
+			return false, resendErr
 		}
 		if addErr := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-resend-"+jobID); addErr != nil {
 			data["sms_resend_request_error"] = addErr.Error()
 		}
 		code, err = s.waitSMSCode(ctx, phone.GetActivationId(), cfg.PhoneResendWaitSeconds)
 		if err != nil {
-			return fmt.Errorf("phone_sms_timeout: %w", err)
+			return false, fmt.Errorf("phone_sms_timeout: %w", err)
 		}
 	}
-	return f.submitCodexOAuthPhoneOTP(s.browserAutomationClient, s.browserAuthConfig, code)
+	data["phone_otp_received"] = true
+	return true, f.submitCodexOAuthPhoneOTP(s.browserAutomationClient, s.browserAuthConfig, code)
 }
 
 func (f *browserAuthFlow) resendCodexOAuthPhoneCode(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig) error {

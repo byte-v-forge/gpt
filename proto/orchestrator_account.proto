@@ -395,25 +395,67 @@ message CodexOAuthPhoneLease {
   int64 expires_at_unix = 11;
 }
 
-message CodexOAuthRunInput {
+message CodexOAuthBrowserSession {
+  string flow_id = 1;
+  string session_id = 2;
+  string state = 3;
+  string pkce_secret_key = 4;
+}
+
+message CodexOAuthStartBrowserInput {
   string job_id = 1;
   string account_id = 2;
   string label = 3;
   CodexOAuthPhoneLease phone = 4;
   bool allow_add_phone = 5;
-  bool mark_phone_confirmed_on_success = 6;
 }
 
-message CodexOAuthRunOutput {
+message CodexOAuthStartBrowserOutput {
+  bool success = 1;
+  string error_message = 2;
+  CodexOAuthBrowserSession session = 3;
+  google.protobuf.Struct data = 4;
+  string phone_label = 5;
+}
+
+message CodexOAuthLoginBrowserInput {
+  string job_id = 1;
+  string account_id = 2;
+  string label = 3;
+  CodexOAuthPhoneLease phone = 4;
+  bool allow_add_phone = 5;
+  CodexOAuthBrowserSession session = 6;
+}
+
+message CodexOAuthLoginBrowserOutput {
+  bool success = 1;
+  string error_message = 2;
+  google.protobuf.Struct data = 3;
+  bool add_phone_confirmed = 4;
+  bool add_phone_required = 5;
+  int32 phone_reuse_count = 6;
+  int32 phone_reuse_limit = 7;
+}
+
+message CodexOAuthCompleteBrowserInput {
+  string job_id = 1;
+  string account_id = 2;
+  string label = 3;
+  bool mark_phone_confirmed_on_success = 4;
+  CodexOAuthBrowserSession session = 5;
+}
+
+message CodexOAuthCompleteBrowserOutput {
   bool success = 1;
   string error_message = 2;
   string auth_secret_key = 3;
-  string phone_label = 4;
-  int32 phone_reuse_count = 5;
-  int32 phone_reuse_limit = 6;
-  google.protobuf.Struct data = 7;
-  bool add_phone_confirmed = 8;
-  bool add_phone_required = 9;
+  google.protobuf.Struct data = 4;
+}
+
+message CodexOAuthStopBrowserInput {
+  string job_id = 1;
+  CodexOAuthBrowserSession session = 2;
+  string reason = 3;
 }
 
 message CodexOAuthReleasePhoneInput {

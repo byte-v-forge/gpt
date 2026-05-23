@@ -20,25 +20,24 @@ func CodexOAuthWorkflow(ctx workflow.Context, input CodexOAuthWorkflowInput) (Co
 		return result, nil
 	}
 
-	var run CodexOAuthRunOutput
-	setWorkflowProgress(ctx, progress, stepCodexOAuthBrowser)
-	if err := workflow.ExecuteActivity(browserCtx, codexOAuthRunActivityName, CodexOAuthRunInput{
-		JobId:         input.GetJobId(),
-		AccountId:     account.GetAccountId(),
+	run, failedStep, err := runCodexOAuthBrowserActivities(ctx, progress, browserCtx, codexOAuthBrowserWorkflowInput{
+		JobID:         input.GetJobId(),
+		AccountID:     account.GetAccountId(),
 		Label:         input.GetLabel(),
 		AllowAddPhone: false,
-	}).Get(ctx, &run); err != nil {
-		return failCodexOAuthWorkflow(ctx, retryCtx, result, input.GetJobId(), stepCodexOAuthBrowser, statusFailedRecoverable, true, false, err, protoDataMap(run.GetData())), nil
+	})
+	if err != nil {
+		return failCodexOAuthWorkflow(ctx, retryCtx, result, input.GetJobId(), failedStep, statusFailedRecoverable, true, false, err, run.data), nil
 	}
 
 	_ = workflow.ExecuteActivity(retryCtx, markJobSucceededActivityName, JobSuccessInput{
 		JobId:  input.GetJobId(),
-		Result: run.GetData(),
+		Result: protoData(run.data),
 	}).Get(ctx, nil)
 	setWorkflowProgressSucceeded(ctx, progress)
 	result.Success = true
-	result.AuthSecretKey = run.GetAuthSecretKey()
-	result.AddPhoneRequired = run.GetAddPhoneRequired()
+	result.AuthSecretKey = run.authSecretKey
+	result.AddPhoneRequired = run.addPhoneRequired
 	return result, nil
 }
 
@@ -59,44 +58,23 @@ func CodexOAuthAddPhoneWorkflow(ctx workflow.Context, input CodexOAuthAddPhoneWo
 		return result, nil
 	}
 
-	var phone CodexOAuthPhoneLease
-	setWorkflowProgress(ctx, progress, stepCodexOAuthAcquirePhone)
-	if err := workflow.ExecuteActivity(phoneCtx, codexOAuthAcquirePhoneActivityName, CodexOAuthAcquirePhoneInput{
-		JobId:         input.GetJobId(),
-		AccountId:     account.GetAccountId(),
+	attempt, failedStep, err := runCodexOAuthAddPhoneWithRotation(ctx, progress, phoneCtx, browserCtx, retryCtx, codexOAuthAddPhoneWorkflowInput{
+		JobID:         input.GetJobId(),
+		AccountID:     account.GetAccountId(),
 		Label:         input.GetLabel(),
 		MaxReuseCount: input.GetMaxReuseCount(),
-	}).Get(ctx, &phone); err != nil {
-		return failCodexOAuthAddPhoneWorkflow(ctx, retryCtx, result, input.GetJobId(), stepCodexOAuthAcquirePhone, statusFailedRetryable, false, true, err, nil), nil
+	})
+	if err != nil {
+		return failCodexOAuthAddPhoneWorkflow(ctx, retryCtx, result, input.GetJobId(), failedStep, statusFailedRetryable, false, true, err, attempt.run.data), nil
 	}
 
-	var run CodexOAuthRunOutput
-	setWorkflowProgress(ctx, progress, stepCodexOAuthBrowser)
-	if err := workflow.ExecuteActivity(browserCtx, codexOAuthRunActivityName, CodexOAuthRunInput{
-		JobId:                       input.GetJobId(),
-		AccountId:                   account.GetAccountId(),
-		Label:                       input.GetLabel(),
-		Phone:                       &phone,
-		AllowAddPhone:               true,
-		MarkPhoneConfirmedOnSuccess: true,
-	}).Get(ctx, &run); err != nil {
-		_ = workflow.ExecuteActivity(retryCtx, codexOAuthReleasePhoneActivityName, CodexOAuthReleasePhoneInput{
-			JobId:        input.GetJobId(),
-			AccountId:    account.GetAccountId(),
-			ActivationId: phone.GetActivationId(),
-			Label:        input.GetLabel(),
-			ErrorMessage: err.Error(),
-		}).Get(ctx, nil)
-		return failCodexOAuthAddPhoneWorkflow(ctx, retryCtx, result, input.GetJobId(), stepCodexOAuthBrowser, statusFailedRetryable, false, true, err, protoDataMap(run.GetData())), nil
-	}
-
-	_ = workflow.ExecuteActivity(retryCtx, markJobSucceededActivityName, JobSuccessInput{JobId: input.GetJobId(), Result: run.GetData()}).Get(ctx, nil)
+	_ = workflow.ExecuteActivity(retryCtx, markJobSucceededActivityName, JobSuccessInput{JobId: input.GetJobId(), Result: protoData(attempt.run.data)}).Get(ctx, nil)
 	setWorkflowProgressSucceeded(ctx, progress)
 	result.Success = true
-	result.AuthSecretKey = run.GetAuthSecretKey()
-	result.PhoneLabel = run.GetPhoneLabel()
-	result.PhoneReuseCount = run.GetPhoneReuseCount()
-	result.PhoneReuseLimit = run.GetPhoneReuseLimit()
+	result.AuthSecretKey = attempt.run.authSecretKey
+	result.PhoneLabel = attempt.run.phoneLabel
+	result.PhoneReuseCount = attempt.run.phoneReuseCount
+	result.PhoneReuseLimit = attempt.run.phoneReuseLimit
 	return result, nil
 }
 
@@ -128,31 +106,13 @@ func CodexOAuthBatchAddPhoneWorkflow(ctx workflow.Context, input CodexOAuthBatch
 		return result, nil
 	}
 
-	var phone CodexOAuthPhoneLease
-	setWorkflowProgress(ctx, progress, stepCodexOAuthAcquirePhone)
-	if err := workflow.ExecuteActivity(phoneCtx, codexOAuthAcquirePhoneActivityName, CodexOAuthAcquirePhoneInput{
-		JobId:         input.GetJobId(),
-		AccountId:     accountIDs[0],
-		Label:         input.GetLabel(),
-		MaxReuseCount: input.GetMaxReuseCount(),
-	}).Get(ctx, &phone); err != nil {
-		return failCodexOAuthBatchAddPhoneWorkflow(ctx, retryCtx, result, input.GetJobId(), stepCodexOAuthAcquirePhone, statusFailedRetryable, false, true, err, nil), nil
-	}
-	result.PhoneLabel = phone.GetLabel()
-	result.PhoneReuseCount = phone.GetReuseCount()
-	result.PhoneReuseLimit = phone.GetReuseLimit()
-
 	for _, accountID := range accountIDs {
-		var run CodexOAuthRunOutput
-		setWorkflowProgress(ctx, progress, stepCodexOAuthBrowser)
-		err := workflow.ExecuteActivity(browserCtx, codexOAuthRunActivityName, CodexOAuthRunInput{
-			JobId:                       input.GetJobId(),
-			AccountId:                   accountID,
-			Label:                       input.GetLabel(),
-			Phone:                       &phone,
-			AllowAddPhone:               true,
-			MarkPhoneConfirmedOnSuccess: true,
-		}).Get(ctx, &run)
+		attempt, failedStep, err := runCodexOAuthAddPhoneWithRotation(ctx, progress, phoneCtx, browserCtx, retryCtx, codexOAuthAddPhoneWorkflowInput{
+			JobID:         input.GetJobId(),
+			AccountID:     accountID,
+			Label:         input.GetLabel(),
+			MaxReuseCount: input.GetMaxReuseCount(),
+		})
 		if err != nil {
 			if reason := codexOAuthBatchStopReason(err.Error()); reason != "" {
 				result.StoppedReason = reason
@@ -161,23 +121,18 @@ func CodexOAuthBatchAddPhoneWorkflow(ctx workflow.Context, input CodexOAuthBatch
 				setWorkflowProgressSucceeded(ctx, progress)
 				return result, nil
 			}
-			return failCodexOAuthBatchAddPhoneWorkflow(ctx, retryCtx, result, input.GetJobId(), stepCodexOAuthBrowser, statusFailedRetryable, false, true, err, protoDataMap(run.GetData())), nil
+			return failCodexOAuthBatchAddPhoneWorkflow(ctx, retryCtx, result, input.GetJobId(), failedStep, statusFailedRetryable, false, true, err, attempt.run.data), nil
 		}
 		result.SuccessCount++
 		result.ProcessedAccountIds = append(result.ProcessedAccountIds, accountID)
-		if run.GetAddPhoneConfirmed() {
+		if attempt.run.addPhoneConfirmed {
 			result.AddPhoneCount++
 		} else {
 			result.DirectOauthCount++
 		}
-		phone.ReuseCount = run.GetPhoneReuseCount()
-		phone.ReuseLimit = run.GetPhoneReuseLimit()
-		result.PhoneReuseCount = phone.GetReuseCount()
-		result.PhoneReuseLimit = phone.GetReuseLimit()
-		if phone.GetReuseLimit() > 0 && phone.GetReuseCount() >= phone.GetReuseLimit() {
-			result.StoppedReason = "phone_reuse_exhausted"
-			break
-		}
+		result.PhoneLabel = attempt.run.phoneLabel
+		result.PhoneReuseCount = attempt.run.phoneReuseCount
+		result.PhoneReuseLimit = attempt.run.phoneReuseLimit
 	}
 
 	result.Success = true
@@ -256,6 +211,38 @@ func codexOAuthBatchStopReason(message string) string {
 	case strings.Contains(text, "phone_expired"):
 		return "phone_expired"
 	case strings.Contains(text, "phone_sms_timeout") || strings.Contains(text, "otp not found"):
+		return "phone_sms_timeout"
+	default:
+		return ""
+	}
+}
+
+func codexOAuthPhoneRetryReason(message string) string {
+	text := strings.ToLower(message)
+	switch {
+	case strings.Contains(text, "phone_reuse_exhausted") ||
+		strings.Contains(text, "phone_reuse_exceeded") ||
+		strings.Contains(text, "already linked to the maximum number") ||
+		strings.Contains(text, "used too many") ||
+		strings.Contains(text, "maximum number") ||
+		strings.Contains(text, "too many"):
+		return "phone_reuse_exhausted"
+	case strings.Contains(text, "phone_rejected") ||
+		strings.Contains(text, "try a different phone") ||
+		strings.Contains(text, "try another phone") ||
+		strings.Contains(text, "cannot use this phone") ||
+		strings.Contains(text, "can't use this phone") ||
+		strings.Contains(text, "invalid phone") ||
+		strings.Contains(text, "unsupported phone") ||
+		strings.Contains(text, "rejected"):
+		return "phone_rejected"
+	case strings.Contains(text, "phone_expired"):
+		return "phone_expired"
+	case strings.Contains(text, "phone_sms_timeout") ||
+		strings.Contains(text, "sms_error_code_timeout") ||
+		strings.Contains(text, "waitforcode") ||
+		strings.Contains(text, "otp not found") ||
+		strings.Contains(text, "empty code"):
 		return "phone_sms_timeout"
 	default:
 		return ""

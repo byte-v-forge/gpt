@@ -16,7 +16,10 @@ const (
 	browserAuthCompleteActivityName              = contracts.BrowserAuthCompleteActivityName
 	browserAuthCancelActivityName                = contracts.BrowserAuthCancelActivityName
 	codexOAuthAcquirePhoneActivityName           = contracts.CodexOAuthAcquirePhoneActivityName
-	codexOAuthRunActivityName                    = contracts.CodexOAuthRunActivityName
+	codexOAuthStartBrowserActivityName           = contracts.CodexOAuthStartBrowserActivityName
+	codexOAuthLoginBrowserActivityName           = contracts.CodexOAuthLoginBrowserActivityName
+	codexOAuthCompleteBrowserActivityName        = contracts.CodexOAuthCompleteBrowserActivityName
+	codexOAuthStopBrowserActivityName            = contracts.CodexOAuthStopBrowserActivityName
 	codexOAuthReleasePhoneActivityName           = contracts.CodexOAuthReleasePhoneActivityName
 	waitOTPActivityName                          = contracts.WaitOTPActivityName
 	fetchManualOTPActivityName                   = contracts.FetchManualOTPActivityName

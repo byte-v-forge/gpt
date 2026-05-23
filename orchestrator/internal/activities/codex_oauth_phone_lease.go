@@ -63,7 +63,11 @@ func (s *Server) releaseCodexPhone(ctx context.Context, phone *CodexOAuthPhoneLe
 	}
 	if terminalStatus != "" {
 		row.Status = terminalStatus
-		if terminalStatus == codexOAuthLeaseExhausted {
+		if !phoneUsed {
+			if err := s.cancelCodexOAuthSMSActivation(ctx, row.ActivationID, jobID, message); err != nil {
+				row.LastError = compactBrowserAuthText(row.LastError+"; cancel failed: "+err.Error(), 500)
+			}
+		} else if terminalStatus == codexOAuthLeaseExhausted {
 			_ = s.completeSMSActivation(ctx, row.ActivationID, "codex-oauth-page-exhausted-"+jobID)
 		}
 		return s.db.WithContext(ctx).Save(&row).Error
@@ -71,6 +75,11 @@ func (s *Server) releaseCodexPhone(ctx context.Context, phone *CodexOAuthPhoneLe
 	if row.ExpiresAt > 0 && row.ExpiresAt <= time.Now().Unix()+int64(codexOAuthPhoneMinRemainingSeconds(s.codexOAuthConfig.withDefaults())) {
 		row.Status = codexOAuthLeaseExpired
 		row.LastFailureKind = codexOAuthFirstNonEmpty(row.LastFailureKind, "phone_expired")
+		if !phoneUsed {
+			if err := s.cancelCodexOAuthSMSActivation(ctx, row.ActivationID, jobID, "phone_expired"); err != nil {
+				row.LastError = compactBrowserAuthText(row.LastError+"; cancel failed: "+err.Error(), 500)
+			}
+		}
 		return s.db.WithContext(ctx).Save(&row).Error
 	}
 	switch {
@@ -86,6 +95,24 @@ func (s *Server) releaseCodexPhone(ctx context.Context, phone *CodexOAuthPhoneLe
 		}
 	}
 	return s.db.WithContext(ctx).Save(&row).Error
+}
+
+func (s *Server) cancelCodexOAuthSMSActivation(ctx context.Context, activationID, jobID, reason string) error {
+	if s.smsClient == nil || strings.TrimSpace(activationID) == "" {
+		return nil
+	}
+	resp, err := s.smsClient.CancelActivation(ctx, &smsv1.CancelActivationRequest{
+		ActivationId: strings.TrimSpace(activationID),
+		RequestId:    "codex-oauth-cancel-" + strings.TrimSpace(jobID),
+		Reason:       compactBrowserAuthText(reason, 200),
+	})
+	if err != nil {
+		return fmt.Errorf("CancelActivation: %w", err)
+	}
+	if smsCancelSettled(resp) {
+		return nil
+	}
+	return fmt.Errorf("CancelActivation: %s", smsCancelResponseText(resp))
 }
 
 func codexOAuthPhoneLeaseFromRow(row db.CodexOAuthPhoneLease, reused bool) *CodexOAuthPhoneLease {

@@ -93,7 +93,9 @@ const (
 	stepLoginSessionOTPWait          = "login_session_otp_wait"
 	stepLoginSessionComplete         = "login_session_complete"
 	stepCodexOAuthAcquirePhone       = "codex_oauth_acquire_phone"
-	stepCodexOAuthBrowser            = "codex_oauth_browser"
+	stepCodexOAuthBrowserStart       = "codex_oauth_browser_start"
+	stepCodexOAuthBrowserLogin       = "codex_oauth_browser_login"
+	stepCodexOAuthBrowserComplete    = "codex_oauth_browser_complete"
 	stepCodexOAuthReleasePhone       = "codex_oauth_release_phone"
 
 	registrationOTPParam            = "registration_otp"

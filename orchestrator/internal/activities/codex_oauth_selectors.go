@@ -13,6 +13,20 @@ func codexOAuthPhoneCountrySelector() *browserautomationv1.BrowserSelectorGroup 
 	)
 }
 
+func codexOAuthPhoneCountryDropdownSelector() *browserautomationv1.BrowserSelectorGroup {
+	return selectorGroup(2*time.Second,
+		cssSelector(`button[aria-haspopup="listbox"],button[role="combobox"],button[aria-label*="Country" i]`),
+	)
+}
+
+func codexOAuthPhoneCountryOptionSelector(labels []string) *browserautomationv1.BrowserSelectorGroup {
+	selectors := make([]*browserautomationv1.BrowserSelector, 0, len(labels)*2)
+	for _, label := range labels {
+		selectors = append(selectors, roleSelector("option", label, true), textSelector(label, true))
+	}
+	return selectorGroup(2*time.Second, selectors...)
+}
+
 func codexOAuthPhoneInputSelector() *browserautomationv1.BrowserSelector {
 	return cssSelector(`input[type="tel"][name="__reservedForPhoneNumberInput_tel"],input#tel[autocomplete="tel"],input[type="tel"]`)
 }

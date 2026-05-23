@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"orchestrator/pb"
 )
@@ -15,35 +16,35 @@ type codexOAuthBrowserResult struct {
 	addPhoneRequired  bool
 }
 
-func (s *Server) runCodexOAuthBrowser(ctx context.Context, account *pb.Account, jobID, label string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, allowAddPhone bool, markPhoneConfirmed bool, data map[string]any) (codexOAuthBrowserResult, error) {
-	flow, err := s.newCodexOAuthBrowserFlow(ctx, account, jobID, label, phone, cfg, allowAddPhone, markPhoneConfirmed, data)
+func (s *Server) codexOAuthBrowserAccount(ctx context.Context, accountID string) (*pb.Account, error) {
+	account, err := s.getAccount(ctx, accountID)
 	if err != nil {
-		return codexOAuthBrowserResult{}, err
+		return nil, err
 	}
-	if err := flow.startSession(); err != nil {
-		return codexOAuthBrowserResult{}, err
+	if strings.TrimSpace(account.GetEmail()) == "" || strings.TrimSpace(account.GetPassword()) == "" {
+		return nil, fmt.Errorf("account email/password is required")
 	}
-	defer flow.stopSession()
-	defer flow.releasePhoneOnFailure()
+	return account, nil
+}
 
-	if err := flow.openAuthorizeURL(); err != nil {
-		return codexOAuthBrowserResult{}, err
+func codexOAuthBrowserData(label string, phone *CodexOAuthPhoneLease) map[string]any {
+	data := map[string]any{"label": label}
+	if phone == nil {
+		return data
 	}
-	if err := flow.ensureLoggedIn(); err != nil {
-		return codexOAuthBrowserResult{}, err
+	data["profile_key"] = phone.GetProfileKey()
+	data["phone_reused"] = phone.GetReused()
+	data["phone_reuse_count"] = phone.GetReuseCount()
+	data["phone_reuse_limit"] = phone.GetReuseLimit()
+	data["phone_expires_at_unix"] = phone.GetExpiresAtUnix()
+	data["phone_activation_id"] = phone.GetActivationId()
+	data["phone_country_iso2"] = phone.GetCountryIso2()
+	data["phone_country_code"] = phone.GetCountryCallingCode()
+	data["phone_mask"] = maskPhone(phone.GetPhoneE164(), phone.GetPhoneNational())
+	if strings.TrimSpace(phone.GetCountryIso2()) != "" {
+		data["verification_channel"] = "sms"
 	}
-	addPhoneResult, err := flow.handleAddPhoneStage()
-	if err != nil {
-		return addPhoneResult, err
-	}
-	if err := flow.completeAuthorization(); err != nil {
-		return codexOAuthBrowserResult{}, err
-	}
-	if err := flow.persistAuthorization(); err != nil {
-		return codexOAuthBrowserResult{}, err
-	}
-	flow.success = true
-	return flow.result(), nil
+	return data
 }
 
 func codexOAuthAddPhoneRequiredError() error {

@@ -3,8 +3,14 @@ package activities
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"orchestrator/pb"
+)
+
+const (
+	codexOAuthBrowserMode      = "codex_oauth_add_phone"
+	codexOAuthPKCESecretPrefix = "codex_oauth_pkce:"
 )
 
 type codexOAuthBrowserFlow struct {
@@ -33,12 +39,12 @@ type codexOAuthBrowserFlow struct {
 	phoneNeeded bool
 }
 
-func (s *Server) newCodexOAuthBrowserFlow(ctx context.Context, account *pb.Account, jobID, label string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, allowAddPhone bool, markPhoneConfirmed bool, data map[string]any) (*codexOAuthBrowserFlow, error) {
+func (s *Server) newCodexOAuthBrowserStartFlow(ctx context.Context, account *pb.Account, jobID, label string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, allowAddPhone bool, data map[string]any) (*codexOAuthBrowserFlow, error) {
 	if s.browserAutomationClient == nil {
 		return nil, fmt.Errorf("browser automation client is not configured")
 	}
 	if allowAddPhone {
-		if err := ensureCodexOAuthPhoneLeaseUsable(phone, cfg); err != nil {
+		if err := ensureCodexOAuthPhoneUsableForSMS(phone, cfg); err != nil {
 			return nil, err
 		}
 	}
@@ -51,6 +57,39 @@ func (s *Server) newCodexOAuthBrowserFlow(ctx context.Context, account *pb.Accou
 		return nil, err
 	}
 	return &codexOAuthBrowserFlow{
+		server:        s,
+		ctx:           ctx,
+		account:       account,
+		jobID:         jobID,
+		label:         label,
+		phone:         phone,
+		cfg:           cfg,
+		allowAddPhone: allowAddPhone,
+		data:          data,
+		pkce:          pkce,
+		state:         state,
+		authorizeURL:  buildCodexOAuthAuthorizeURL(cfg, pkce, state),
+		browserFlow:   newCodexOAuthBrowserAuthFlow(ctx, jobID, account),
+		failure:       "codex oauth browser did not complete",
+	}, nil
+}
+
+func (s *Server) newCodexOAuthBrowserSessionFlow(ctx context.Context, account *pb.Account, jobID, label string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, allowAddPhone bool, markPhoneConfirmed bool, session *CodexOAuthBrowserSession, data map[string]any) (*codexOAuthBrowserFlow, error) {
+	if s.browserAutomationClient == nil {
+		return nil, fmt.Errorf("browser automation client is not configured")
+	}
+	if session == nil || strings.TrimSpace(session.GetFlowId()) == "" || strings.TrimSpace(session.GetSessionId()) == "" {
+		return nil, fmt.Errorf("codex oauth browser session is required")
+	}
+	if allowAddPhone {
+		if err := ensureCodexOAuthPhoneUsableForSMS(phone, cfg); err != nil {
+			return nil, err
+		}
+	}
+	browserFlow := newCodexOAuthBrowserAuthFlow(ctx, jobID, account)
+	browserFlow.flowID = strings.TrimSpace(session.GetFlowId())
+	browserFlow.sessionID = strings.TrimSpace(session.GetSessionId())
+	return &codexOAuthBrowserFlow{
 		server:             s,
 		ctx:                ctx,
 		account:            account,
@@ -61,12 +100,17 @@ func (s *Server) newCodexOAuthBrowserFlow(ctx context.Context, account *pb.Accou
 		allowAddPhone:      allowAddPhone,
 		markPhoneConfirmed: markPhoneConfirmed,
 		data:               data,
-		pkce:               pkce,
-		state:              state,
-		authorizeURL:       buildCodexOAuthAuthorizeURL(cfg, pkce, state),
-		browserFlow:        newBrowserAuthFlow("codex_oauth_add_phone", jobID, account),
+		state:              strings.TrimSpace(session.GetState()),
+		browserFlow:        browserFlow,
 		failure:            "codex oauth browser did not complete",
 	}, nil
+}
+
+func newCodexOAuthBrowserAuthFlow(ctx context.Context, jobID string, account *pb.Account) *browserAuthFlow {
+	flow := newBrowserAuthFlow(codexOAuthBrowserMode, jobID, account)
+	flow.cancel()
+	flow.ctx, flow.cancel = context.WithCancel(ctx)
+	return flow
 }
 
 func (f *codexOAuthBrowserFlow) startSession() error {
@@ -105,4 +149,15 @@ func (f *codexOAuthBrowserFlow) result() codexOAuthBrowserResult {
 		addPhoneConfirmed: f.phoneAdded,
 		addPhoneRequired:  f.phoneNeeded,
 	}
+}
+
+func codexOAuthPKCESecretKey(jobID, flowID string) string {
+	return codexOAuthPKCESecretPrefix + strings.TrimSpace(jobID) + ":" + strings.TrimSpace(flowID)
+}
+
+func ensureCodexOAuthPhoneUsableForSMS(phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig) error {
+	if err := ensureCodexOAuthPhoneLeaseUsable(phone, cfg); err != nil {
+		return err
+	}
+	return validateCodexOAuthSMSCountry(phone.GetCountryIso2())
 }

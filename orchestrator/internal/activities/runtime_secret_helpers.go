@@ -71,3 +71,10 @@ func (s *Server) saveRuntimeSecret(ctx context.Context, key string, value string
 		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
 	}).Create(&row).Error
 }
+
+func (s *Server) deleteRuntimeSecret(ctx context.Context, key string) error {
+	if s == nil || s.db == nil || strings.TrimSpace(key) == "" {
+		return nil
+	}
+	return s.db.WithContext(ctx).Delete(&db.RuntimeSecret{}, "key = ?", strings.TrimSpace(key)).Error
+}

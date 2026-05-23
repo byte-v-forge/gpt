@@ -37,8 +37,9 @@ func (f *codexOAuthBrowserFlow) handleAddPhoneStage() (codexOAuthBrowserResult, 
 }
 
 func (f *codexOAuthBrowserFlow) addPhoneToCodexOAuthAccount() error {
-	f.phoneUsed = true
-	if err := f.browserFlow.completeCodexOAuthAddPhone(f.ctx, f.server, f.jobID, f.phone, f.cfg, f.data); err != nil {
+	otpReceived, err := f.browserFlow.completeCodexOAuthAddPhone(f.ctx, f.server, f.jobID, f.phone, f.cfg, f.data)
+	f.phoneUsed = otpReceived
+	if err != nil {
 		return f.fail(err)
 	}
 	f.data["add_phone_confirmed"] = true

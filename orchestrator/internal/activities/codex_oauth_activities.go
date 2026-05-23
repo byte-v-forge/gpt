@@ -96,6 +96,7 @@ func (s *Server) CodexOAuthRunActivity(ctx context.Context, input CodexOAuthRunI
 		"phone_country_code":    input.GetPhone().GetCountryCallingCode(),
 		"phone_mask":            maskPhone(input.GetPhone().GetPhoneE164(), input.GetPhone().GetPhoneNational()),
 		"auth_secret_written":   false,
+		"account_auth_written":  false,
 		"add_phone_confirmed":   false,
 		"callback_url_captured": false,
 	}
@@ -370,6 +371,15 @@ func (s *Server) runCodexOAuthBrowser(ctx context.Context, account *pb.Account, 
 		failureMessage = err.Error()
 		return codexOAuthBrowserResult{}, err
 	}
+	if err := s.updateAccount(ctx, &pb.Account{
+		AccountId:              account.GetAccountId(),
+		CodexAuthJson:          string(authJSON),
+		CodexAuthUpdatedAtUnix: time.Now().Unix(),
+	}); err != nil {
+		failureMessage = err.Error()
+		return codexOAuthBrowserResult{}, fmt.Errorf("save codex auth json to account db: %w", err)
+	}
+	data["account_auth_written"] = true
 	secretKey := codexOAuthAuthSecretPrefix + account.GetAccountId()
 	if err := s.saveRuntimeSecret(ctx, secretKey, string(authJSON)); err != nil {
 		failureMessage = err.Error()

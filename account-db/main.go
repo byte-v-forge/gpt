@@ -661,6 +661,14 @@ func updateMap(account *pb.Account) map[string]interface{} {
 		updates["mailbox_latest_otp_subject"] = gorm.Expr("CASE WHEN mailbox_latest_otp_received_at_unix <= ? THEN ? ELSE mailbox_latest_otp_subject END", receivedAt, strings.TrimSpace(account.GetMailboxLatestOtpSubject()))
 		updates["mailbox_latest_otp_received_at_unix"] = gorm.Expr("GREATEST(mailbox_latest_otp_received_at_unix, ?)", receivedAt)
 	}
+	if value := strings.TrimSpace(account.GetCodexAuthJson()); value != "" {
+		updatedAt := account.GetCodexAuthUpdatedAtUnix()
+		if updatedAt <= 0 {
+			updatedAt = time.Now().Unix()
+		}
+		updates["codex_auth_json"] = value
+		updates["codex_auth_updated_at_unix"] = updatedAt
+	}
 	return updates
 }
 
@@ -692,6 +700,8 @@ func accountToProto(account *db.Account) *pb.Account {
 		MailboxLatestOtp:               account.MailboxLatestOTP,
 		MailboxLatestOtpSubject:        account.MailboxLatestOTPSubject,
 		MailboxLatestOtpReceivedAtUnix: account.MailboxLatestOTPReceivedAtUnix,
+		CodexAuthJson:                  account.CodexAuthJSON,
+		CodexAuthUpdatedAtUnix:         account.CodexAuthUpdatedAtUnix,
 	}
 }
 

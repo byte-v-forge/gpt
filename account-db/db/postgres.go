@@ -34,8 +34,10 @@ type Account struct {
 	MailboxLatestOTP               string
 	MailboxLatestOTPSubject        string
 	MailboxLatestOTPReceivedAtUnix int64
-	CreatedAt                      int64 `gorm:"autoCreateTime"`
-	UpdatedAt                      int64 `gorm:"autoUpdateTime"`
+	CodexAuthJSON                  string `gorm:"column:codex_auth_json"`
+	CodexAuthUpdatedAtUnix         int64  `gorm:"column:codex_auth_updated_at_unix"`
+	CreatedAt                      int64  `gorm:"autoCreateTime"`
+	UpdatedAt                      int64  `gorm:"autoUpdateTime"`
 }
 
 type GPTEmailAllocation struct {
@@ -75,6 +77,9 @@ func InitDB() *gorm.DB {
 	}
 	if err := backfillGPTEmailAllocationsFromAccounts(db); err != nil {
 		log.Printf("failed to backfill GPT email allocations from accounts: %v", err)
+	}
+	if err := backfillCodexAuthJSONFromRuntimeSecrets(db); err != nil {
+		log.Printf("failed to backfill codex auth json from runtime secrets: %v", err)
 	}
 
 	return db
@@ -191,6 +196,24 @@ func backfillGPTEmailAllocationsFromAccounts(db *gorm.DB) error {
 			AND alias_row.primary_email = primary_row.email
 			AND alias_row.is_primary = false
 			AND alias_row.status = 'AVAILABLE'
+	`).Error
+}
+
+func backfillCodexAuthJSONFromRuntimeSecrets(db *gorm.DB) error {
+	return db.Exec(`
+		DO $$
+		BEGIN
+			IF to_regclass('public.runtime_secrets') IS NOT NULL THEN
+				UPDATE accounts
+				SET
+					codex_auth_json = runtime_secrets.value,
+					codex_auth_updated_at_unix = GREATEST(COALESCE(accounts.codex_auth_updated_at_unix, 0), runtime_secrets.updated_at)
+				FROM runtime_secrets
+				WHERE runtime_secrets.key = 'codex_oauth_auth_json:' || accounts.id
+					AND COALESCE(accounts.codex_auth_json, '') = ''
+					AND COALESCE(runtime_secrets.value, '') <> '';
+			END IF;
+		END $$;
 	`).Error
 }
 

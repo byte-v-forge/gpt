@@ -29,6 +29,8 @@ message Account {
   string mailbox_latest_otp = 22;
   string mailbox_latest_otp_subject = 23;
   int64 mailbox_latest_otp_received_at_unix = 24;
+  string codex_auth_json = 25;
+  int64 codex_auth_updated_at_unix = 26;
 }
 
 message CreateAccountRequest {

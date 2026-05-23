@@ -111,6 +111,16 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
     masked: !showSecrets,
     mono: true,
   }];
+  const codexAuthFields: KVDescriptor[] = [{
+    id: 'codex-auth-json',
+    label: 'auth.json',
+    value: showSecrets ? account.codex_auth_json : mask(account.codex_auth_json),
+    copyValue: account.codex_auth_json,
+    copyDisabled: !account.codex_auth_json,
+    copyHint: '暂无 auth.json',
+    masked: !showSecrets,
+    mono: true,
+  }];
   const timeFields: KVDescriptor[] = [{
     id: 'created-at',
     label: '创建时间',
@@ -119,6 +129,11 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
     id: 'updated-at',
     label: '更新时间',
     value: formatUnix(account.updated_at),
+  }, {
+    id: 'codex-auth-updated-at',
+    label: 'auth.json更新时间',
+    value: formatUnix(account.codex_auth_updated_at_unix),
+    visible: !!account.codex_auth_updated_at_unix,
   }];
 
   return (
@@ -135,6 +150,7 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
         <KVList items={credentialFields} onCopy={onCopy} />
         <TokenEditor label="Session" field="session_token" account={account} showSecrets={showSecrets} onCopy={onCopy} onSave={onSessionSave} />
         <TokenEditor label="Access" field="access_token" account={account} showSecrets={showSecrets} onCopy={onCopy} onSave={onAccessSave} />
+        <KVList items={codexAuthFields} onCopy={onCopy} />
         <KVList items={timeFields} onCopy={onCopy} />
       </section>
     </div>

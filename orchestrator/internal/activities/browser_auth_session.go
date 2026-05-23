@@ -1,0 +1,74 @@
+package activities
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+
+	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+func (f *browserAuthFlow) startSession(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig) error {
+	ctx, cancel := context.WithTimeout(f.ctx, cfg.CommandTimeout)
+	defer cancel()
+	resp, err := client.StartBrowserSession(ctx, &browserautomationv1.StartBrowserSessionRequest{
+		RequestId: "gpt-browser-auth-" + f.flowID,
+		Profile: &browserautomationv1.BrowserProfile{
+			BrowserKind: browserautomationv1.BrowserKind_BROWSER_KIND_FIREFOX,
+			Locale:      cfg.Locale,
+			Timezone:    cfg.Timezone,
+			UserAgent:   cfg.UserAgent,
+			Viewport: &browserautomationv1.BrowserViewport{
+				Width:  int32(cfg.WindowWidth),
+				Height: int32(cfg.WindowHeight),
+			},
+			ProxyRef: cfg.ProxyRef,
+			ExtraHttpHeaders: map[string]string{
+				"Accept-Language": cfg.AcceptLanguage,
+			},
+			InitScripts: []string{browserAuthLanguageOverrideScript(cfg.Locale)},
+			Labels: map[string]string{
+				"domain":                   "gpt",
+				"workflow":                 "browser_auth",
+				"mode":                     f.mode,
+				"job_id":                   f.jobID,
+				"camoufox.geoip":           boolLabel(cfg.GeoIP),
+				"camoufox.block_images":    boolLabel(cfg.BlockImages),
+				"camoufox.humanize":        cfg.Humanize,
+				"camoufox.enable_cache":    "false",
+				"camoufox.disable_coop":    "true",
+				"camoufox.main_world_eval": "false",
+			},
+		},
+		Ttl: durationpb.New(cfg.SessionTTL),
+	})
+	if err != nil {
+		return err
+	}
+	if resp.GetError() != nil {
+		return errors.New(resp.GetError().GetMessage())
+	}
+	sessionID := resp.GetSession().GetSessionId()
+	if sessionID == "" {
+		return fmt.Errorf("browser automation returned empty session_id")
+	}
+	f.mu.Lock()
+	f.sessionID = sessionID
+	f.mu.Unlock()
+	return nil
+}
+
+func (f *browserAuthFlow) stopSession(client browserautomationv1.BrowserAutomationServiceClient) {
+	sessionID := f.getSessionID()
+	if sessionID == "" {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	_, _ = client.StopBrowserSession(ctx, &browserautomationv1.StopBrowserSessionRequest{
+		SessionId: sessionID,
+		Reason:    "gpt browser auth finished",
+	})
+}

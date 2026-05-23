@@ -197,6 +197,7 @@ func goPayAppOTPWorkflowInput(jobID string, opts goPayAppOTPOptions) *GoPayAppOT
 		StateJson:       opts.StateJSON,
 		Pin:             opts.Pin,
 		CountryCode:     opts.CountryCode,
+		SkipPhoneProbe:  opts.SkipPhoneProbe,
 	}
 }
 
@@ -210,6 +211,7 @@ func goPayAppOTPOptionsFromChildInput(input *GoPayAppOTPWorkflowInput) goPayAppO
 		StateJSON:       input.GetStateJson(),
 		Pin:             input.GetPin(),
 		CountryCode:     input.GetCountryCode(),
+		SkipPhoneProbe:  input.GetSkipPhoneProbe(),
 	}
 }
 

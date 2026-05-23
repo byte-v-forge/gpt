@@ -257,30 +257,32 @@ func runGoPayAppBackedWAPaymentWorkflow(ctx workflow.Context, input GoPayPayment
 	combined["load_state"] = protoDataMap(stored.GetData())
 
 	otpOpts := goPayAppOTPOptions{
-		Phone:       result.GetWaPhone(),
-		OTPChannel:  "wa",
-		Source:      userID,
-		StateJSON:   stateJSON,
-		Pin:         input.GetPin(),
-		CountryCode: input.GetCountryCode(),
+		Phone:          result.GetWaPhone(),
+		OTPChannel:     "wa",
+		Source:         userID,
+		StateJSON:      stateJSON,
+		Pin:            input.GetPin(),
+		CountryCode:    input.GetCountryCode(),
+		SkipPhoneProbe: true,
 	}
 
-	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
-	token, err := runGoPayAppEnsureTokenChild(ctx, input.GetJobId(), otpOpts)
-	stateJSON = token.GetStateJson()
-	combined["ensure_token_available"] = protoDataMap(token.GetData())
+	setWorkflowProgress(ctx, progress, stepGoPayAppSignup)
+	signup, err := runGoPayAppSignupChild(ctx, input.GetJobId(), otpOpts, 0)
+	stateJSON = signup.GetStateJson()
+	combined["signup"] = protoDataMap(signup.GetData())
+	combined["signup_phone_probe_skipped"] = true
 	if err != nil {
-		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, combined), nil
+		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppSignup, statusFailedRetryable, false, true, err, combined), nil
 	}
-	result.SignupComplete = token.GetSignupComplete()
-	result.AccountTokenReady = token.GetAccountTokenReady()
+	result.SignupComplete = signup.GetSignupComplete()
+	result.AccountTokenReady = signup.GetAccountTokenReady()
 	if err := workflow.ExecuteActivity(retryCtx, goPayAppSaveStateActivityName, GoPayAppStateActivityInput{
 		JobId:     input.GetJobId(),
 		UserId:    userID,
 		StateJson: stateJSON,
-		Reason:    stateReasonPrefix + "_token_available",
+		Reason:    stateReasonPrefix + "_signup",
 	}).Get(ctx, nil); err != nil {
-		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, combined), nil
+		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppSignup, statusFailedRetryable, false, true, err, combined), nil
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppEnsurePINSetup)

@@ -132,7 +132,7 @@ func (s *Server) SignupStart(ctx context.Context, req *pb.SignupStartRequest) (*
 	if strings.TrimSpace(req.GetPhone()) == "" {
 		return &pb.SignupStartResponse{Success: false, ErrorMessage: "signup phone required", StateJson: stateJSON(state)}, nil
 	}
-	result := s.startSignup(ctx, state, req.GetPhone(), req.GetName(), req.GetEmail(), req.GetCountryCode(), req.GetOtpChannel())
+	result := s.startSignup(ctx, state, req.GetPhone(), req.GetName(), req.GetEmail(), req.GetCountryCode(), req.GetOtpChannel(), req.GetSkipPhoneProbe())
 	if !anyBool(result["success"]) {
 		return &pb.SignupStartResponse{Success: false, ErrorMessage: anyString(result["error"]), RawJson: anyString(result["raw_json"]), StateJson: stateJSON(state)}, nil
 	}

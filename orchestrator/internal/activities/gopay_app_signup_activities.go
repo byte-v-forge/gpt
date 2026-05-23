@@ -28,6 +28,9 @@ func (s *Server) startGoPayAppSignup(ctx context.Context, input GoPayAppOTPStart
 		"otp_channel":       otpChannel,
 		"state_diagnostics": goPayAppStateDiagnostics(stateJSON),
 	}
+	if input.GetSkipPhoneProbe() {
+		data["skip_phone_probe"] = true
+	}
 	defer func() {
 		output.Data = protoData(data)
 	}()
@@ -86,10 +89,11 @@ func (s *Server) startGoPayAppSignup(ctx context.Context, input GoPayAppOTPStart
 
 	startedAt := time.Now().Unix()
 	startResp, err := s.gopayClient.SignupStart(ctx, &pb.SignupStartRequest{
-		Phone:       phone,
-		CountryCode: input.GetCountryCode(),
-		OtpChannel:  goPayOTPMethod(otpChannel),
-		StateJson:   output.GetStateJson(),
+		Phone:          phone,
+		CountryCode:    input.GetCountryCode(),
+		OtpChannel:     goPayOTPMethod(otpChannel),
+		SkipPhoneProbe: input.GetSkipPhoneProbe(),
+		StateJson:      output.GetStateJson(),
 	})
 	output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(startResp))
 	if err == nil && strings.TrimSpace(input.GetSmsActivationId()) != "" {

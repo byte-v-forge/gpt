@@ -52,7 +52,7 @@ func (s *Server) AuthStart(ctx context.Context, req *pb.AuthStartRequest) (*pb.A
 	if !anyBool(login["not_registered"]) {
 		return &pb.AuthStartResponse{Success: false, ErrorMessage: anyString(login["error"]), Mode: "login", Stage: firstNonEmpty(stateString(state, "stage"), "idle"), StateJson: stateJSON(state)}, nil
 	}
-	signup := s.startSignup(ctx, state, phone, "", "", req.GetCountryCode(), req.GetOtpChannel())
+	signup := s.startSignup(ctx, state, phone, "", "", req.GetCountryCode(), req.GetOtpChannel(), false)
 	return &pb.AuthStartResponse{
 		Success:            anyBool(signup["success"]),
 		ErrorMessage:       anyString(signup["error"]),

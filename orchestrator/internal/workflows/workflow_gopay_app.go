@@ -28,6 +28,7 @@ type goPayAppOTPOptions struct {
 	StateJSON       string
 	Pin             string
 	CountryCode     string
+	SkipPhoneProbe  bool
 }
 
 func GoPayAppWorkflow(ctx workflow.Context, input GoPayAppWorkflowInput) (GoPayAppWorkflowResult, error) {
@@ -609,6 +610,7 @@ func runGoPayAppSignup(ctx workflow.Context, activityCtx workflow.Context, cance
 		StateJson:       opts.StateJSON,
 		Pin:             opts.Pin,
 		CountryCode:     opts.CountryCode,
+		SkipPhoneProbe:  opts.SkipPhoneProbe,
 	}).Get(ctx, &start); err != nil {
 		return goPayAppStepFromOTP(start), err
 	}

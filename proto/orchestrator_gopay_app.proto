@@ -421,6 +421,7 @@ message GoPayAppOTPWorkflowInput {
   string state_json = 7;
   string pin = 8;
   string country_code = 9;
+  bool skip_phone_probe = 10;
 }
 
 message GoPayAppChangePhoneWorkflowInput {
@@ -767,6 +768,7 @@ message GoPayAppOTPStartInput {
   string state_json = 8;
   string pin = 9;
   string country_code = 10;
+  bool skip_phone_probe = 11;
 }
 
 message GoPayAppCreatePinStartInput {

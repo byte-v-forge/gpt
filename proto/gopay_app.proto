@@ -114,6 +114,7 @@ message SignupStartRequest {
   string email = 3;
   string country_code = 4; // 电话区号，例如 "+62"；为空时 provider 使用 GoPay 默认国家区号
   string otp_channel = 5;  // sms 或 wa；为空默认 sms；由服务映射为 otp_sms / otp_wa
+  bool skip_phone_probe = 6; // 直接进入 signup methods，不预探测手机号是否已注册
   string state_json = 100;
 }
 

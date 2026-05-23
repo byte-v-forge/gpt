@@ -207,7 +207,7 @@ func (s *Server) continueLogin2FA(ctx context.Context, client *gopayapp.Client, 
 	return nil
 }
 
-func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, email, countryCode, otpChannel string) map[string]any {
+func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, email, countryCode, otpChannel string, skipPhoneProbe bool) map[string]any {
 	cc := phoneCountryCode(s.cfg, countryCode)
 	normalized := normalizePhoneWithConfig(s.cfg, phone, cc)
 	if normalized == "" {
@@ -249,6 +249,7 @@ func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, e
 	state["_signup_name"] = name
 	state["_signup_email"] = email
 	state["_signup_started_at"] = time.Now().Unix()
+	state["_signup_skip_phone_probe"] = skipPhoneProbe
 	state["stage"] = "signup"
 	delete(state, "last_error")
 	proxyURL := s.proxyForState(state)
@@ -272,25 +273,30 @@ func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, e
 		delete(state, "_signup_support_warmup_error")
 	}
 	state["_signup_support_warmup_at"] = time.Now().Unix()
-	probeResp, err := client.Post(ctx, gotoAuthBaseURL+"/goto-auth/login/methods", signupProbeBody{
-		PhoneNumber:               normalized,
-		CountryCode:               cc,
-		Email:                     "",
-		DeviceVerificationTokenID: "",
-		ClientID:                  s.cfg.GotoClientID,
-		ClientSecret:              s.cfg.GotoClientSecret,
-	})
-	if err != nil {
-		return map[string]any{"success": false, "error": err.Error()}
-	}
-	if probeResp.StatusCode == http.StatusOK || probeResp.StatusCode == http.StatusCreated {
-		return map[string]any{"success": false, "error": "PHONE_REGISTERED", "raw_json": safeJSON(probeResp.Payload)}
-	}
-	if isRateLimited(probeResp) {
-		return s.signupRateLimitResult(state, signupRateLimitScopeProbe, normalized, cc, rateLimitLabel(signupRateLimitScopeProbe), probeResp)
-	}
-	if !loginMethodsInvalidUser(probeResp) && probeResp.StatusCode >= http.StatusBadRequest {
-		return map[string]any{"success": false, "error": apiError("signup phone probe failed", probeResp), "support_warmup": supportWarmup, "raw_json": safeJSON(probeResp.Payload)}
+	if skipPhoneProbe {
+		state["_signup_phone_probe_skipped"] = true
+		supportWarmup["phone_probe_skipped"] = true
+	} else {
+		probeResp, err := client.Post(ctx, gotoAuthBaseURL+"/goto-auth/login/methods", signupProbeBody{
+			PhoneNumber:               normalized,
+			CountryCode:               cc,
+			Email:                     "",
+			DeviceVerificationTokenID: "",
+			ClientID:                  s.cfg.GotoClientID,
+			ClientSecret:              s.cfg.GotoClientSecret,
+		})
+		if err != nil {
+			return map[string]any{"success": false, "error": err.Error()}
+		}
+		if probeResp.StatusCode == http.StatusOK || probeResp.StatusCode == http.StatusCreated {
+			return map[string]any{"success": false, "error": "PHONE_REGISTERED", "raw_json": safeJSON(probeResp.Payload)}
+		}
+		if isRateLimited(probeResp) {
+			return s.signupRateLimitResult(state, signupRateLimitScopeProbe, normalized, cc, rateLimitLabel(signupRateLimitScopeProbe), probeResp)
+		}
+		if !loginMethodsInvalidUser(probeResp) && probeResp.StatusCode >= http.StatusBadRequest {
+			return map[string]any{"success": false, "error": apiError("signup phone probe failed", probeResp), "support_warmup": supportWarmup, "raw_json": safeJSON(probeResp.Payload)}
+		}
 	}
 	device = device.WithNewTransactionID()
 	state["_signup_cvs_transaction_id"] = device.TransactionID

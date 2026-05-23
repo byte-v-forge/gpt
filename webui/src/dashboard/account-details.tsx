@@ -8,7 +8,7 @@ import {
 } from '@/dashboard/module-kit';
 import { AccountSignalBadge, PaymentChannelIcon } from './account-badges';
 import { ActivationChannelEditor, TokenEditor } from './account-detail-editors';
-import { accountInboxHint } from './account-mail-utils';
+import { accountInboxHint, canFetchAccountInbox } from './account-mail-utils';
 import { accountSignalText, canGoPayPayment, canLoginSession, canProbeAccount, canRefreshAccessToken, loginActionHint, loginActionLabel, probeAccountHint } from './account-utils';
 import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
 
@@ -33,6 +33,7 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
   onRefreshAccessToken: (account: Account) => Promise<void>;
   onDelete: (account: Account) => Promise<void>;
 }) {
+  const canFetchOTP = canFetchAccountInbox(account, mailboxContext);
   const accountActions: ActionButtonDescriptor[] = [{
     id: 'gopay-wa-payment',
     visible: canGoPayPayment(account),
@@ -75,10 +76,11 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
     onClick: () => onProbeAccount(account),
   }, {
     id: 'fetch-otp',
+    visible: canFetchOTP,
     label: inboxLoading ? '拉取中' : '拉取 OTP',
     hint: accountInboxHint(account.email, mailboxContext, showSecrets),
     icon: <Inbox size={14} />,
-    disabled: busy || inboxLoading || !account.email,
+    disabled: busy || inboxLoading,
     onClick: () => void onFetchInbox(account),
   }, {
     id: 'delete-account',
@@ -143,7 +145,7 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
           <h3>账号</h3>
           <ActionButtonGroup className="sectionActions" actions={accountActions} />
         </div>
-        <MailboxOtpPanel latestOtp={latestOtp} showSecrets={showSecrets} loading={inboxLoading} onCopy={onCopy} />
+        {(canFetchOTP || latestOtp) && <MailboxOtpPanel latestOtp={latestOtp} showSecrets={showSecrets} loading={inboxLoading} compact onCopy={onCopy} />}
         <AccountSignalBadge account={account} />
         <KVList items={summaryFields} onCopy={onCopy} />
         <ActivationChannelEditor account={account} activationChannel={activationChannel} onSave={onActivationChannelSave} />

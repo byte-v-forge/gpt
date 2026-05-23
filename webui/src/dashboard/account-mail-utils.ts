@@ -21,6 +21,10 @@ export function accountInboxHint(email: string, context: AccountMailboxContext |
   return `用邮箱账号 ${primaryEmail} 拉取收件箱，按收件地址 ${accountEmail} 匹配 OTP`;
 }
 
+export function canFetchAccountInbox(account: Account, context: AccountMailboxContext | null) {
+  return !!normalizeUiEmail(account.email) && (!!normalizeUiEmail(account.primary_mailbox_email) || !!context?.known);
+}
+
 export function latestOtpFromAccount(account: Account): LatestOtp | null {
   if (!account.mailbox_latest_otp) return null;
   return {

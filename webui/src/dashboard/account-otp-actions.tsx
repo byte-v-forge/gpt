@@ -14,7 +14,7 @@ const otpWaitSteps = new Set([
   'gopay_app_ensure_token_available',
   'gopay_app_signup',
   'gopay_app_signup_retry',
-  'gopay_app_ensure_pin_settled',
+  'gopay_app_ensure_pin_setup',
   'gopay_app_change_phone_sms_wait',
   'gopay_app_deactivate_sms_wait'
 ]);

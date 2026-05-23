@@ -20,6 +20,7 @@ func temporalWorkerSpec(taskQueue string, s *activities.Server) workflowruntime.
 			{Name: "GoPayAppChangePhoneWorkflow", Definition: workflows.GoPayAppChangePhoneWorkflow},
 			{Name: "GoPayAppDeactivateWorkflow", Definition: workflows.GoPayAppDeactivateWorkflow},
 			{Name: "GoPayAppSignupWorkflow", Definition: workflows.GoPayAppSignupWorkflow},
+			{Name: "GoPayAppEnsurePINSetupWorkflow", Definition: workflows.GoPayAppEnsurePINSetupWorkflow},
 			{Name: "GoPayAppCreatePinWorkflow", Definition: workflows.GoPayAppCreatePinWorkflow},
 			{Name: "GoPayPaymentWorkflow", Definition: workflows.GoPayPaymentWorkflow},
 			{Name: "GoPayQRISPaymentActivateWorkflow", Definition: workflows.GoPayQRISPaymentActivateWorkflow},

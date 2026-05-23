@@ -63,7 +63,7 @@ export function GoPayActionsPanel({ currentJob, onDone, onRefreshState, onRefres
       <ActionGroup title="流程">
         <Button onClick={() => startAppWorkflow('登录', 'login')} disabled={disabled}><LogIn size={15} />登录</Button>
         <Button onClick={() => startAppWorkflow('注册', 'signup')} disabled={disabled}><UserPlus size={15} />注册</Button>
-        <Button onClick={() => startAppWorkflow('设置PIN', 'create_pin')} disabled={disabled}><KeyRound size={15} />设置PIN</Button>
+        <Button onClick={() => startAppWorkflow('设置PIN', 'ensure_pin_setup')} disabled={disabled}><KeyRound size={15} />设置PIN</Button>
         <Button onClick={() => startAppWorkflow('换绑', 'change_phone')} disabled={disabled}><Repeat size={15} />换绑</Button>
       </ActionGroup>
       <ActionGroup title="手动 OTP">

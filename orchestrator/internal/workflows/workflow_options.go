@@ -348,22 +348,6 @@ func waitForGoPayAddBalanceSelectionPolling(ctx workflow.Context, activityCtx wo
 	var lastData map[string]any
 	var lastErr string
 	for {
-		nextStateJSON, checkData, ready, checkErr := checkGoPayAddBalanceReady(ctx, activityCtx, jobID, stateJSON)
-		if nextStateJSON != "" {
-			stateJSON = nextStateJSON
-		}
-		if len(checkData) > 0 {
-			lastData = checkData
-		}
-		if checkErr != "" {
-			lastErr = checkErr
-		}
-		if ready {
-			checkData["add_balance_status"] = "balance_ready"
-			checkData["auto_confirmed"] = true
-			return nil, stateJSON, checkData, true, nil
-		}
-
 		pollCtx, cancelPoll := workflow.WithCancel(ctx)
 		poll := workflow.NewTimer(pollCtx, goPayAddBalancePollInterval)
 		var selected *GoPayAddBalance
@@ -384,17 +368,32 @@ func waitForGoPayAddBalanceSelectionPolling(ctx workflow.Context, activityCtx wo
 		selector.Select(ctx)
 		cancelPoll()
 
+		if goPayAddBalanceMethod(selected) != "" {
+			return selected, stateJSON, lastData, false, nil
+		}
 		if timedOut {
 			if lastErr != "" {
 				return nil, stateJSON, lastData, false, fmt.Errorf("add_balance method not selected and balance not ready after %ds: %s", timeoutSeconds, lastErr)
 			}
 			return nil, stateJSON, lastData, false, fmt.Errorf("add_balance method not selected and balance not ready after %ds", timeoutSeconds)
 		}
-		if goPayAddBalanceMethod(selected) != "" {
-			return selected, stateJSON, lastData, false, nil
-		}
-		if shouldPoll {
+		if !shouldPoll {
 			continue
+		}
+		nextStateJSON, checkData, ready, checkErr := checkGoPayAddBalanceReady(ctx, activityCtx, jobID, stateJSON)
+		if nextStateJSON != "" {
+			stateJSON = nextStateJSON
+		}
+		if len(checkData) > 0 {
+			lastData = checkData
+		}
+		if checkErr != "" {
+			lastErr = checkErr
+		}
+		if ready {
+			checkData["add_balance_status"] = "balance_ready"
+			checkData["auto_confirmed"] = true
+			return nil, stateJSON, checkData, true, nil
 		}
 	}
 }

@@ -11,12 +11,13 @@ import (
 )
 
 const (
-	goPayAppAuthChildWorkflowName        = "GoPayAppAuthWorkflow"
-	goPayAppEnsureTokenChildWorkflowName = "GoPayAppEnsureTokenWorkflow"
-	goPayAppChangePhoneChildWorkflowName = "GoPayAppChangePhoneWorkflow"
-	goPayAppDeactivateChildWorkflowName  = "GoPayAppDeactivateWorkflow"
-	goPayAppSignupChildWorkflowName      = "GoPayAppSignupWorkflow"
-	goPayAppCreatePinChildWorkflowName   = "GoPayAppCreatePinWorkflow"
+	goPayAppAuthChildWorkflowName           = "GoPayAppAuthWorkflow"
+	goPayAppEnsureTokenChildWorkflowName    = "GoPayAppEnsureTokenWorkflow"
+	goPayAppChangePhoneChildWorkflowName    = "GoPayAppChangePhoneWorkflow"
+	goPayAppDeactivateChildWorkflowName     = "GoPayAppDeactivateWorkflow"
+	goPayAppSignupChildWorkflowName         = "GoPayAppSignupWorkflow"
+	goPayAppEnsurePINSetupChildWorkflowName = "GoPayAppEnsurePINSetupWorkflow"
+	goPayAppCreatePinChildWorkflowName      = "GoPayAppCreatePinWorkflow"
 )
 
 func GoPayAppAuthWorkflow(ctx workflow.Context, input *GoPayAppOTPWorkflowInput) (*GoPayAppStepOutput, error) {
@@ -52,10 +53,17 @@ func GoPayAppSignupWorkflow(ctx workflow.Context, input *GoPayAppOTPWorkflowInpu
 	return &out, err
 }
 
+func GoPayAppEnsurePINSetupWorkflow(ctx workflow.Context, input *GoPayAppOTPWorkflowInput) (*GoPayAppStepOutput, error) {
+	activityCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(30*time.Minute))
+	cancelCtx := workflow.WithActivityOptions(ctx, retryableActivityOptions(30*time.Second, 5))
+	out, err := runGoPayAppEnsurePINSetup(ctx, activityCtx, cancelCtx, input.GetJobId(), goPayAppOTPOptionsFromChildInput(input))
+	return &out, err
+}
+
 func GoPayAppCreatePinWorkflow(ctx workflow.Context, input *GoPayAppOTPWorkflowInput) (*GoPayAppStepOutput, error) {
 	activityCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(30*time.Minute))
 	cancelCtx := workflow.WithActivityOptions(ctx, retryableActivityOptions(30*time.Second, 5))
-	out, err := runGoPayAppCreatePin(ctx, activityCtx, cancelCtx, input.GetJobId(), goPayAppOTPOptionsFromChildInput(input))
+	out, err := runGoPayAppEnsurePINSetup(ctx, activityCtx, cancelCtx, input.GetJobId(), goPayAppOTPOptionsFromChildInput(input))
 	return &out, err
 }
 
@@ -96,6 +104,12 @@ func runGoPayAppDeactivateChild(ctx workflow.Context, jobID, activationID, state
 func runGoPayAppSignupChild(ctx workflow.Context, jobID string, opts goPayAppOTPOptions, attempt int) (*GoPayAppStepOutput, error) {
 	out := &GoPayAppStepOutput{}
 	err := executeGoPayChildWorkflow(ctx, goPayAppSignupChildWorkflowName, childWorkflowSuffix("gopay-signup", attempt), GoPayAppSignupWorkflow, goPayAppOTPWorkflowInput(jobID, opts), &out)
+	return out, err
+}
+
+func runGoPayAppEnsurePINSetupChild(ctx workflow.Context, jobID string, opts goPayAppOTPOptions) (*GoPayAppStepOutput, error) {
+	out := &GoPayAppStepOutput{}
+	err := executeGoPayChildWorkflow(ctx, goPayAppEnsurePINSetupChildWorkflowName, "gopay-ensure-pin-setup", GoPayAppEnsurePINSetupWorkflow, goPayAppOTPWorkflowInput(jobID, opts), &out)
 	return out, err
 }
 

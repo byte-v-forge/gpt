@@ -235,7 +235,7 @@ func goPayWebhookOTPWaitMessage(stepName string) string {
 	switch strings.TrimSpace(stepName) {
 	case stepGoPayAppSignup:
 		return "waiting for gopay signup otp"
-	case stepGoPayAppCreatePin:
+	case stepGoPayAppEnsurePINSetup:
 		return "waiting for gopay create pin otp"
 	case stepGoPayPayment:
 		return "waiting for gopay payment otp"
@@ -248,7 +248,7 @@ func goPayWebhookOTPNotReceivedMessage(stepName string) string {
 	switch strings.TrimSpace(stepName) {
 	case stepGoPayAppSignup:
 		return "gopay signup otp not received"
-	case stepGoPayAppCreatePin:
+	case stepGoPayAppEnsurePINSetup:
 		return "gopay create pin otp not received"
 	case stepGoPayPayment:
 		return "gopay payment otp not received"

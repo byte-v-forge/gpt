@@ -9,7 +9,7 @@ import (
 	pb "orchestrator/pb"
 )
 
-const goPayAppCreatePinOperation = "create_pin"
+const goPayAppEnsurePINSetupOperation = "ensure_pin_setup"
 
 func (s *Server) GoPayAppCreatePinStartActivity(ctx context.Context, input GoPayAppCreatePinStartInput) (GoPayAppOTPOutput, error) {
 	return s.startGoPayAppCreatePin(ctx, input)
@@ -24,16 +24,16 @@ func (s *Server) GoPayAppCreatePinCompleteActivity(ctx context.Context, input Go
 }
 
 func (s *Server) startGoPayAppCreatePin(ctx context.Context, input GoPayAppCreatePinStartInput) (GoPayAppOTPOutput, error) {
-	stepName := stepGoPayAppCreatePin
+	stepName := stepGoPayAppEnsurePINSetup
 	output := GoPayAppOTPOutput{
-		Operation:      goPayAppCreatePinOperation,
+		Operation:      goPayAppEnsurePINSetupOperation,
 		TimeoutSeconds: s.paymentOtpTimeout(),
 		StateJson:      normalizeGoPayWorkflowStateJSON(input.GetStateJson()),
 	}
 	otpChannel := normalizeGoPayOTPChannel(input.GetOtpChannel())
 	output.OtpChannel = otpChannel
 	data := map[string]any{
-		"operation":   goPayAppCreatePinOperation,
+		"operation":   goPayAppEnsurePINSetupOperation,
 		"otp_channel": otpChannel,
 	}
 	defer func() {
@@ -119,9 +119,9 @@ func (s *Server) startGoPayAppCreatePin(ctx context.Context, input GoPayAppCreat
 }
 
 func (s *Server) retryGoPayAppCreatePin(ctx context.Context, input GoPayAppCreatePinStartInput) (GoPayAppOTPOutput, error) {
-	stepName := stepGoPayAppCreatePin
+	stepName := stepGoPayAppEnsurePINSetup
 	output := GoPayAppOTPOutput{
-		Operation:      goPayAppCreatePinOperation,
+		Operation:      goPayAppEnsurePINSetupOperation,
 		TimeoutSeconds: s.paymentOtpTimeout(),
 		StateJson:      normalizeGoPayWorkflowStateJSON(input.GetStateJson()),
 	}
@@ -179,9 +179,9 @@ func (s *Server) retryGoPayAppCreatePin(ctx context.Context, input GoPayAppCreat
 }
 
 func (s *Server) completeGoPayAppCreatePin(ctx context.Context, input GoPayAppCreatePinCompleteInput) (GoPayAppOTPOutput, error) {
-	stepName := stepGoPayAppCreatePin
+	stepName := stepGoPayAppEnsurePINSetup
 	output := GoPayAppOTPOutput{
-		Operation:      goPayAppCreatePinOperation,
+		Operation:      goPayAppEnsurePINSetupOperation,
 		TimeoutSeconds: s.paymentOtpTimeout(),
 		StateJson:      normalizeGoPayWorkflowStateJSON(input.GetStateJson()),
 	}

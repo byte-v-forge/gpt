@@ -70,7 +70,7 @@ const (
 	stepGoPayAppSignupRetry          = "gopay_app_signup_retry"
 	stepGoPayAppSignupPhoneCancel    = "gopay_app_signup_phone_cancel"
 	stepGoPayAppStatus               = "gopay_app_status"
-	stepGoPayAppCreatePin            = "gopay_app_ensure_pin_settled"
+	stepGoPayAppEnsurePINSetup       = "gopay_app_ensure_pin_setup"
 	stepGoPayAppAddBalance           = "gopay_app_add_balance"
 	stepGoPayAppAddBalanceConfirm    = "gopay_app_add_balance_confirm"
 	stepGoPayAppSMSFinish            = "gopay_app_sms_finish"

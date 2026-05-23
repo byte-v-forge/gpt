@@ -299,6 +299,25 @@ func goPaySMSPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInp
 	}
 	result.SignupComplete = signup.GetSignupComplete()
 
+	ensurePINBeforeAddBalance := workflow.GetVersion(ctx, "gopay-sms-ensure-pin-setup-before-add-balance", workflow.DefaultVersion, 1) != workflow.DefaultVersion
+	pinSetupComplete := false
+	if ensurePINBeforeAddBalance {
+		setWorkflowProgress(ctx, progress, stepGoPayAppEnsurePINSetup)
+		otpOpts.StateJSON = stateJSON
+		pin, err := runGoPayAppEnsurePINSetupChild(ctx, input.GetJobId(), otpOpts)
+		stateJSON = pin.GetStateJson()
+		combined["ensure_pin_setup"] = protoDataMap(pin.GetData())
+		if err != nil {
+			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsurePINSetup, statusFailedRetryable, false, true, err, combined), nil
+		}
+		result.SignupPinComplete = pin.GetSignupPinComplete()
+		result.AccountTokenReady = pin.GetAccountTokenReady()
+		if !pin.GetAccountTokenReady() {
+			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsurePINSetup, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after ensure pin setup"), combined), nil
+		}
+		pinSetupComplete = true
+	}
+
 	if addBalance == nil {
 		setWorkflowProgress(ctx, progress, stepGoPayAppAddBalance)
 		selectedAddBalance, nextStateJSON, balanceData, balanceReady, err := waitForGoPayAddBalanceSelection(ctx, retryCtx, input.GetJobId(), stateJSON, input.GetAddBalanceConfirmTimeoutSeconds())
@@ -383,21 +402,22 @@ func goPaySMSPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInp
 		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayPaymentPrepare, statusFailedRetryable, false, true, err, combined), nil
 	}
 
-	setWorkflowProgress(ctx, progress, stepGoPayAppCreatePin)
-	otpOpts.StateJSON = stateJSON
-	createPin, err := runGoPayAppCreatePinChild(ctx, input.GetJobId(), otpOpts)
-	stateJSON = createPin.GetStateJson()
-	if err != nil {
-		cancelGoPayPayment(ctx, retryCtx, paymentPrepare.GetFlowId())
-		combined["create_pin"] = protoDataMap(createPin.GetData())
-		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppCreatePin, statusFailedRetryable, false, true, err, combined), nil
-	}
-	combined["create_pin"] = protoDataMap(createPin.GetData())
-	result.SignupPinComplete = createPin.GetSignupPinComplete()
-	result.AccountTokenReady = createPin.GetAccountTokenReady()
-	if !createPin.GetAccountTokenReady() {
-		cancelGoPayPayment(ctx, retryCtx, paymentPrepare.GetFlowId())
-		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppCreatePin, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after create pin"), combined), nil
+	if !pinSetupComplete {
+		setWorkflowProgress(ctx, progress, stepGoPayAppEnsurePINSetup)
+		otpOpts.StateJSON = stateJSON
+		pin, err := runGoPayAppCreatePinChild(ctx, input.GetJobId(), otpOpts)
+		stateJSON = pin.GetStateJson()
+		combined["ensure_pin_setup"] = protoDataMap(pin.GetData())
+		if err != nil {
+			cancelGoPayPayment(ctx, retryCtx, paymentPrepare.GetFlowId())
+			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsurePINSetup, statusFailedRetryable, false, true, err, combined), nil
+		}
+		result.SignupPinComplete = pin.GetSignupPinComplete()
+		result.AccountTokenReady = pin.GetAccountTokenReady()
+		if !pin.GetAccountTokenReady() {
+			cancelGoPayPayment(ctx, retryCtx, paymentPrepare.GetFlowId())
+			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsurePINSetup, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after ensure pin setup"), combined), nil
+		}
 	}
 
 	var payment GoPayActivityOutput

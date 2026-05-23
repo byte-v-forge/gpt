@@ -283,26 +283,26 @@ func runGoPayAppBackedWAPaymentWorkflow(ctx workflow.Context, input GoPayPayment
 		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, combined), nil
 	}
 
-	setWorkflowProgress(ctx, progress, stepGoPayAppCreatePin)
+	setWorkflowProgress(ctx, progress, stepGoPayAppEnsurePINSetup)
 	otpOpts.StateJSON = stateJSON
-	createPin, err := runGoPayAppCreatePinChild(ctx, input.GetJobId(), otpOpts)
-	stateJSON = createPin.GetStateJson()
-	combined["ensure_pin_settled"] = protoDataMap(createPin.GetData())
+	pin, err := runGoPayAppEnsurePINSetupChild(ctx, input.GetJobId(), otpOpts)
+	stateJSON = pin.GetStateJson()
+	combined["ensure_pin_setup"] = protoDataMap(pin.GetData())
 	if err != nil {
-		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppCreatePin, statusFailedRetryable, false, true, err, combined), nil
+		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsurePINSetup, statusFailedRetryable, false, true, err, combined), nil
 	}
-	result.SignupPinComplete = createPin.GetSignupPinComplete()
-	result.AccountTokenReady = createPin.GetAccountTokenReady()
-	if !createPin.GetAccountTokenReady() {
-		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppCreatePin, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after create pin"), combined), nil
+	result.SignupPinComplete = pin.GetSignupPinComplete()
+	result.AccountTokenReady = pin.GetAccountTokenReady()
+	if !pin.GetAccountTokenReady() {
+		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsurePINSetup, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after ensure pin setup"), combined), nil
 	}
 	if err := workflow.ExecuteActivity(retryCtx, goPayAppSaveStateActivityName, GoPayAppStateActivityInput{
 		JobId:     input.GetJobId(),
 		UserId:    userID,
 		StateJson: stateJSON,
-		Reason:    stateReasonPrefix + "_pin_settled",
+		Reason:    stateReasonPrefix + "_pin_setup",
 	}).Get(ctx, nil); err != nil {
-		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppCreatePin, statusFailedRetryable, false, true, err, combined), nil
+		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsurePINSetup, statusFailedRetryable, false, true, err, combined), nil
 	}
 
 	if addBalance == nil {

@@ -1,4 +1,4 @@
-import { FileKey, Inbox, KeyRound, Search, Zap } from 'lucide-react';
+import { FileKey, Inbox, KeyRound, Search, Trash2, Zap } from 'lucide-react';
 import { ActionButtonGroup, KVList } from '@/dashboard/module-kit';
 import type { ActionButtonDescriptor, KVDescriptor } from '@/dashboard/module-kit';
 import { MailboxOtpPanel, maskEmail } from '@/dashboard/modules/mailbox/sdk';
@@ -12,7 +12,7 @@ import { accountInboxHint } from './account-mail-utils';
 import { accountSignalText, canGoPayPayment, canLoginSession, canProbeAccount, canRefreshAccessToken, loginActionHint, loginActionLabel, probeAccountHint } from './account-utils';
 import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
 
-export function AccountDetails({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, activationChannel, onCopy, onFetchInbox, onSessionSave, onAccessSave, onActivationChannelSave, onProbeAccount, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken }: {
+export function AccountDetails({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, activationChannel, onCopy, onFetchInbox, onSessionSave, onAccessSave, onActivationChannelSave, onProbeAccount, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onDelete }: {
   account: Account;
   showSecrets: boolean;
   busy: boolean;
@@ -31,6 +31,7 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
   onCodexOAuthAddPhone: (account: Account) => void;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onRefreshAccessToken: (account: Account) => Promise<void>;
+  onDelete: (account: Account) => Promise<void>;
 }) {
   const accountActions: ActionButtonDescriptor[] = [{
     id: 'gopay-wa-payment',
@@ -79,6 +80,14 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
     icon: <Inbox size={14} />,
     disabled: busy || inboxLoading || !account.email,
     onClick: () => void onFetchInbox(account),
+  }, {
+    id: 'delete-account',
+    label: '删除账号',
+    hint: '删除当前账号记录',
+    icon: <Trash2 size={14} />,
+    variant: 'destructive',
+    disabled: busy,
+    onClick: () => void onDelete(account),
   }];
   const summaryFields: KVDescriptor[] = [{
     id: 'account-status',

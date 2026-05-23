@@ -39,7 +39,6 @@ export type GptAccountsViewProps = {
   onCodexOAuthAddPhone: (account: Account) => void | Promise<void>;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onRefreshAccessToken: (account: Account) => Promise<void>;
-  onDeleteAccount: (account: Account) => Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
   onConfirmManualPayment: (jobId: string) => Promise<void>;
@@ -77,7 +76,6 @@ export function GptAccountsView(props: GptAccountsViewProps) {
           onCodexOAuthAddPhone={props.onCodexOAuthAddPhone}
           onGoPayPayment={props.onGoPayPayment}
           onRefreshAccessToken={props.onRefreshAccessToken}
-          onDelete={props.onDeleteAccount}
           onSubmitOTP={props.onSubmitOTP}
           onResendOTP={props.onResendOTP}
           onConfirmManualPayment={props.onConfirmManualPayment}

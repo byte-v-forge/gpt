@@ -50,6 +50,14 @@ func runCodexOAuthAddPhoneWithRotation(ctx workflow.Context, progress *WorkflowP
 			Label:         input.Label,
 			MaxReuseCount: input.MaxReuseCount,
 		}).Get(ctx, &phone); err != nil {
+			last.run.data = map[string]any{
+				"phone_attempt":      attempt,
+				"phone_max_attempts": codexOAuthMaxPhoneAttempts,
+			}
+			if reason := codexOAuthPhoneSupplyStopReason(err.Error()); reason != "" {
+				last.run.data["phone_stop_reason"] = reason
+				err = fmt.Errorf("%s: %s", reason, codexOAuthCleanAcquirePhoneError(err.Error()))
+			}
 			last.phone = phone
 			return last, stepCodexOAuthAcquirePhone, err
 		}

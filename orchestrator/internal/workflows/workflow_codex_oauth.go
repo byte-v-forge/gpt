@@ -204,6 +204,9 @@ func compactAccountIDs(values []string) []string {
 }
 
 func codexOAuthBatchStopReason(message string) string {
+	if reason := codexOAuthPhoneSupplyStopReason(message); reason != "" {
+		return reason
+	}
 	text := strings.ToLower(message)
 	switch {
 	case strings.Contains(text, "phone_reuse_exhausted") || strings.Contains(text, "phone_reuse_exceeded") || strings.Contains(text, "maximum number") || strings.Contains(text, "too many"):
@@ -215,6 +218,53 @@ func codexOAuthBatchStopReason(message string) string {
 	default:
 		return ""
 	}
+}
+
+func codexOAuthPhoneSupplyStopReason(message string) string {
+	text := strings.ToLower(message)
+	switch {
+	case strings.Contains(text, "sms_error_code_no_number_available") ||
+		strings.Contains(text, "no upstream number available") ||
+		strings.Contains(text, "no number available"):
+		return "phone_no_number_available"
+	case strings.Contains(text, "sms_error_code_supply_unavailable") ||
+		strings.Contains(text, "supply unavailable"):
+		return "phone_supply_unavailable"
+	case strings.Contains(text, "sms_error_code_price_limit_exceeded") ||
+		strings.Contains(text, "price limit exceeded"):
+		return "phone_price_limit_exceeded"
+	case strings.Contains(text, "sms_error_code_insufficient_balance") ||
+		strings.Contains(text, "insufficient balance"):
+		return "phone_insufficient_balance"
+	case strings.Contains(text, "sms_error_code_route_not_found") ||
+		strings.Contains(text, "route not found") ||
+		strings.Contains(text, "no matching route"):
+		return "phone_route_not_found"
+	default:
+		return ""
+	}
+}
+
+func codexOAuthCleanAcquirePhoneError(message string) string {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return "acquire phone failed"
+	}
+	if idx := strings.LastIndex(strings.ToLower(message), "sms_error_code_"); idx >= 0 {
+		tail := strings.TrimSpace(message[idx:])
+		if sep := strings.LastIndex(tail, ":"); sep >= 0 && sep+1 < len(tail) {
+			if detail := strings.TrimSpace(tail[sep+1:]); detail != "" {
+				return detail
+			}
+		}
+		return tail
+	}
+	if idx := strings.LastIndex(message, "AcquireNumber:"); idx >= 0 {
+		if detail := strings.TrimSpace(message[idx+len("AcquireNumber:"):]); detail != "" {
+			return detail
+		}
+	}
+	return message
 }
 
 func codexOAuthPhoneRetryReason(message string) string {

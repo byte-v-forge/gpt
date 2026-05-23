@@ -17,7 +17,7 @@ const (
 	defaultCodexOAuthPhoneMaxPriceUSD        = "0.067"
 	defaultCodexOAuthPhoneMaxReuseCount      = 3
 	defaultCodexOAuthPhoneWaitSeconds        = 60
-	defaultCodexOAuthPhoneMinReuseRemaining  = 300
+	defaultCodexOAuthPhoneMinReuseRemaining  = 180
 )
 
 type CodexOAuthConfig struct {

@@ -11,6 +11,7 @@ service JobService {
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
   rpc WatchJob(WatchJobRequest) returns (stream WatchJobResponse);
   rpc WatchJobs(WatchJobsRequest) returns (stream WatchJobsResponse);
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
 }
 
 message CreateJobInput {
@@ -131,6 +132,18 @@ message ListJobsResponse {
 message JobListCursor {
   int64 updated_at = 1;
   string job_id = 2;
+}
+
+message CancelJobRequest {
+  string job_id = 1;
+  string reason = 2;
+}
+
+message CancelJobResponse {
+  bool success = 1;
+  string job_id = 2;
+  JobSnapshot snapshot = 3;
+  string error_message = 4;
 }
 
 message WatchJobRequest {

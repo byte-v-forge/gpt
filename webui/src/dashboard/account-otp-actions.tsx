@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { ExternalLink, RotateCcw, Send } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ExternalLink, RotateCcw, Send, XCircle } from 'lucide-react';
 import QRCode from 'qrcode';
 import { Button, Input, buttonHint } from '@/dashboard/module-kit';
 import { WorkflowActionButton } from '@/dashboard/modules/workflow/sdk';
@@ -19,10 +19,11 @@ const otpWaitSteps = new Set([
   'gopay_app_deactivate_sms_wait'
 ]);
 
-export function AccountRunningWorkflowActions({ job, busy, onOpenWorkflow, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+export function AccountRunningWorkflowActions({ job, busy, onOpenWorkflow, onCancelWorkflow, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   job: Job;
   busy: boolean;
   onOpenWorkflow: (job: Job) => void;
+  onCancelWorkflow: (jobId: string) => Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
   onConfirmManualPayment: (jobId: string) => Promise<void>;
@@ -33,6 +34,7 @@ export function AccountRunningWorkflowActions({ job, busy, onOpenWorkflow, onSub
   const [submitting, setSubmitting] = useState(false);
   const [resending, setResending] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [canceling, setCanceling] = useState(false);
   const payment = manualGoPayPaymentView(job);
   const canConfirmPayment = canConfirmManualGoPayPayment(job, null, payment);
   const canHandleAddBalance = hasGoPayAddBalanceActions(job);
@@ -70,23 +72,39 @@ export function AccountRunningWorkflowActions({ job, busy, onOpenWorkflow, onSub
     }
   }
 
+  async function cancelWorkflow() {
+    setCanceling(true);
+    try {
+      await onCancelWorkflow(job.job_id);
+    } finally {
+      setCanceling(false);
+    }
+  }
+
+  const controls = (
+    <>
+      <WorkflowActionButton job={job} onOpen={onOpenWorkflow} />
+      <Button className="iconActionButton" variant="destructive" type="button" {...buttonHint('取消流程')} disabled={busy || canceling} onClick={() => void cancelWorkflow()}><XCircle size={14} /></Button>
+    </>
+  );
+
   if (canHandleAddBalance) {
     return (
       <div className="runningOtpActions" onClick={(event) => event.stopPropagation()}>
-        <WorkflowActionButton job={job} onOpen={onOpenWorkflow} />
+        {controls}
         <GoPayAddBalanceActions job={job} busy={busy} onSelect={onSelectAddBalance} onConfirm={onConfirmAddBalance} />
       </div>
     );
   }
-  if (qrisActivation) return <WorkflowActionButton job={job} onOpen={onOpenWorkflow} />;
+  if (qrisActivation) return <div className="runningOtpActions" onClick={(event) => event.stopPropagation()}>{controls}</div>;
   if (canConfirmPayment && payment) {
-    return <ManualQRISPaymentActions job={job} payment={payment} busy={busy || confirming} onOpenWorkflow={onOpenWorkflow} onConfirm={() => void confirmPayment()} />;
+    return <ManualQRISPaymentActions payment={payment} busy={busy || confirming} controls={controls} onConfirm={() => void confirmPayment()} />;
   }
-  if (!waitingOTP) return <WorkflowActionButton job={job} onOpen={onOpenWorkflow} />;
+  if (!waitingOTP) return <div className="runningOtpActions" onClick={(event) => event.stopPropagation()}>{controls}</div>;
 
   return (
     <div className="runningOtpActions" onClick={(event) => event.stopPropagation()}>
-      <WorkflowActionButton job={job} onOpen={onOpenWorkflow} />
+      {controls}
       <form className="runningOtpForm" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
         <Input className="runningOtpInput" inputMode="numeric" autoComplete="one-time-code" placeholder="OTP" value={otp} onChange={(event) => setOtp(event.target.value)} />
         <Button className="iconActionButton" type="submit" {...buttonHint('提交 OTP')} disabled={busy || submitting || !otp.trim()}><Send size={14} /></Button>
@@ -96,17 +114,16 @@ export function AccountRunningWorkflowActions({ job, busy, onOpenWorkflow, onSub
   );
 }
 
-function ManualQRISPaymentActions({ job, payment, busy, onOpenWorkflow, onConfirm }: {
-  job: Job;
+function ManualQRISPaymentActions({ payment, busy, controls, onConfirm }: {
   payment: NonNullable<ReturnType<typeof manualGoPayPaymentView>>;
   busy: boolean;
-  onOpenWorkflow: (job: Job) => void;
+  controls: ReactNode;
   onConfirm: () => void;
 }) {
   const dataUrl = useQRCodeDataURL(payment.qr_payload);
   return (
     <div className="flex max-w-[360px] items-center justify-end gap-3" onClick={(event) => event.stopPropagation()}>
-      <WorkflowActionButton job={job} onOpen={onOpenWorkflow} />
+      {controls}
       <div className="flex items-center gap-2 rounded-xl border bg-background p-2 shadow-sm">
         {dataUrl ? <img src={dataUrl} alt="QRIS" className="h-24 w-24 rounded bg-white p-1" /> : <div className="flex h-24 w-24 items-center justify-center rounded bg-muted text-xs text-muted-foreground">QRIS</div>}
         <div className="grid min-w-0 gap-1 text-left text-xs">

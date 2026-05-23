@@ -4,6 +4,7 @@ const (
 	Created           = "CREATED"
 	Running           = "RUNNING"
 	Succeeded         = "SUCCEEDED"
+	Canceled          = "CANCELED"
 	FailedRecoverable = "FAILED_RECOVERABLE"
 	FailedRetryable   = "FAILED_RETRYABLE"
 	FailedFinal       = "FAILED_FINAL"

@@ -27,7 +27,7 @@ import { OpenAIIcon } from './brand-icons';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onRegister, onLogin, onGoPayPayment, onProbeAccount, onRegisterActivate, onRefreshAccessToken, onDelete, onCopy, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegister, onLogin, onGoPayPayment, onProbeAccount, onRegisterActivate, onRefreshAccessToken, onDelete, onCopy, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
@@ -38,6 +38,7 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
   busy: boolean;
   onSelect: (a: Account) => void;
   onOpenWorkflow: (job: Job) => void;
+  onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (a: Account) => void;
   onLogin: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
@@ -77,6 +78,7 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
               busy={busy}
               refreshingAccessToken={refreshingAccessToken}
               onOpenWorkflow={onOpenWorkflow}
+              onCancelWorkflow={onCancelWorkflow}
               onRegister={onRegister}
               onLogin={onLogin}
               onGoPayPayment={onGoPayPayment}
@@ -126,13 +128,14 @@ function AccountCardIdentity({ account, showSecrets, onCopy }: {
   );
 }
 
-function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onRegister, onLogin, onGoPayPayment, onProbeAccount, onRegisterActivate, onRefreshAccessToken, onDelete, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onCancelWorkflow, onRegister, onLogin, onGoPayPayment, onProbeAccount, onRegisterActivate, onRefreshAccessToken, onDelete, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   account: Account;
   accountBusy: boolean;
   currentWorkflow?: Job;
   busy: boolean;
   refreshingAccessToken: boolean;
   onOpenWorkflow: (job: Job) => void;
+  onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (a: Account) => void;
   onLogin: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
@@ -149,7 +152,7 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
   if (accountBusy && currentWorkflow && !isUserAlreadyExistsAccount(account)) {
     return (
       <RecordActions className="rowActions">
-        <AccountRunningWorkflowActions job={currentWorkflow} busy={busy} onOpenWorkflow={onOpenWorkflow} onSubmitOTP={onSubmitOTP} onResendOTP={onResendOTP} onConfirmManualPayment={onConfirmManualPayment} onSelectAddBalance={onSelectAddBalance} onConfirmAddBalance={onConfirmAddBalance} />
+        <AccountRunningWorkflowActions job={currentWorkflow} busy={busy} onOpenWorkflow={onOpenWorkflow} onCancelWorkflow={onCancelWorkflow} onSubmitOTP={onSubmitOTP} onResendOTP={onResendOTP} onConfirmManualPayment={onConfirmManualPayment} onSelectAddBalance={onSelectAddBalance} onConfirmAddBalance={onConfirmAddBalance} />
       </RecordActions>
     );
   }

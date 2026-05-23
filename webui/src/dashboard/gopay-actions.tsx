@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type React from 'react';
-import { CheckCircle2, KeyRound, LogIn, RefreshCcw, Repeat, Save, Send, UserPlus, WalletCards } from 'lucide-react';
+import { CheckCircle2, KeyRound, LogIn, RefreshCcw, Repeat, Save, Send, UserPlus, WalletCards, XCircle } from 'lucide-react';
 import { Button, Input, Label, api, useQuery } from '@/dashboard/module-kit';
 import type { GoPayUserWAPhoneResponse } from '@/proto/orchestrator_gopay_app';
 import { GoPayPhoneCheck } from './gopay-phone-check';
@@ -22,11 +22,12 @@ type WorkflowResult = {
 type Props = {
   currentJob?: Job;
   onDone: (message: string, error?: boolean) => void;
+  onCancelWorkflow: (jobId: string) => Promise<void>;
   onRefreshState: () => Promise<void> | void;
   onRefreshJobs: () => Promise<void> | void;
 };
 
-export function GoPayActionsPanel({ currentJob, onDone, onRefreshState, onRefreshJobs }: Props) {
+export function GoPayActionsPanel({ currentJob, onDone, onCancelWorkflow, onRefreshState, onRefreshJobs }: Props) {
   const profile = useQuery({ queryKey: ['gpt', 'gopay', 'profile', USER_ID], queryFn: loadProfile });
   const [waPhone, setWaPhone] = useState('');
   const [pin, setPin] = useState('');
@@ -69,6 +70,7 @@ export function GoPayActionsPanel({ currentJob, onDone, onRefreshState, onRefres
       <ActionGroup title="手动 OTP">
         <GoPayField label="OTP" value={otp} onChange={setOtp} placeholder="123456" />
         <Button onClick={submitOTP} disabled={disabled || !currentJob}><Send size={15} />提交当前流程</Button>
+        <Button variant="destructive" onClick={cancelWorkflow} disabled={disabled || !currentJob}><XCircle size={15} />取消当前流程</Button>
         <Button onClick={() => void refreshAll('已刷新')} disabled={disabled}><RefreshCcw size={15} />刷新</Button>
       </ActionGroup>
     </section>
@@ -95,6 +97,17 @@ export function GoPayActionsPanel({ currentJob, onDone, onRefreshState, onRefres
     if (!otp.trim()) return onDone('OTP 不能为空', true);
     await run('提交 OTP', `/api/jobs/${currentJob.job_id}/otp`, { otp }, true);
     setOtp('');
+  }
+
+  async function cancelWorkflow() {
+    if (!currentJob?.job_id) return onDone('没有运行中的 GoPay 流程', true);
+    setBusy('取消流程');
+    try {
+      await onCancelWorkflow(currentJob.job_id);
+      await refreshAll();
+    } finally {
+      setBusy('');
+    }
   }
 
   async function run(label: string, path: string, body: Record<string, unknown>, refresh: boolean) {

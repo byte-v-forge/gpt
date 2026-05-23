@@ -2,9 +2,15 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"orchestrator/internal/contracts"
 	"orchestrator/internal/jobprojection"
+	"orchestrator/internal/jobstatus"
 	"orchestrator/pb"
 	"strings"
+
+	"go.temporal.io/api/serviceerror"
 )
 
 func (s *Server) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb.GetJobResponse, error) {
@@ -36,6 +42,47 @@ func (s *Server) ListJobs(ctx context.Context, req *pb.ListJobsRequest) (*pb.Lis
 	}
 
 	return &pb.ListJobsResponse{Snapshots: snapshots, Next: next, HasMore: hasMore}, nil
+}
+
+func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.CancelJobResponse, error) {
+	jobID := strings.TrimSpace(req.GetJobId())
+	if jobID == "" {
+		return &pb.CancelJobResponse{ErrorMessage: "job_id is required"}, nil
+	}
+	job, err := s.getJob(ctx, jobID)
+	if err != nil {
+		return &pb.CancelJobResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	if strings.EqualFold(job.Status, jobstatus.Canceled) {
+		snapshot, _ := s.jobStore.GetSnapshot(ctx, jobID)
+		return &pb.CancelJobResponse{Success: true, JobId: jobID, Snapshot: snapshot}, nil
+	}
+	if !strings.EqualFold(job.Status, statusRunning) {
+		return &pb.CancelJobResponse{JobId: jobID, ErrorMessage: "job is not running: " + job.Status}, nil
+	}
+	workflowID, ok := contracts.WorkflowID(job.Action, job.ID)
+	if !ok || workflowID == "" {
+		return &pb.CancelJobResponse{JobId: jobID, ErrorMessage: "workflow id not found"}, nil
+	}
+	if err := s.temporal.CancelWorkflow(ctx, workflowID, ""); err != nil && !isTemporalWorkflowNotFound(err) {
+		return &pb.CancelJobResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	reason := strings.TrimSpace(req.GetReason())
+	if reason == "" {
+		reason = "manual workflow cancel"
+	}
+	if err := s.jobStore.Cancel(ctx, jobID, reason, map[string]any{
+		"canceled":    true,
+		"workflow_id": workflowID,
+		"reason":      reason,
+	}); err != nil {
+		return &pb.CancelJobResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	snapshot, err := s.jobStore.GetSnapshot(ctx, jobID)
+	if err != nil {
+		return &pb.CancelJobResponse{JobId: jobID, ErrorMessage: fmt.Sprintf("load canceled job: %v", err)}, nil
+	}
+	return &pb.CancelJobResponse{Success: true, JobId: jobID, Snapshot: snapshot}, nil
 }
 
 func (s *Server) WatchJob(req *pb.WatchJobRequest, stream pb.JobService_WatchJobServer) error {
@@ -144,7 +191,13 @@ func snapshotIsTerminal(snapshot *pb.JobSnapshot) bool {
 	}
 	status := strings.ToUpper(strings.TrimSpace(snapshot.GetJob().GetStatus()))
 	return status == "SUCCEEDED" ||
+		status == "CANCELED" ||
 		status == "FAILED_RETRYABLE" ||
 		status == "FAILED_RECOVERABLE" ||
 		status == "FAILED_FINAL"
+}
+
+func isTemporalWorkflowNotFound(err error) bool {
+	var notFound *serviceerror.NotFound
+	return errors.As(err, &notFound)
 }

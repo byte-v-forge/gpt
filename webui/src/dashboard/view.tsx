@@ -34,6 +34,7 @@ export type GptAccountsViewProps = {
   onSyncMailboxes: () => void | Promise<void>;
   onSelectAccount: (account: Account) => void;
   onOpenWorkflow: (job: Job) => void | Promise<void>;
+  onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (account: Account) => void | Promise<void>;
   onLogin: (account: Account) => void | Promise<void>;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
@@ -73,6 +74,7 @@ export function GptAccountsView(props: GptAccountsViewProps) {
           busy={props.busy}
           onSelect={props.onSelectAccount}
           onOpenWorkflow={props.onOpenWorkflow}
+          onCancelWorkflow={props.onCancelWorkflow}
           onRegister={props.onRegister}
           onLogin={props.onLogin}
           onGoPayPayment={props.onGoPayPayment}
@@ -99,6 +101,7 @@ export type GoPayLabViewProps = {
   onLoadState: (showToast?: boolean) => void | Promise<void>;
   onRefreshJobs: () => void | Promise<void>;
   onGoPayActionDone: (message: string, error?: boolean) => void;
+  onCancelWorkflow: (jobId: string) => Promise<void>;
 };
 
 export function GoPayLabView(props: GoPayLabViewProps) {
@@ -114,6 +117,7 @@ export function GoPayLabView(props: GoPayLabViewProps) {
         <GoPayActionsPanel
           currentJob={props.currentJob}
           onDone={props.onGoPayActionDone}
+          onCancelWorkflow={props.onCancelWorkflow}
           onRefreshState={() => props.onLoadState(false)}
           onRefreshJobs={props.onRefreshJobs}
         />

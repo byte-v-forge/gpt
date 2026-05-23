@@ -14,6 +14,7 @@ const accountStatusLabels: DisplayLabelMap = {
 const jobStatusLabels: DisplayLabelMap = {
   RUNNING: '运行中',
   SUCCEEDED: '成功',
+  CANCELED: '已取消',
   FAILED_RETRYABLE: '失败',
   FAILED_RECOVERABLE: '失败，需处理',
   FAILED_FINAL: '最终失败'

@@ -52,7 +52,54 @@ func (s *Server) GoPayAppBalanceCheckActivity(ctx context.Context, input GoPayAp
 	return output, nil
 }
 
+func (s *Server) applyGoPayAddBalanceReadyFromToken(ctx context.Context, output *GoPayAppAddBalanceOutput, data map[string]any, reason string) bool {
+	if s.gopayClient == nil {
+		data["balance_check_error"] = "gopay-app client not configured"
+		return false
+	}
+	resp, nextStateJSON, err := s.validateGoPayAccountTokenForState(ctx, output.GetStateJson())
+	output.StateJson = nextStateJSON
+	checkData := checkTokenValidData(resp)
+	if reason = strings.TrimSpace(reason); reason != "" {
+		checkData["reason"] = reason
+	}
+	if err != nil {
+		checkData["error_message"] = err.Error()
+		data["balance_check_error"] = err.Error()
+		data["balance_check"] = checkData
+		return false
+	}
+	data["balance_check"] = checkData
+	if resp == nil || !resp.GetSuccess() || !resp.GetTokenValid() {
+		return false
+	}
+	ready := resp.GetHasMinBalance() || resp.GetBalanceAmount() >= 1
+	if !ready {
+		return false
+	}
+	output.Success = true
+	output.Method = "balance_poll"
+	output.Status = "balance_ready"
+	data["method"] = output.GetMethod()
+	data["status"] = output.GetStatus()
+	data["add_balance_complete"] = true
+	data["balance_ready"] = true
+	data["has_min_balance"] = resp.GetHasMinBalance()
+	data["balance_amount"] = resp.GetBalanceAmount()
+	if currency := strings.TrimSpace(resp.GetBalanceCurrency()); currency != "" {
+		data["balance_currency"] = currency
+	}
+	return true
+}
+
 func (s *Server) runGoPayAddBalance(ctx context.Context, step activityStep, input GoPayAppAddBalanceInput, output *GoPayAppAddBalanceOutput, data map[string]any) (any, error) {
+	if s.applyGoPayAddBalanceReadyFromToken(ctx, output, data, "before_add_balance_method") {
+		step.progress("gopay balance already ready", map[string]any{
+			"balance_amount": data["balance_amount"],
+			"currency":       data["balance_currency"],
+		})
+		return data, nil
+	}
 	addBalance := input.GetAddBalance()
 	if addBalance == nil {
 		err := fmt.Errorf("add_balance is required")
@@ -312,6 +359,14 @@ func (s *Server) submitRekberinajaAddBalance(ctx context.Context, step activityS
 	deadline := time.Now().Add(pollTimeout)
 	orderURL := transactionURL + "/order-product"
 	for attempt := 1; ; attempt++ {
+		if s.applyGoPayAddBalanceReadyFromToken(ctx, output, data, "rekberinaja_order_poll") {
+			step.progress("gopay balance ready while polling rekberinaja", map[string]any{
+				"attempt":        attempt,
+				"balance_amount": data["balance_amount"],
+				"currency":       data["balance_currency"],
+			})
+			return data, nil
+		}
 		step.progress("polling rekberinaja order product", map[string]any{
 			"attempt":                attempt,
 			"poll_timeout_seconds":   int(pollTimeout / time.Second),

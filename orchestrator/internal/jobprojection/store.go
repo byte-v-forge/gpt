@@ -126,6 +126,44 @@ func (s *Store) Update(ctx context.Context, jobID, statusValue, errorMessage str
 	s.publish(ctx, "job_updated", jobID)
 }
 
+func (s *Store) Cancel(ctx context.Context, jobID string, reason string, result any) error {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "workflow canceled"
+	}
+	now := time.Now().Unix()
+	jobUpdates := map[string]any{
+		"status":        jobstatus.Canceled,
+		"recoverable":   false,
+		"retryable":     false,
+		"error_message": reason,
+	}
+	if result != nil {
+		if b, err := json.Marshal(result); err == nil {
+			jobUpdates["result_json"] = string(b)
+		}
+	}
+	stepUpdates := map[string]any{
+		"status":        jobstatus.Canceled,
+		"recoverable":   false,
+		"retryable":     false,
+		"error_message": reason,
+		"completed_at":  now,
+	}
+	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&db.Job{}).Where("id = ?", jobID).Updates(jobUpdates).Error; err != nil {
+			return err
+		}
+		return tx.Model(&db.JobStep{}).
+			Where("job_id = ? AND status = ?", jobID, jobstatus.Running).
+			Updates(stepUpdates).Error
+	}); err != nil {
+		return err
+	}
+	s.publish(ctx, "job_canceled", jobID)
+	return nil
+}
+
 func (s *Store) Get(ctx context.Context, jobID string) (*db.Job, error) {
 	var job db.Job
 	if err := s.db.WithContext(ctx).First(&job, "id = ?", jobID).Error; err != nil {

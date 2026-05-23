@@ -1,0 +1,50 @@
+.paymentIconAction {
+  width: 58px;
+  min-width: 58px;
+}
+
+.splitRowActions {
+  width: 100%;
+  justify-content: space-between;
+}
+
+.rowActionsLeft,
+.rowActionsRight {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rowActionsLeft { justify-content: flex-start; }
+.rowActionsRight { justify-content: flex-end; margin-left: auto; }
+
+.activationAction {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.activationAction svg { color: currentColor; }
+.activationAction > svg { fill: currentColor; }
+
+.activationPaymentIcon {
+  min-width: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+.paymentChannelIcon {
+  min-width: 31px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 3px;
+}
+
+.paymentChannelIcon svg { flex: 0 0 auto; }
+.goPayWalletIcon { width: 15px; height: 15px; }
+.whatsAppPaymentIcon { color: #25d366; display: inline-flex; align-items: center; }

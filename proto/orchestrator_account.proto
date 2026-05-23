@@ -12,6 +12,7 @@ service AccountWorkflowService {
   rpc CreateGPTAccount(CreateGPTAccountRequest) returns (CreateGPTAccountResponse);
   rpc RegisterAccount(RegisterAccountRequest) returns (RegisterAccountResponse);
   rpc LoginAccount(LoginAccountRequest) returns (LoginAccountResponse);
+  rpc CodexOAuthAddPhone(CodexOAuthAddPhoneRequest) returns (CodexOAuthAddPhoneResponse);
   rpc RegisterAndActivateAccount(RegisterAndActivateAccountRequest) returns (RegisterAndActivateAccountResponse);
   rpc FetchAccountMailbox(FetchAccountMailboxRequest) returns (FetchAccountMailboxResponse);
   rpc SyncAccountMailboxes(SyncAccountMailboxesRequest) returns (SyncAccountMailboxesResponse);
@@ -230,6 +231,18 @@ message LoginAccountResponse {
   string error_message = 3;
 }
 
+message CodexOAuthAddPhoneRequest {
+  string account_id = 1;
+  string label = 2;
+  int32 max_reuse_count = 3;
+}
+
+message CodexOAuthAddPhoneResponse {
+  string job_id = 1;
+  bool started = 2;
+  string error_message = 3;
+}
+
 message RegisterAndActivateAccountRequest {
   reserved 1, 2, 3, 4, 5, 8, 9, 10, 12;
   reserved "use_split_strategy";
@@ -281,6 +294,69 @@ message LoginSessionWorkflowResult {
   string session_token = 2;
   string access_token = 3;
   string error_message = 4;
+}
+
+message CodexOAuthAddPhoneWorkflowInput {
+  string job_id = 1;
+  string account_id = 2;
+  string label = 3;
+  int32 max_reuse_count = 4;
+}
+
+message CodexOAuthAddPhoneWorkflowResult {
+  string job_id = 1;
+  bool success = 2;
+  string error_message = 3;
+  string auth_secret_key = 4;
+  string phone_label = 5;
+  int32 phone_reuse_count = 6;
+  int32 phone_reuse_limit = 7;
+}
+
+message CodexOAuthAcquirePhoneInput {
+  string job_id = 1;
+  string account_id = 2;
+  string label = 3;
+  int32 max_reuse_count = 4;
+}
+
+message CodexOAuthPhoneLease {
+  string activation_id = 1;
+  string phone_e164 = 2;
+  string phone_national = 3;
+  string country_iso2 = 4;
+  string country_calling_code = 5;
+  string label = 6;
+  int32 reuse_count = 7;
+  int32 reuse_limit = 8;
+  bool reused = 9;
+  string profile_key = 10;
+  int64 expires_at_unix = 11;
+}
+
+message CodexOAuthRunInput {
+  string job_id = 1;
+  string account_id = 2;
+  string label = 3;
+  CodexOAuthPhoneLease phone = 4;
+}
+
+message CodexOAuthRunOutput {
+  bool success = 1;
+  string error_message = 2;
+  string auth_secret_key = 3;
+  string phone_label = 4;
+  int32 phone_reuse_count = 5;
+  int32 phone_reuse_limit = 6;
+  google.protobuf.Struct data = 7;
+}
+
+message CodexOAuthReleasePhoneInput {
+  string job_id = 1;
+  string account_id = 2;
+  string activation_id = 3;
+  string label = 4;
+  string error_message = 5;
 }
 
 message RegisterAndActivateWorkflowInput {

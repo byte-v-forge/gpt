@@ -17,6 +17,7 @@ type Config struct {
 	AccountClient                  pb.AccountDatabaseServiceClient
 	BrowserAutomationClient        browserautomationv1.BrowserAutomationServiceClient
 	BrowserAuth                    BrowserAuthConfig
+	CodexOAuth                     CodexOAuthConfig
 	PaymentClient                  pb.PaymentServiceClient
 	OTPRelay                       *gopayotp.Relay
 	GoPayClient                    pb.GopayAppServiceClient
@@ -41,6 +42,7 @@ type Server struct {
 	browserAutomationClient        browserautomationv1.BrowserAutomationServiceClient
 	browserAuthConfig              BrowserAuthConfig
 	browserAuthFlows               *browserAuthFlowStore
+	codexOAuthConfig               CodexOAuthConfig
 	paymentClient                  pb.PaymentServiceClient
 	otpRelay                       *gopayotp.Relay
 	gopayClient                    pb.GopayAppServiceClient
@@ -66,6 +68,7 @@ func NewServer(cfg Config) *Server {
 		browserAutomationClient:        cfg.BrowserAutomationClient,
 		browserAuthConfig:              cfg.BrowserAuth.withDefaults(),
 		browserAuthFlows:               newBrowserAuthFlowStore(),
+		codexOAuthConfig:               cfg.CodexOAuth.withDefaults(),
 		paymentClient:                  cfg.PaymentClient,
 		otpRelay:                       cfg.OTPRelay,
 		gopayClient:                    cfg.GoPayClient,

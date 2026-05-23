@@ -171,13 +171,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     return { phone: goPayProfile.data?.wa_phone || '', country_code: '+62', pin: goPayProfile.data?.pin || '' };
   }
 
-  function goPayActivationInput() { const input = goPayAppInput(); return { gopay_phone: input.phone, gopay_country_code: input.country_code, gopay_pin: input.pin }; }
-
-  async function runRegisterActivate(account: Account) {
-    await runWorkflow('注册并激活', '/api/workflows/register-and-activate', account, goPayActivationInput());
-  }
-
-  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, syncingMailboxes, refreshing, runWorkflow, runGoPayPayment, runRegisterActivate, submitJobOTP, resendJobOTP, updateAccount, refreshAccessToken, fetchInbox, syncMailboxes, deleteAccount };
+  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, syncingMailboxes, refreshing, runWorkflow, runGoPayPayment, submitJobOTP, resendJobOTP, updateAccount, refreshAccessToken, fetchInbox, syncMailboxes, deleteAccount };
 }
 
 function loadGoPayProfile() {

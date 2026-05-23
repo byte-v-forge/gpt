@@ -1,4 +1,4 @@
-import { Copy, KeyRound, Play, Search, ShieldCheck, Trash2 } from 'lucide-react';
+import { Copy, KeyRound, Phone, Play, Search, Trash2, Zap } from 'lucide-react';
 import {
   IconActionButton,
   RecordActionButtons,
@@ -27,7 +27,7 @@ import { OpenAIIcon } from './brand-icons';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegister, onLogin, onGoPayPayment, onProbeAccount, onRegisterActivate, onRefreshAccessToken, onDelete, onCopy, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegister, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onProbeAccount, onRefreshAccessToken, onDelete, onCopy, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
@@ -41,9 +41,9 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (a: Account) => void;
   onLogin: (a: Account) => void;
+  onCodexOAuthAddPhone: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onProbeAccount: (a: Account) => void;
-  onRegisterActivate: (a: Account) => void;
   onRefreshAccessToken: (a: Account) => Promise<void>;
   onDelete: (a: Account) => void;
   onCopy: (label: string, value: string) => void;
@@ -81,9 +81,9 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
               onCancelWorkflow={onCancelWorkflow}
               onRegister={onRegister}
               onLogin={onLogin}
+              onCodexOAuthAddPhone={onCodexOAuthAddPhone}
               onGoPayPayment={onGoPayPayment}
               onProbeAccount={onProbeAccount}
-              onRegisterActivate={onRegisterActivate}
               onRefreshAccessToken={onRefreshAccessToken}
               onDelete={onDelete}
               onSubmitOTP={onSubmitOTP}
@@ -128,7 +128,7 @@ function AccountCardIdentity({ account, showSecrets, onCopy }: {
   );
 }
 
-function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onCancelWorkflow, onRegister, onLogin, onGoPayPayment, onProbeAccount, onRegisterActivate, onRefreshAccessToken, onDelete, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onCancelWorkflow, onRegister, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onProbeAccount, onRefreshAccessToken, onDelete, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   account: Account;
   accountBusy: boolean;
   currentWorkflow?: Job;
@@ -138,9 +138,9 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (a: Account) => void;
   onLogin: (a: Account) => void;
+  onCodexOAuthAddPhone: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onProbeAccount: (a: Account) => void;
-  onRegisterActivate: (a: Account) => void;
   onRefreshAccessToken: (a: Account) => Promise<void>;
   onDelete: (a: Account) => void;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
@@ -161,24 +161,26 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
   if (canRegister(account)) actions.push({ label: '注册账号', icon: <Play size={14} />, onClick: () => onRegister(account), disabled: busy, kind: 'primary' });
   if (canRefreshAccessToken(account)) actions.push({ label: refreshingAccessToken ? '获取中' : '获取 Access', icon: <KeyRound size={14} />, onClick: () => void onRefreshAccessToken(account), disabled: busy || refreshingAccessToken, kind: actions.length ? 'secondary' : 'primary' });
   if (canLoginSession(account)) actions.push({ label: loginActionLabel(account), icon: <KeyRound size={14} />, onClick: () => onLogin(account), disabled: busy, kind: actions.length ? 'secondary' : 'primary' });
+  if (canLoginSession(account)) actions.push({ label: 'Add Phone', icon: <Phone size={14} />, onClick: () => onCodexOAuthAddPhone(account), disabled: busy, kind: 'secondary' });
   if (canProbeAccount(account)) actions.push({ label: '探测账号', icon: <Search size={14} />, onClick: () => onProbeAccount(account), disabled: busy, kind: 'secondary' });
-  if (canRegister(account)) actions.push({ label: '注册并激活', icon: <ShieldCheck size={14} />, onClick: () => onRegisterActivate(account), disabled: busy, kind: 'secondary' });
   actions.push({ label: '删除账号', icon: <Trash2 size={14} />, onClick: () => onDelete(account), disabled: busy, kind: 'danger' });
 
-  const paymentActions: RowActionDescriptor[] = canGoPayPayment(account) ? GO_PAY_PAYMENT_CHANNELS.map((channel) => ({
+  const paymentActions: RowActionDescriptor[] = canGoPayPayment(account) ? GO_PAY_PAYMENT_CHANNELS.filter((channel) => channel !== 'wa').map((channel) => ({
     label: goPayPaymentActionLabel(channel),
-    icon: <PaymentChannelIcon channel={channel} />,
+    icon: <span className="activationPaymentIcon"><Zap size={13} /><PaymentChannelIcon channel={channel} /></span>,
     onClick: () => onGoPayPayment(account, channel),
     disabled: busy,
     kind: 'secondary' as const,
-    className: 'paymentIconAction'
+    className: 'paymentIconAction activationAction'
   })) : [];
   const primary = actions.find((action) => action.kind === 'primary' && !action.disabled) || actions.find((action) => !action.disabled) || actions[0];
-  const orderedActions = primary ? [primary, ...actions.filter((action) => action !== primary), ...paymentActions] : [...actions, ...paymentActions];
+  const leftActions = paymentActions;
+  const rightActions = primary ? [primary, ...actions.filter((action) => action !== primary)] : actions;
   return (
     <RecordActions className="rowActions">
-      <div className="rowActionsMain">
-        <RecordActionButtons actions={orderedActions} />
+      <div className="rowActionsMain splitRowActions">
+        <div className="rowActionsLeft"><RecordActionButtons actions={leftActions} /></div>
+        <div className="rowActionsRight"><RecordActionButtons actions={rightActions} /></div>
       </div>
     </RecordActions>
   );

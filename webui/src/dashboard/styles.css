@@ -120,34 +120,6 @@
   white-space: nowrap;
 }
 
-.paymentIconAction {
-  width: 46px;
-  min-width: 46px;
-}
-
-.paymentChannelIcon {
-  min-width: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 3px;
-}
-
-.paymentChannelIcon svg {
-  flex: 0 0 auto;
-}
-
-.goPayWalletIcon {
-  width: 15px;
-  height: 15px;
-}
-
-.whatsAppPaymentIcon {
-  color: #25d366;
-  display: inline-flex;
-  align-items: center;
-}
-
 .accountCardEmail {
   min-width: 0;
   width: 100%;

@@ -16,6 +16,7 @@ const (
 	actionGoPayPaymentRebind       = contracts.ActionGoPayPaymentRebind
 	actionProbeAccount             = contracts.ActionProbeAccount
 	actionLoginSession             = contracts.ActionLoginSession
+	actionCodexOAuthAddPhone       = contracts.ActionCodexOAuthAddPhone
 	actionRegisterAndActivate      = contracts.ActionRegisterAndActivate
 
 	statusCreated           = jobstatus.Created
@@ -88,6 +89,9 @@ const (
 	stepLoginSessionOTPRequest       = "login_session_otp_request"
 	stepLoginSessionOTPWait          = "login_session_otp_wait"
 	stepLoginSessionComplete         = "login_session_complete"
+	stepCodexOAuthAcquirePhone       = "codex_oauth_acquire_phone"
+	stepCodexOAuthBrowser            = "codex_oauth_browser"
+	stepCodexOAuthReleasePhone       = "codex_oauth_release_phone"
 
 	registrationOTPParam            = "registration_otp"
 	registrationOTPSubmittedAtParam = "registration_otp_submitted_at_unix"

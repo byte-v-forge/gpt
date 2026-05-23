@@ -28,6 +28,7 @@ func temporalWorkerSpec(taskQueue string, s *activities.Server) workflowruntime.
 			{Name: "GoPayPaymentRebindWorkflow", Definition: workflows.GoPayPaymentRebindWorkflow},
 			{Name: "ProbeAccountWorkflow", Definition: workflows.ProbeAccountWorkflow},
 			{Name: "LoginSessionWorkflow", Definition: workflows.LoginSessionWorkflow},
+			{Name: "CodexOAuthAddPhoneWorkflow", Definition: workflows.CodexOAuthAddPhoneWorkflow},
 			{Name: "RegisterAndActivateWorkflow", Definition: workflows.RegisterAndActivateWorkflow},
 		},
 		Activities: []workflowruntime.ActivityDefinition{
@@ -41,6 +42,9 @@ func temporalWorkerSpec(taskQueue string, s *activities.Server) workflowruntime.
 			{Name: browserAuthResendOTPActivityName, Definition: s.BrowserAuthResendOTPActivity},
 			{Name: browserAuthCompleteActivityName, Definition: s.BrowserAuthCompleteActivity},
 			{Name: browserAuthCancelActivityName, Definition: s.BrowserAuthCancelActivity},
+			{Name: codexOAuthAcquirePhoneActivityName, Definition: s.CodexOAuthAcquirePhoneActivity},
+			{Name: codexOAuthRunActivityName, Definition: s.CodexOAuthRunActivity},
+			{Name: codexOAuthReleasePhoneActivityName, Definition: s.CodexOAuthReleasePhoneActivity},
 			{Name: waitOTPActivityName, Definition: s.OTPWaitActivity},
 			{Name: fetchManualOTPActivityName, Definition: s.FetchManualOTPActivity},
 			{Name: ensureLogonActivityName, Definition: s.EnsureLogonActivity},

@@ -32,6 +32,7 @@ const emailAllocationStatusLabels: DisplayLabelMap = {
 const actionLabels: DisplayLabelMap = {
   REGISTER: '注册账号',
   LOGIN_SESSION: '登录取 Token',
+  CODEX_OAUTH_ADD_PHONE: 'Codex OAuth 加手机号',
   ACTIVATE: '激活支付',
   AUTOPAY: '自动支付',
   GOPAY_APP: 'GoPay App',

@@ -6,6 +6,7 @@ import { GoPayLabPage } from './gopay-page';
 import { registerGoPayWorkflowRenderers } from './gopay-workflow-renderers';
 import './gopay-actions.css';
 import './gopay-workflow.css';
+import './account-actions-layout.css';
 import './styles.css';
 
 registerGoPayWorkflowRenderers();

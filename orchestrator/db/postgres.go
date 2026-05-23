@@ -68,6 +68,26 @@ type RuntimeSecret struct {
 	UpdatedAt int64  `gorm:"autoUpdateTime"`
 }
 
+type CodexOAuthPhoneLease struct {
+	ActivationID       string `gorm:"primaryKey;column:activation_id"`
+	PhoneE164          string `gorm:"column:phone_e164;index"`
+	PhoneNational      string `gorm:"column:phone_national"`
+	CountryISO2        string `gorm:"column:country_iso2;index"`
+	CountryCallingCode string `gorm:"column:country_calling_code"`
+	ProfileKey         string `gorm:"column:profile_key;index"`
+	Status             string `gorm:"column:status;index"`
+	Label              string `gorm:"column:label;index"`
+	UseCount           int32  `gorm:"column:use_count"`
+	MaxUseCount        int32  `gorm:"column:max_use_count"`
+	ExpiresAt          int64  `gorm:"column:expires_at;index"`
+	LastFailureKind    string `gorm:"column:last_failure_kind;index"`
+	LastJobID          string `gorm:"column:last_job_id;index"`
+	LastAccountID      string `gorm:"column:last_account_id;index"`
+	LastError          string `gorm:"column:last_error"`
+	CreatedAt          int64  `gorm:"autoCreateTime"`
+	UpdatedAt          int64  `gorm:"autoUpdateTime"`
+}
+
 func (JobEvent) TableName() string {
 	return "job_events"
 }
@@ -78,6 +98,10 @@ func (GoPayUserProfile) TableName() string {
 
 func (RuntimeSecret) TableName() string {
 	return "runtime_secrets"
+}
+
+func (CodexOAuthPhoneLease) TableName() string {
+	return "codex_oauth_phone_leases"
 }
 
 func DSN() string {
@@ -95,6 +119,6 @@ func InitDB() *gorm.DB {
 	if err != nil {
 		log.Fatalf("failed to connect to PostgreSQL database: %v", err)
 	}
-	db.AutoMigrate(&Job{}, &JobParam{}, &JobStep{}, &JobEvent{}, &GoPayUserProfile{}, &RuntimeSecret{})
+	db.AutoMigrate(&Job{}, &JobParam{}, &JobStep{}, &JobEvent{}, &GoPayUserProfile{}, &RuntimeSecret{}, &CodexOAuthPhoneLease{})
 	return db
 }

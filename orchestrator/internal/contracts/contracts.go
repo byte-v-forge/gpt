@@ -13,6 +13,7 @@ const (
 	ActionGoPayPaymentRebind       = "GOPAY_PAYMENT_REBIND"
 	ActionProbeAccount             = "PROBE_ACCOUNT"
 	ActionLoginSession             = "LOGIN_SESSION"
+	ActionCodexOAuthAddPhone       = "CODEX_OAUTH_ADD_PHONE"
 	ActionRegisterAndActivate      = "REGISTER_AND_ACTIVATE"
 )
 
@@ -29,6 +30,9 @@ const (
 	BrowserAuthResendOTPActivityName             = "BrowserAuthResendOTPActivity"
 	BrowserAuthCompleteActivityName              = "BrowserAuthCompleteActivity"
 	BrowserAuthCancelActivityName                = "BrowserAuthCancelActivity"
+	CodexOAuthAcquirePhoneActivityName           = "CodexOAuthAcquirePhoneActivity"
+	CodexOAuthRunActivityName                    = "CodexOAuthRunActivity"
+	CodexOAuthReleasePhoneActivityName           = "CodexOAuthReleasePhoneActivity"
 	WaitOTPActivityName                          = "OTPWaitActivity"
 	FetchManualOTPActivityName                   = "FetchManualOTPActivity"
 	EnsureLogonActivityName                      = "EnsureLogonActivity"
@@ -109,6 +113,8 @@ func WorkflowID(action string, jobID string) (string, bool) {
 		return "probe-" + jobID, true
 	case ActionLoginSession:
 		return "login-session-" + jobID, true
+	case ActionCodexOAuthAddPhone:
+		return "codex-oauth-add-phone-" + jobID, true
 	case ActionRegisterAndActivate:
 		return "register-activate-" + jobID, true
 	default:

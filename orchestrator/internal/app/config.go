@@ -31,6 +31,21 @@ type orchestratorConfig struct {
 	BrowserAuthGeoIP          bool
 	BrowserAuthHumanize       string
 
+	CodexOAuthClientID                      string
+	CodexOAuthRedirectURI                   string
+	CodexOAuthAuthURL                       string
+	CodexOAuthTokenURL                      string
+	CodexOAuthScope                         string
+	CodexOAuthPhoneLabel                    string
+	CodexOAuthPhoneProfileKey               string
+	CodexOAuthPhoneMaxReuseCount            int
+	CodexOAuthPhoneCountryISO2              string
+	CodexOAuthPhoneCountryCallingCode       string
+	CodexOAuthPhoneMaxPriceUSD              string
+	CodexOAuthPhoneFirstWaitSeconds         int32
+	CodexOAuthPhoneResendWaitSeconds        int32
+	CodexOAuthPhoneMinReuseRemainingSeconds int32
+
 	GoPayOTPWebhookListenAddr              string
 	MailboxWebhookToken                    string
 	GoPayOTPWebhookTTL                     time.Duration
@@ -95,6 +110,21 @@ func loadOrchestratorConfig() orchestratorConfig {
 		BrowserAuthBlockImages:    envBool("BROWSER_AUTH_BLOCK_IMAGES", false),
 		BrowserAuthGeoIP:          envBool("BROWSER_AUTH_GEOIP", true),
 		BrowserAuthHumanize:       envDefault("BROWSER_AUTH_HUMANIZE", "true"),
+
+		CodexOAuthClientID:                      envDefault("CODEX_OAUTH_CLIENT_ID", "app_EMoamEEZ73f0CkXaXp7hrann"),
+		CodexOAuthRedirectURI:                   envDefault("CODEX_OAUTH_REDIRECT_URI", "http://localhost:1455/auth/callback"),
+		CodexOAuthAuthURL:                       envDefault("CODEX_OAUTH_AUTH_URL", "https://auth.openai.com/oauth/authorize"),
+		CodexOAuthTokenURL:                      envDefault("CODEX_OAUTH_TOKEN_URL", "https://auth.openai.com/oauth/token"),
+		CodexOAuthScope:                         envDefault("CODEX_OAUTH_SCOPE", "openid profile email offline_access api.connectors.read api.connectors.invoke"),
+		CodexOAuthPhoneLabel:                    envDefault("CODEX_OAUTH_PHONE_LABEL", "codex-oauth-add-phone"),
+		CodexOAuthPhoneProfileKey:               envDefault("CODEX_OAUTH_PHONE_PROFILE_KEY", "openai-th"),
+		CodexOAuthPhoneMaxReuseCount:            envInt("CODEX_OAUTH_PHONE_MAX_REUSE_COUNT", 3),
+		CodexOAuthPhoneCountryISO2:              envDefault("CODEX_OAUTH_PHONE_COUNTRY_ISO2", "TH"),
+		CodexOAuthPhoneCountryCallingCode:       envDefault("CODEX_OAUTH_PHONE_COUNTRY_CALLING_CODE", "66"),
+		CodexOAuthPhoneMaxPriceUSD:              envDefault("CODEX_OAUTH_PHONE_MAX_PRICE_USD", "0.067"),
+		CodexOAuthPhoneFirstWaitSeconds:         envInt32("CODEX_OAUTH_PHONE_FIRST_WAIT_SECONDS", 120),
+		CodexOAuthPhoneResendWaitSeconds:        envInt32("CODEX_OAUTH_PHONE_RESEND_WAIT_SECONDS", 120),
+		CodexOAuthPhoneMinReuseRemainingSeconds: envInt32("CODEX_OAUTH_PHONE_MIN_REUSE_REMAINING_SECONDS", 300),
 
 		GoPayOTPWebhookListenAddr:              envDefault("GOPAY_OTP_WEBHOOK_LISTEN_ADDR", ":8081"),
 		MailboxWebhookToken:                    envDefault("GPT_MAILBOX_WEBHOOK_TOKEN", ""),

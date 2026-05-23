@@ -15,6 +15,9 @@ const (
 	browserAuthResendOTPActivityName             = contracts.BrowserAuthResendOTPActivityName
 	browserAuthCompleteActivityName              = contracts.BrowserAuthCompleteActivityName
 	browserAuthCancelActivityName                = contracts.BrowserAuthCancelActivityName
+	codexOAuthAcquirePhoneActivityName           = contracts.CodexOAuthAcquirePhoneActivityName
+	codexOAuthRunActivityName                    = contracts.CodexOAuthRunActivityName
+	codexOAuthReleasePhoneActivityName           = contracts.CodexOAuthReleasePhoneActivityName
 	waitOTPActivityName                          = contracts.WaitOTPActivityName
 	fetchManualOTPActivityName                   = contracts.FetchManualOTPActivityName
 	ensureLogonActivityName                      = contracts.EnsureLogonActivityName

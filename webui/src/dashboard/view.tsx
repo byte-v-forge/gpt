@@ -7,13 +7,16 @@ import type {
   Account,
   ConcreteGoPayAddBalanceMethod,
   ConcreteGoPayPaymentChannel,
+  GPTEmailAllocation,
   GoPayDashboardStateResponse,
   Job,
+  Mailbox,
   MailboxDomain
 } from './types';
 import { AccountTable, CreateAccountForm } from './accounts';
 import { accountCodexPhoneState, canLoginSession } from './account-utils';
 import { invalidAccountsForCleanup } from './account-cleanup-actions';
+import { canFetchAccountInbox, mailboxContextForEmail } from './account-mail-utils';
 import { OpenAIIcon } from './brand-icons';
 import { GoPayActionsPanel } from './gopay-actions';
 import { GoPayStatusCard } from './gopay';
@@ -21,6 +24,8 @@ import { GoPayStatusCard } from './gopay';
 export type GptAccountsViewProps = {
   accounts: Account[];
   jobs: Job[];
+  mailboxes: Mailbox[];
+  allocations: GPTEmailAllocation[];
   mailboxDomains: MailboxDomain[];
   selectedAccountId?: string;
   showSecrets: boolean;
@@ -53,6 +58,7 @@ export type GptAccountsViewProps = {
 export function GptAccountsView(props: GptAccountsViewProps) {
   const addPhoneAccounts = props.accounts.filter((account) => canLoginSession(account) && !accountCodexPhoneState(account, props.jobs).confirmed);
   const invalidAccounts = invalidAccountsForCleanup(props.accounts);
+  const canSyncMailboxes = props.accounts.some((account) => canFetchAccountInbox(account, mailboxContextForEmail(props.mailboxes, props.allocations, account)));
   return (
     <section className="workspace singlePaneWorkspace">
       <div className="panel">
@@ -61,7 +67,7 @@ export function GptAccountsView(props: GptAccountsViewProps) {
             <CreateAccountForm compact domains={props.mailboxDomains} onDone={props.onCreateDone} onError={props.onError} />
             {addPhoneAccounts.length > 0 && <ToolbarIconButton label={`add phone · ${addPhoneAccounts.length} 个未加手机账号`} icon={<Phone size={15} />} disabled={props.busy} onClick={() => void props.onCodexOAuthBatchAddPhone(addPhoneAccounts)} />}
             {invalidAccounts.length > 0 && <ToolbarIconButton label={props.cleaningInvalidAccounts ? '清理中' : `清理失效账号 · ${invalidAccounts.length}`} icon={<Trash2 size={15} />} disabled={props.busy || props.cleaningInvalidAccounts} onClick={() => void props.onCleanInvalidAccounts()} />}
-            <ToolbarIconButton label={props.mailboxSyncing ? '同步邮箱中' : '同步邮箱'} icon={<RefreshCcw size={15} />} disabled={props.busy || props.mailboxSyncing} onClick={() => void props.onSyncMailboxes()} />
+            {canSyncMailboxes && <ToolbarIconButton label={props.mailboxSyncing ? '同步邮箱中' : '同步邮箱'} icon={<RefreshCcw size={15} />} disabled={props.busy || props.mailboxSyncing} onClick={() => void props.onSyncMailboxes()} />}
             <ToolbarIconButton label={props.showSecrets ? '隐藏敏感信息' : '显示敏感信息'} icon={props.showSecrets ? <EyeOff size={15} /> : <Eye size={15} />} onClick={props.onToggleSecrets} />
           </div>
         </PanelHeader>

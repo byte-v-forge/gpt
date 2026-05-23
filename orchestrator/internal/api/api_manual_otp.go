@@ -108,7 +108,7 @@ func (s *Server) resolveManualOTPJob(ctx context.Context, jobID, accountID strin
 
 	var job db.Job
 	err := s.db.WithContext(ctx).
-		Where("account_id = ? AND action IN ? AND status = ?", accountID, []string{actionRegister, actionActivate, actionAutopay, actionGoPayApp, actionGoPayPayment, actionGoPayWAPayment, actionGoPayPaymentRebind, actionRegisterAndActivate, actionLoginSession}, statusRunning).
+		Where("account_id = ? AND action IN ? AND status = ?", accountID, []string{actionRegister, actionActivate, actionAutopay, actionGoPayApp, actionGoPayPayment, actionGoPayQRISPaymentActivate, actionGoPayWAPayment, actionGoPayPaymentRebind, actionRegisterAndActivate, actionLoginSession}, statusRunning).
 		Order("updated_at DESC").
 		First(&job).Error
 	if err != nil {
@@ -145,7 +145,7 @@ func manualOTPParamsForJobSnapshot(job *db.Job) (string, string, string, error) 
 	switch job.Action {
 	case actionRegister, actionLoginSession:
 		return registrationOTPParam, registrationOTPSubmittedAtParam, "registration", nil
-	case actionActivate, actionAutopay, actionGoPayApp, actionGoPayPayment, actionGoPayWAPayment, actionGoPayPaymentRebind:
+	case actionActivate, actionAutopay, actionGoPayApp, actionGoPayPayment, actionGoPayQRISPaymentActivate, actionGoPayWAPayment, actionGoPayPaymentRebind:
 		return paymentOTPParam, paymentOTPSubmittedAtParam, "payment", nil
 	case actionRegisterAndActivate:
 		if job.LastStep == stepEnsureLogon || job.LastStep == stepGoPayPayment {

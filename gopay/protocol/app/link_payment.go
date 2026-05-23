@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -18,6 +20,7 @@ const (
 	DefaultCurrency                   = "IDR"
 	defaultServiceID                  = "1001"
 	midtransMerchantTransferServiceID = "1002"
+	gopayGatewayBaseURL               = "https://gwa.gopayapi.com"
 )
 
 type LinkPaymentOptions struct {
@@ -57,18 +60,115 @@ func RunLinkPayment(ctx context.Context, client *Client, options LinkPaymentOpti
 		return LinkPaymentResult{ErrorMessage: err.Error()}, err
 	}
 	recorder := stepRecorder{limit: normalizeBodyLimit(options.BodyLimit)}
-	detail, err := recorder.call("payment_detail", func() (*protocol.Response, error) {
-		return client.Get(ctx, CustomerBaseURL+"/customers/v1/payments/"+paymentRef+"?fetch_promotion_details=false", http.StatusOK)
+	status, err := RunGatewayPayment(ctx, client, paymentRef, options.PIN, &recorder)
+	if err != nil {
+		return recorder.result(paymentRef, "", err), err
+	}
+	return LinkPaymentResult{Success: true, PaymentID: paymentRef, Status: status, Steps: recorder.steps}, nil
+}
+
+func RunGatewayPayment(ctx context.Context, client *Client, paymentRef string, pin string, recorder *stepRecorder) (string, error) {
+	if err := ValidateGatewayPayment(ctx, client, paymentRef, recorder); err != nil {
+		return "", err
+	}
+	challengeID, clientID, err := ConfirmGatewayPayment(ctx, client, paymentRef, recorder)
+	if err != nil {
+		return "", err
+	}
+	pinToken, err := TokenizeNBPIN(ctx, client, pin, challengeID, clientID, recorder)
+	if err != nil {
+		return "", err
+	}
+	return ProcessGatewayPayment(ctx, client, paymentRef, pinToken, recorder)
+}
+
+func ValidateGatewayPayment(ctx context.Context, client *Client, paymentRef string, recorder *stepRecorder) error {
+	endpoint := gopayGatewayBaseURL + "/v1/payment/validate?reference_id=" + url.QueryEscape(paymentRef)
+	var lastErr error
+	for attempt := 1; attempt <= 8; attempt++ {
+		label := fmt.Sprintf("payment_validate_%d", attempt)
+		resp, err := recorder.call(label, func() (*protocol.Response, error) {
+			return client.Get(ctx, endpoint, http.StatusOK)
+		})
+		if err == nil && responseSuccess(resp) {
+			return nil
+		}
+		if err != nil {
+			lastErr = err
+		} else {
+			lastErr = fmt.Errorf("payment/validate not ready: %s", responseError(resp))
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(1500 * time.Millisecond):
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("payment/validate failed")
+	}
+	return lastErr
+}
+
+func ConfirmGatewayPayment(ctx context.Context, client *Client, paymentRef string, recorder *stepRecorder) (string, string, error) {
+	endpoint := gopayGatewayBaseURL + "/v1/payment/confirm?reference_id=" + url.QueryEscape(paymentRef)
+	resp, err := recorder.call("payment_confirm", func() (*protocol.Response, error) {
+		return client.Post(ctx, endpoint, map[string]any{"payment_instructions": []any{}}, http.StatusOK)
 	})
 	if err != nil {
-		return recorder.result(paymentRef, "", err), err
+		return "", "", err
 	}
-	order, err := ExtractPaymentOrder(detail)
+	if !responseSuccess(resp) {
+		return "", "", fmt.Errorf("payment/confirm failed: %s", responseError(resp))
+	}
+	return ExtractChallenge(resp)
+}
+
+func TokenizeNBPIN(ctx context.Context, client *Client, pin string, challengeID string, clientID string, recorder *stepRecorder) (string, error) {
+	resp, err := recorder.call("pin_tokens_nb", func() (*protocol.Response, error) {
+		return client.Post(ctx, CustomerBaseURL+"/api/v1/users/pin/tokens/nb", map[string]any{
+			"challenge_id": challengeID,
+			"client_id":    clientID,
+			"pin":          pin,
+		}, http.StatusOK)
+	})
+	if err == nil {
+		if token, tokenErr := ExtractPinToken(resp); tokenErr == nil {
+			return token, nil
+		} else {
+			err = tokenErr
+		}
+	}
+	webResp, webErr := recorder.call("pin_tokens_nb_web", func() (*protocol.Response, error) {
+		return client.TokenizePINWeb(ctx, pin, challengeID, clientID, http.StatusOK)
+	})
+	if webErr != nil {
+		return "", fmt.Errorf("pin token failed: app=%v; web=%w", err, webErr)
+	}
+	token, tokenErr := ExtractPinToken(webResp)
+	if tokenErr != nil {
+		return "", fmt.Errorf("pin token missing: app=%v; web=%w", err, tokenErr)
+	}
+	return token, nil
+}
+
+func ProcessGatewayPayment(ctx context.Context, client *Client, paymentRef string, pinToken string, recorder *stepRecorder) (string, error) {
+	endpoint := gopayGatewayBaseURL + "/v1/payment/process?reference_id=" + url.QueryEscape(paymentRef)
+	resp, err := recorder.call("payment_process", func() (*protocol.Response, error) {
+		return client.Post(ctx, endpoint, map[string]any{
+			"challenge": map[string]any{
+				"type":  "GOPAY_PIN_CHALLENGE",
+				"value": map[string]any{"pin_token": pinToken},
+			},
+		}, http.StatusOK)
+	})
 	if err != nil {
-		return recorder.result(paymentRef, "", err), err
+		return "", err
 	}
-	order["payment_id"] = firstNonEmpty(protocol.StringAt(order, "payment_id"), paymentRef)
-	return RunPaymentOrder(ctx, client, order, options.PIN, recorder)
+	if !responseSuccess(resp) || protocol.StringAt(resp.Data(), "next_action") != "payment-success" {
+		return "", fmt.Errorf("payment/process failed: %s", responseError(resp))
+	}
+	return "PAID", nil
 }
 
 func RunPaymentOrder(ctx context.Context, client *Client, order map[string]any, pin string, recorder stepRecorder) (LinkPaymentResult, error) {
@@ -305,6 +405,42 @@ func ExtractPinToken(response *protocol.Response) (string, error) {
 		return "", fmt.Errorf("pin token missing")
 	}
 	return token, nil
+}
+
+func responseSuccess(response *protocol.Response) bool {
+	if response == nil {
+		return false
+	}
+	value := response.Payload["success"]
+	if value == nil {
+		value = response.Data()["success"]
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case string:
+		return strings.EqualFold(strings.TrimSpace(typed), "true")
+	default:
+		return false
+	}
+}
+
+func responseError(response *protocol.Response) string {
+	if response == nil {
+		return "empty response"
+	}
+	for _, value := range []string{
+		protocol.StringAt(response.Payload, "error_message"),
+		protocol.StringAt(response.Payload, "message"),
+		protocol.StringAt(response.Data(), "error_message"),
+		protocol.StringAt(response.Data(), "message"),
+		strings.TrimSpace(string(response.Body)),
+	} {
+		if value != "" {
+			return protocol.Snippet(protocol.RedactText(value), 500)
+		}
+	}
+	return fmt.Sprintf("http_status=%d", response.StatusCode)
 }
 
 func stringAtAnyKey(value any, keys ...string) string {

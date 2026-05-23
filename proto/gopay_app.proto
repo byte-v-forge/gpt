@@ -100,6 +100,9 @@ message LoginCompleteResponse {
   reserved 3;
   reserved "token";
   string phone = 4;
+  bool otp_sent = 5;
+  string verification_id = 6;
+  string verification_method = 7;
   string state_json = 100;
 }
 
@@ -148,6 +151,18 @@ message SignupCompleteResponse {
   string phone = 3;
   bool pin_setup_required = 4;
   string raw_json = 5; // 上游原始响应 JSON
+  string state_json = 100;
+}
+
+message GenerateDeviceProxyRequest {}
+
+message GenerateDeviceProxyResponse {
+  bool success = 1;
+  string error_message = 2;
+  int32 proxy_slot = 3;
+  int32 dynamic_egress_size = 4;
+  string proxy_hash = 5;
+  string device_fingerprint = 6;
   string state_json = 100;
 }
 
@@ -229,6 +244,9 @@ message AuthCompleteResponse {
   bool ready = 6;
   bool pin_setup_required = 7;
   bool pin_setup_complete = 8;
+  bool otp_sent = 9;
+  string verification_id = 10;
+  string verification_method = 11;
   string state_json = 100;
 }
 
@@ -354,12 +372,18 @@ message CheckPhoneRequest {
   reserved 2;
   reserved "country";
   string country_code = 3; // 电话区号，例如 "+62"；为空时 provider 使用 GoPay 默认国家区号
+  string state_json = 100; // 必须来自 GenerateDeviceProxy；CheckPhone 不隐式生成设备或代理
 }
 
 message CheckPhoneResponse {
   bool available = 1;       // true=未注册，可用于接收改号
   string error_message = 2;
   string status = 3;        // available / registered / rate_limited / error
+  int32 proxy_slot = 4;
+  int32 dynamic_egress_size = 5;
+  string proxy_hash = 6;
+  string device_fingerprint = 7;
+  string state_json = 100;  // 原样返回输入链路态；用于后续注册复用同一 proxy/device
 }
 
 // === Midtrans GoPay 链接支付 ===
@@ -429,7 +453,8 @@ service GopayAppService {
   rpc UpsertGoPayState(UpsertGoPayStateRequest) returns (UpsertGoPayStateResponse);
   rpc DeleteGoPayState(DeleteGoPayStateRequest) returns (DeleteGoPayStateResponse);
 
-  // 号码可用性检测；stateless，使用随机设备指纹调用 login/methods。
+  // 号码可用性检测；调用方必须先 GenerateDeviceProxy，并把 state_json 传入 CheckPhone。
+  rpc GenerateDeviceProxy(GenerateDeviceProxyRequest) returns (GenerateDeviceProxyResponse);
   rpc CheckPhone(CheckPhoneRequest) returns (CheckPhoneResponse);
 
   // 改手机号（start/retry/complete）

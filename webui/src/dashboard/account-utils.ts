@@ -21,9 +21,11 @@ export function accountActivationChannel(account: Account, jobs: Job[]) {
   const direct = goPayPaymentChannelLabel(paymentChannelValue(account.activation_channel || ''));
   if (direct !== '-') return direct;
   const latestPaymentJob = jobs
-    .filter((job) => job.account_id === account.account_id && ['GOPAY_PAYMENT', 'ACTIVATE', 'AUTOPAY', 'REGISTER_AND_ACTIVATE'].includes(job.action))
+    .filter((job) => job.account_id === account.account_id && ['GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE', 'GOPAY_WA_PAYMENT', 'ACTIVATE', 'AUTOPAY', 'REGISTER_AND_ACTIVATE'].includes(job.action))
     .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))[0];
   if (!latestPaymentJob) return '-';
+  if (latestPaymentJob.action === 'GOPAY_QRIS_PAYMENT_ACTIVATE') return 'QRIS';
+  if (latestPaymentJob.action === 'GOPAY_WA_PAYMENT') return '纯Gopay-WA';
   return goPayPaymentChannelLabel(paymentChannelValue(stringValue(objectValue(latestPaymentJob.result).otp_channel)));
 }
 

@@ -18,9 +18,23 @@ func (s *Server) GoPayUserCheckPhone(ctx context.Context, req *pb.GoPayUserCheck
 	if s.gopayClient == nil {
 		return &pb.GoPayUserCheckPhoneResponse{ErrorMessage: "gopay-app client not configured"}, nil
 	}
+	deviceProxy, err := s.gopayClient.GenerateDeviceProxy(ctx, &pb.GenerateDeviceProxyRequest{})
+	if err != nil {
+		return &pb.GoPayUserCheckPhoneResponse{ErrorMessage: fmt.Sprintf("GenerateDeviceProxy: %v", err)}, nil
+	}
+	if deviceProxy == nil {
+		return &pb.GoPayUserCheckPhoneResponse{ErrorMessage: "GenerateDeviceProxy returned empty response"}, nil
+	}
+	if !deviceProxy.GetSuccess() {
+		return &pb.GoPayUserCheckPhoneResponse{ErrorMessage: deviceProxy.GetErrorMessage()}, nil
+	}
+	if strings.TrimSpace(deviceProxy.GetStateJson()) == "" {
+		return &pb.GoPayUserCheckPhoneResponse{ErrorMessage: "GenerateDeviceProxy returned empty state_json"}, nil
+	}
 	resp, err := s.gopayClient.CheckPhone(ctx, &pb.CheckPhoneRequest{
 		Phone:       req.GetPhone(),
 		CountryCode: req.GetCountryCode(),
+		StateJson:   deviceProxy.GetStateJson(),
 	})
 	if err != nil {
 		return &pb.GoPayUserCheckPhoneResponse{ErrorMessage: fmt.Sprintf("CheckPhone: %v", err)}, nil

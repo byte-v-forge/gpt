@@ -16,7 +16,7 @@ func (s *Server) GoPayResolveWAPhoneActivity(ctx context.Context, input GoPayRes
 	}
 	output := GoPayResolveWAPhoneOutput{UserId: userID}
 	data := map[string]any{"user_id": userID}
-	step := s.activityStep(ctx, input.GetJobId(), stepGoPayAppResolveWAPhone, false, true)
+	step := s.activityStep(ctx, input.GetJobId(), stepGoPayResolveWAPhone, false, true)
 	_, err = step.run(func() (any, error) {
 		if s.db == nil {
 			err := fmt.Errorf("orchestrator db not configured")

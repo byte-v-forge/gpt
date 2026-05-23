@@ -14,7 +14,8 @@ import (
 var (
 	loginStateKeys = []string{
 		"_login_phone", "_login_country_code", "_login_verification_id",
-		"_login_verification_method", "_login_otp_token", "_login_2fa_token",
+		"_login_methods", "_login_default_method", "_login_methods_checked_at",
+		"_login_flow", "_login_verification_method", "_login_otp_token", "_login_2fa_token",
 		"_login_started_at", "_login_otp_sent_at", "_login_otp_expires_at",
 	}
 	signupAccountStateKeys = []string{"_signup_phone", "_signup_country_code", "_signup_name", "_signup_email"}
@@ -26,53 +27,65 @@ var (
 	tmpTokenMetaKeys       = []string{"_tmp_phone", "_tmp_token_migrated_at"}
 )
 
-func (s *Server) checkPhoneByLoginMethods(ctx context.Context, phone, countryCode string) map[string]any {
+func (s *Server) checkPhoneByLoginMethods(ctx context.Context, phone, countryCode string, proxyState stateMap) map[string]any {
 	cc := phoneCountryCode(s.cfg, countryCode)
 	normalized := normalizePhoneWithConfig(s.cfg, phone, cc)
-	proxyState := stateMap{}
-	attempts := s.proxyAttemptLimit()
-	for attempt := 1; attempt <= attempts; attempt++ {
-		proxyURL, _, proxyCount, err := s.proxyForAttempt(attempt, proxyState)
-		if err != nil {
-			return map[string]any{"success": false, "available": false, "status": "rate_limited", "error": err.Error(), "attempts": attempt - 1}
-		}
-		device, _, err := s.newLogonDevice()
-		if err != nil {
-			return map[string]any{"success": false, "available": false, "status": "error", "error": err.Error()}
-		}
-		client, err := s.newClient(ctx, "", proxyURL, device)
-		if err != nil {
-			return map[string]any{"success": false, "available": false, "status": "error", "error": err.Error()}
-		}
-		resp, err := client.Post(ctx, gotoAuthBaseURL+"/goto-auth/login/methods", s.authBody(map[string]any{
-			"country_code":                 cc,
-			"device_verification_token_id": "",
-			"email":                        "",
-			"phone_number":                 normalized,
-		}))
-		if err != nil {
-			if attempt < attempts && retryableGoPayTransportError(err) {
-				time.Sleep(loginMethodsBackoff(attempt))
-				continue
-			}
-			return map[string]any{"success": false, "available": false, "status": "error", "error": err.Error(), "attempts": attempt}
-		}
-		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
-			return map[string]any{"success": true, "available": false, "status": "registered", "methods": resp.Data()["methods"], "attempts": attempt}
-		}
-		if loginMethodsInvalidUser(resp) {
-			return map[string]any{"success": true, "available": true, "status": "available", "attempts": attempt}
-		}
-		if isRateLimited(resp) && attempt < attempts {
-			time.Sleep(loginMethodsBackoff(attempt))
-			continue
-		}
-		if isRateLimited(resp) {
-			return map[string]any{"success": false, "available": false, "status": "rate_limited", "error": loginMethodsRateLimitedError(attempts, proxyCount), "attempts": attempt, "proxy_pool_size": proxyCount}
-		}
-		return map[string]any{"success": false, "available": false, "status": "error", "error": apiError("login methods failed", resp), "attempts": attempt}
+	if proxyState == nil {
+		proxyState = stateMap{}
 	}
-	return map[string]any{"success": false, "available": false, "status": "error", "error": "login methods attempts exhausted"}
+	proxyURL := stateString(proxyState, "_gopay_proxy")
+	if proxyURL == "" {
+		return s.checkPhoneResult(proxyState, map[string]any{"success": false, "available": false, "status": "error", "error": "generated proxy missing", "attempts": 0})
+	}
+	rawDevice := nestedMap(proxyState["device"])
+	if len(rawDevice) == 0 {
+		return s.checkPhoneResult(proxyState, map[string]any{"success": false, "available": false, "status": "error", "error": "generated device missing", "attempts": 0})
+	}
+	device := deviceFromMap(rawDevice)
+	if device.AppID == "" || device.UniqueID == "" || device.PhoneMake == "" || device.PhoneModel == "" {
+		return s.checkPhoneResult(proxyState, map[string]any{"success": false, "available": false, "status": "error", "error": "generated device incomplete", "attempts": 0})
+	}
+	client, err := s.newClient(ctx, "", proxyURL, device)
+	if err != nil {
+		return s.checkPhoneResult(proxyState, map[string]any{"success": false, "available": false, "status": "error", "error": err.Error(), "attempts": 0})
+	}
+	resp, err := client.Post(ctx, gotoAuthBaseURL+"/goto-auth/login/methods", signupProbeBody{
+		PhoneNumber:               normalized,
+		CountryCode:               cc,
+		Email:                     "",
+		DeviceVerificationTokenID: "",
+		ClientID:                  s.cfg.GotoClientID,
+		ClientSecret:              s.cfg.GotoClientSecret,
+	})
+	if err != nil {
+		return s.checkPhoneResult(proxyState, map[string]any{"success": false, "available": false, "status": "error", "error": err.Error(), "attempts": 1})
+	}
+	if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
+		verificationID, methods, defaultMethod := s.persistLoginProbe(proxyState, normalized, cc, resp.Data())
+		return s.checkPhoneResult(proxyState, map[string]any{
+			"success": true, "available": false, "status": "registered",
+			"verification_id_present": verificationID != "", "methods": methods, "default_method": defaultMethod,
+			"attempts": 1,
+		})
+	}
+	if loginMethodsInvalidUser(resp) {
+		return s.checkPhoneResult(proxyState, map[string]any{"success": true, "available": true, "status": "available", "attempts": 1})
+	}
+	if isRateLimited(resp) {
+		return s.checkPhoneResult(proxyState, map[string]any{"success": false, "available": false, "status": "rate_limited", "error": loginMethodsRateLimitedError(1, len(s.cfg.DynamicEgress)), "attempts": 1})
+	}
+	return s.checkPhoneResult(proxyState, map[string]any{"success": false, "available": false, "status": "error", "error": apiError("login methods failed", resp), "attempts": 1})
+}
+
+func (s *Server) checkPhoneResult(state stateMap, data map[string]any) map[string]any {
+	if data == nil {
+		data = map[string]any{}
+	}
+	for key, value := range s.deviceProxyDiagnostics(state) {
+		data[key] = value
+	}
+	data["state_json"] = stateJSON(state)
+	return data
 }
 
 func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, countryCode, otpChannel string) map[string]any {
@@ -81,17 +94,20 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	attempts := s.proxyAttemptLimit()
 	var resp *protocol.Response
 	var client *gopayapp.Client
+	var methods []string
+	var defaultMethod string
+	var verificationID string
 	for attempt := 1; attempt <= attempts; attempt++ {
 		proxyURL, _, _, err := s.proxyForAttempt(attempt, state)
 		if err != nil {
 			return map[string]any{"success": false, "error": err.Error()}
 		}
-		device, rawDevice, err := s.newLogonDevice()
+		device, err := s.ensureDevice(state)
 		if err != nil {
 			return map[string]any{"success": false, "error": err.Error()}
 		}
-		state["device"] = rawDevice
 		state["_login_phone"] = normalized
+		state["_login_country_code"] = cc
 		state["_login_started_at"] = time.Now().Unix()
 		state["stage"] = "login"
 		delete(state, "last_error")
@@ -99,12 +115,21 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 		if err != nil {
 			return map[string]any{"success": false, "error": err.Error()}
 		}
-		resp, err = c.Post(ctx, gotoAuthBaseURL+"/goto-auth/login/methods", s.authBody(map[string]any{
-			"country_code":                 cc,
-			"device_verification_token_id": "",
-			"email":                        "",
-			"phone_number":                 normalized,
-		}))
+		if probeID, probeMethods, probeDefault, ok := s.reusableLoginProbe(state, normalized, cc); ok {
+			client = c
+			verificationID = probeID
+			methods = probeMethods
+			defaultMethod = probeDefault
+			break
+		}
+		resp, err = c.Post(ctx, gotoAuthBaseURL+"/goto-auth/login/methods", signupProbeBody{
+			PhoneNumber:               normalized,
+			CountryCode:               cc,
+			Email:                     "",
+			DeviceVerificationTokenID: "",
+			ClientID:                  s.cfg.GotoClientID,
+			ClientSecret:              s.cfg.GotoClientSecret,
+		})
 		if err != nil {
 			if attempt < attempts && retryableGoPayTransportError(err) {
 				time.Sleep(loginMethodsBackoff(attempt))
@@ -114,6 +139,7 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 		}
 		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated {
 			client = c
+			verificationID, methods, defaultMethod = s.persistLoginProbe(state, normalized, cc, resp.Data())
 			break
 		}
 		if isRateLimited(resp) && attempt < attempts {
@@ -121,22 +147,48 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 			continue
 		}
 		if isRateLimited(resp) {
-			return map[string]any{"success": false, "error": loginMethodsRateLimitedError(attempts, len(s.cfg.ProxyPool))}
+			return map[string]any{"success": false, "error": loginMethodsRateLimitedError(attempts, len(s.cfg.DynamicEgress))}
 		}
 		if loginMethodsInvalidUser(resp) {
 			return map[string]any{"success": false, "not_registered": true, "error": apiError("login methods failed", resp)}
 		}
 		return map[string]any{"success": false, "error": apiError("login methods failed", resp)}
 	}
-	if resp == nil || client == nil {
+	if client == nil {
 		return map[string]any{"success": false, "error": "login methods failed"}
 	}
-	data := resp.Data()
-	methods := methodsFrom(data)
-	verificationID := verificationIDFrom(data)
 	if verificationID == "" {
-		shape := responseShape(resp)
-		return map[string]any{"success": false, "error": "verification_id missing: " + safeJSON(shape), "response_shape": shape}
+		if resp != nil {
+			shape := responseShape(resp)
+			return map[string]any{"success": false, "error": "verification_id missing: " + safeJSON(shape), "response_shape": shape}
+		}
+		return map[string]any{"success": false, "error": "verification_id missing from login probe state"}
+	}
+	if method := chooseOTPMethod(methods, otpChannel, firstNonEmpty(defaultMethod, "otp_wa")); method != "" {
+		otpResp, err := client.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/cvs/v1/initiate", signupInitiateBody{
+			VerificationID:            verificationID,
+			Flow:                      "login_1fa",
+			VerificationMethod:        method,
+			CountryCode:               cc,
+			EmailAddress:              nil,
+			ClientID:                  s.cfg.GotoClientID,
+			PhoneNumber:               normalized,
+			ClientSecret:              s.cfg.GotoClientSecret,
+			IsMultipleMethod:          nil,
+			DeviceVerificationTokenID: nil,
+		}, nil)
+		if err != nil {
+			return map[string]any{"success": false, "error": err.Error()}
+		}
+		if otpResp.StatusCode != http.StatusOK {
+			return map[string]any{"success": false, "error": apiError("login otp initiate failed", otpResp)}
+		}
+		otpToken := otpTokenFrom(otpResp.Data())
+		if otpToken == "" {
+			return map[string]any{"success": false, "error": "login otp_token missing", "response_shape": responseShape(otpResp)}
+		}
+		s.persistLoginOTP(state, normalized, cc, verificationID, method, otpToken, "", "login_1fa")
+		return map[string]any{"success": true, "ready": false, "otp_sent": true, "verification_id": verificationID, "method": method}
 	}
 	if !contains(methods, "goto_pin") {
 		return map[string]any{"success": false, "error": fmt.Sprintf("goto_pin unavailable: %v", methods)}
@@ -145,16 +197,18 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 		return map[string]any{"success": false, "error": "gopay pin missing"}
 	}
 	c := client
-	initResp, err := c.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/cvs/v1/initiate", s.authBody(map[string]any{
-		"country_code":                 cc,
-		"device_verification_token_id": nil,
-		"email_address":                nil,
-		"flow":                         "login_1fa",
-		"is_multiple_method":           true,
-		"phone_number":                 normalized,
-		"verification_id":              verificationID,
-		"verification_method":          "goto_pin",
-	}), http.Header{"Authorization": []string{""}})
+	initResp, err := c.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/cvs/v1/initiate", signupInitiateBody{
+		VerificationID:            verificationID,
+		Flow:                      "login_1fa",
+		VerificationMethod:        "goto_pin",
+		CountryCode:               cc,
+		EmailAddress:              nil,
+		ClientID:                  s.cfg.GotoClientID,
+		PhoneNumber:               normalized,
+		ClientSecret:              s.cfg.GotoClientSecret,
+		IsMultipleMethod:          true,
+		DeviceVerificationTokenID: nil,
+	}, http.Header{"Authorization": []string{""}})
 	if err != nil {
 		return map[string]any{"success": false, "error": err.Error()}
 	}
@@ -184,12 +238,14 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	if validationJWT == "" {
 		return map[string]any{"success": false, "error": "pin validation token missing"}
 	}
-	verifyResp, err := c.Post(ctx, gotoAuthBaseURL+"/cvs/v1/verify", s.authBody(map[string]any{
-		"data":                map[string]any{"challenge_id": challengeID, "validation_jwt": validationJWT},
-		"flow":                "login_1fa",
-		"verification_id":     verificationID,
-		"verification_method": "goto_pin",
-	}))
+	verifyResp, err := c.Post(ctx, gotoAuthBaseURL+"/cvs/v1/verify", cvsVerifyBody{
+		Data:               map[string]any{"challenge_id": challengeID, "validation_jwt": validationJWT},
+		Flow:               "login_1fa",
+		VerificationID:     verificationID,
+		VerificationMethod: "goto_pin",
+		ClientID:           s.cfg.GotoClientID,
+		ClientSecret:       s.cfg.GotoClientSecret,
+	})
 	if err != nil {
 		return map[string]any{"success": false, "error": err.Error()}
 	}
@@ -200,7 +256,10 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	if verificationToken == "" {
 		return map[string]any{"success": false, "error": "1fa verification_token missing"}
 	}
-	accountResp, err := c.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/goto-auth/accountlist", s.authBody(map[string]any{}), http.Header{"Verification-Token": []string{"Bearer " + verificationToken}})
+	accountResp, err := c.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/goto-auth/accountlist", gotoAuthClientBody{
+		ClientID:     s.cfg.GotoClientID,
+		ClientSecret: s.cfg.GotoClientSecret,
+	}, http.Header{"Verification-Token": []string{"Bearer " + verificationToken}})
 	if err != nil {
 		return map[string]any{"success": false, "error": err.Error()}
 	}
@@ -212,12 +271,14 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	if accountID == "" || oneFAToken == "" {
 		return map[string]any{"success": false, "error": "account_id or 1fa_token missing"}
 	}
-	tokenResp, err := c.Post(ctx, gotoAuthBaseURL+"/goto-auth/token", s.authBody(map[string]any{
-		"account_id":     accountID,
-		"ext_user_token": nil,
-		"grant_type":     "cvs",
-		"token":          oneFAToken,
-	}))
+	tokenResp, err := c.Post(ctx, gotoAuthBaseURL+"/goto-auth/token", gotoCVSTokenBody{
+		AccountID:    accountID,
+		ExtUserToken: nil,
+		GrantType:    "cvs",
+		Token:        oneFAToken,
+		ClientID:     s.cfg.GotoClientID,
+		ClientSecret: s.cfg.GotoClientSecret,
+	})
 	if err != nil {
 		return map[string]any{"success": false, "error": err.Error()}
 	}
@@ -235,16 +296,18 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	if method == "" {
 		return map[string]any{"success": false, "error": fmt.Sprintf("otp method unavailable: %v", otpMethods), "response_shape": responseShape(tokenResp)}
 	}
-	otpResp, err := c.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/cvs/v1/initiate", s.authBody(map[string]any{
-		"country_code":                 cc,
-		"device_verification_token_id": nil,
-		"email_address":                nil,
-		"flow":                         "login_2fa",
-		"is_multiple_method":           nil,
-		"phone_number":                 normalized,
-		"verification_id":              verificationID,
-		"verification_method":          method,
-	}), http.Header{"Authorization": []string{""}})
+	otpResp, err := c.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/cvs/v1/initiate", signupInitiateBody{
+		VerificationID:            verificationID,
+		Flow:                      "login_2fa",
+		VerificationMethod:        method,
+		CountryCode:               cc,
+		EmailAddress:              nil,
+		ClientID:                  s.cfg.GotoClientID,
+		PhoneNumber:               normalized,
+		ClientSecret:              s.cfg.GotoClientSecret,
+		IsMultipleMethod:          nil,
+		DeviceVerificationTokenID: nil,
+	}, http.Header{"Authorization": []string{""}})
 	if err != nil {
 		return map[string]any{"success": false, "error": err.Error()}
 	}
@@ -255,6 +318,6 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	if otpToken == "" {
 		return map[string]any{"success": false, "error": "2fa otp_token missing"}
 	}
-	s.persistLoginOTP(state, normalized, cc, verificationID, method, otpToken, twoFAToken)
+	s.persistLoginOTP(state, normalized, cc, verificationID, method, otpToken, twoFAToken, "login_2fa")
 	return map[string]any{"success": true, "ready": false, "otp_sent": true, "verification_id": verificationID, "method": method}
 }

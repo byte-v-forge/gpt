@@ -100,7 +100,7 @@ func authStartData(resp *pb.AuthStartResponse) map[string]any {
 	if resp == nil {
 		return map[string]any{"response_present": false}
 	}
-	return map[string]any{
+	data := map[string]any{
 		"response_present":    true,
 		"success":             resp.GetSuccess(),
 		"error_message":       resp.GetErrorMessage(),
@@ -111,6 +111,10 @@ func authStartData(resp *pb.AuthStartResponse) map[string]any {
 		"ready":               resp.GetReady(),
 		"pin_setup_required":  resp.GetPinSetupRequired(),
 	}
+	for key, value := range goPayAppStateDiagnostics(resp.GetStateJson()) {
+		data[key] = value
+	}
+	return data
 }
 
 func authCompleteData(resp *pb.AuthCompleteResponse) map[string]any {
@@ -118,16 +122,19 @@ func authCompleteData(resp *pb.AuthCompleteResponse) map[string]any {
 		return map[string]any{"response_present": false}
 	}
 	return map[string]any{
-		"response_present":     true,
-		"success":              resp.GetSuccess(),
-		"error_message":        resp.GetErrorMessage(),
-		"mode":                 resp.GetMode(),
-		"stage":                resp.GetStage(),
-		"phone":                resp.GetPhone(),
-		"ready":                resp.GetReady(),
-		"pin_setup_required":   resp.GetPinSetupRequired(),
-		"pin_setup_complete":   resp.GetPinSetupComplete(),
-		"sensitive_values_set": false,
+		"response_present":        true,
+		"success":                 resp.GetSuccess(),
+		"error_message":           resp.GetErrorMessage(),
+		"mode":                    resp.GetMode(),
+		"stage":                   resp.GetStage(),
+		"phone":                   resp.GetPhone(),
+		"ready":                   resp.GetReady(),
+		"otp_sent":                resp.GetOtpSent(),
+		"verification_method":     resp.GetVerificationMethod(),
+		"verification_id_present": resp.GetVerificationId() != "",
+		"pin_setup_required":      resp.GetPinSetupRequired(),
+		"pin_setup_complete":      resp.GetPinSetupComplete(),
+		"sensitive_values_set":    false,
 	}
 }
 

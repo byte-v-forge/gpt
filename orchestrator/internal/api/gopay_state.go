@@ -85,6 +85,8 @@ func goPayStatusSnapshot(resp *pb.StatusResponse, err error) *pb.StatusResponse 
 		snapshot.BalanceAmount = resp.GetBalanceAmount()
 		snapshot.HasMinBalance = resp.GetHasMinBalance()
 		snapshot.BalanceCurrency = resp.GetBalanceCurrency()
+		snapshot.PinSetup = resp.GetPinSetup()
+		snapshot.PinSetupAtUnix = resp.GetPinSetupAtUnix()
 	}
 	if err != nil {
 		snapshot.ErrorMessage = err.Error()

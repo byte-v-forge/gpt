@@ -215,6 +215,9 @@ func (s *Server) completeGoPayAppCreatePin(ctx context.Context, input GoPayAppCr
 	if !completeResp.GetSuccess() {
 		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay create pin complete: %s", completeResp.GetErrorMessage()))
 	}
+	if completeResp.GetPinSetupComplete() {
+		output.StateJson = goPayWorkflowStateWithPINSetup(output.GetStateJson(), true)
+	}
 
 	statusAfter, statusErr := s.goPayStatusForState(ctx, output.GetStateJson())
 	output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(statusAfter))

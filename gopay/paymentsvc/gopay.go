@@ -31,12 +31,26 @@ func (c *charger) gopayPINHeaders(linking bool) http.Header {
 		headers.Set("Referer", "https://pin-web-client.gopayapi.com/")
 		headers.Set("x-user-locale", c.cfg.PINLocale)
 		headers.Set("x-appversion", "1.0.0")
-		headers.Set("x-correlation-id", uuid.NewString())
 		headers.Set("x-is-mobile", "false")
 		headers.Set("x-platform", c.cfg.BrowserPlatform)
 	}
 	headers.Set("x-request-id", uuid.NewString())
 	return headers
+}
+
+func (c *charger) paymentAttemptHeaders(base http.Header) (http.Header, error) {
+	fingerprint := randomPaymentBrowserFingerprint(c.cfg.BrowserLocale)
+	if c.ext != nil {
+		if err := c.ext.rotateFingerprint(fingerprint); err != nil {
+			return nil, err
+		}
+	}
+	headers := cloneHeader(base)
+	mergeHeader(headers, fingerprint.newAttemptHeaders())
+	headers.Set("sec-fetch-dest", "empty")
+	headers.Set("sec-fetch-mode", "cors")
+	headers.Set("sec-fetch-site", "same-origin")
+	return headers, nil
 }
 
 func (c *charger) startLinkingUntilOTP(ctx context.Context, snapToken, csID, stripePK, otpChannel string) (map[string]any, error) {
@@ -99,9 +113,13 @@ func (c *charger) resendLinkingOTP(ctx context.Context, state map[string]any) (m
 }
 
 func (c *charger) gopayValidateReference(ctx context.Context, referenceID string) error {
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(""))
+	if err != nil {
+		return err
+	}
 	resp, err := c.ext.request(ctx, http.MethodPost, "https://gwa.gopayapi.com/v1/linking/validate-reference", requestOptions{
 		jsonBody: map[string]any{"reference_id": referenceID},
-		headers:  c.gopayHeaders(""),
+		headers:  headers,
 	})
 	if err != nil {
 		return err
@@ -116,9 +134,13 @@ func (c *charger) gopayValidateReference(ctx context.Context, referenceID string
 }
 
 func (c *charger) gopayUserConsent(ctx context.Context, referenceID string) (map[string]any, error) {
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.cfg.BrowserLocale))
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.ext.request(ctx, http.MethodPost, "https://gwa.gopayapi.com/v1/linking/user-consent", requestOptions{
 		jsonBody: map[string]any{"reference_id": referenceID},
-		headers:  c.gopayHeaders(c.cfg.BrowserLocale),
+		headers:  headers,
 	})
 	if err != nil {
 		return nil, err
@@ -133,9 +155,13 @@ func (c *charger) gopayUserConsent(ctx context.Context, referenceID string) (map
 }
 
 func (c *charger) gopayResendOTP(ctx context.Context, referenceID string) (map[string]any, error) {
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.cfg.BrowserLocale))
+	if err != nil {
+		return nil, err
+	}
 	resp, err := c.ext.request(ctx, http.MethodPost, "https://gwa.gopayapi.com/v1/linking/resend-otp", requestOptions{
 		jsonBody: map[string]any{"reference_id": referenceID},
-		headers:  c.gopayHeaders(c.cfg.BrowserLocale),
+		headers:  headers,
 	})
 	if err != nil {
 		return nil, err
@@ -147,9 +173,13 @@ func (c *charger) gopayResendOTP(ctx context.Context, referenceID string) (map[s
 }
 
 func (c *charger) gopayValidateOTP(ctx context.Context, referenceID, otp string) (string, string, error) {
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.cfg.BrowserLocale))
+	if err != nil {
+		return "", "", err
+	}
 	resp, err := c.ext.request(ctx, http.MethodPost, "https://gwa.gopayapi.com/v1/linking/validate-otp", requestOptions{
 		jsonBody: map[string]any{"reference_id": referenceID, "otp": strings.TrimSpace(otp)},
-		headers:  c.gopayHeaders(c.cfg.BrowserLocale),
+		headers:  headers,
 	})
 	if err != nil {
 		return "", "", err
@@ -172,9 +202,13 @@ func (c *charger) tokenizePIN(ctx context.Context, challengeID, clientID string,
 	if strings.TrimSpace(c.pin) == "" {
 		return "", fmt.Errorf("pin is required")
 	}
+	headers, err := c.paymentAttemptHeaders(c.gopayPINHeaders(linking))
+	if err != nil {
+		return "", err
+	}
 	resp, err := c.ext.request(ctx, http.MethodPost, "https://customer.gopayapi.com/api/v1/users/pin/tokens/nb", requestOptions{
 		jsonBody: map[string]any{"pin": c.pin, "challenge_id": challengeID, "client_id": clientID},
-		headers:  c.gopayPINHeaders(linking),
+		headers:  headers,
 	})
 	if err != nil {
 		return "", err
@@ -185,7 +219,7 @@ func (c *charger) tokenizePIN(ctx context.Context, challengeID, clientID string,
 	if resp.status >= 400 {
 		return "", fmt.Errorf("pin tokenize %d: %s", resp.status, resp.excerpt(500))
 	}
-	token := stringAt(resp.data(), "token")
+	token := firstNonEmpty(stringAt(resp.data(), "token"), stringAt(resp.data(), "pin_token"), stringAt(resp.json, "data", "token"), stringAt(resp.json, "data", "pin_token"))
 	if token == "" {
 		return "", fmt.Errorf("pin tokenize: no token in response")
 	}
@@ -193,9 +227,13 @@ func (c *charger) tokenizePIN(ctx context.Context, challengeID, clientID string,
 }
 
 func (c *charger) gopayValidatePIN(ctx context.Context, referenceID, pinToken string) error {
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.cfg.BrowserLocale))
+	if err != nil {
+		return err
+	}
 	resp, err := c.ext.request(ctx, http.MethodPost, "https://gwa.gopayapi.com/v1/linking/validate-pin", requestOptions{
 		jsonBody: map[string]any{"reference_id": referenceID, "token": pinToken},
-		headers:  c.gopayHeaders(c.cfg.BrowserLocale),
+		headers:  headers,
 	})
 	if err != nil {
 		return err
@@ -210,37 +248,137 @@ func (c *charger) gopayValidatePIN(ctx context.Context, referenceID, pinToken st
 }
 
 func (c *charger) midtransCreateChargeData(ctx context.Context, snapToken string) (map[string]any, error) {
-	resp, err := c.ext.request(ctx, http.MethodPost, "https://app.midtrans.com/snap/v2/transactions/"+snapToken+"/charge", requestOptions{
-		jsonBody: map[string]any{"payment_type": "gopay", "tokenization": c.tokenization, "promo_details": nil},
-		headers:  c.midtransHeaders(snapToken, midtransHeaderOptions{jsonBody: true, source: true}),
-	})
+	resp, err := c.midtransCreateCharge(ctx, snapToken)
 	if err != nil {
 		return nil, err
 	}
-	if err := resp.require(http.StatusOK, "midtrans charge"); err != nil {
+	if err := newMidtransChargeDeniedError(resp.json); err != nil {
 		return nil, err
 	}
-	if message := midtransChargeDenial(resp.json); message != "" {
-		return nil, fmt.Errorf("%s", message)
-	}
 	chargeRef := extractMidtransChargeReference(resp.json)
+	qrString := firstNonEmpty(stringAt(resp.json, "qr_string"), stringAt(resp.json, "qris_string"))
+	urls := midtransChargeURLs(resp.json)
+	if chargeRef == "" && isQRISTokenization(c.tokenization) && (qrString != "" || urls["qr_code_url"] != "") {
+		chargeRef = firstNonEmpty(extractReferenceFromText(urls["qr_code_url"]), snapToken)
+	}
 	if chargeRef == "" {
-		return nil, fmt.Errorf("midtrans charge: no reference in response")
+		return nil, fmt.Errorf("midtrans charge: no reference in response: %s", jsonExcerpt(redactMidtransChargeDebug(resp.json), 500))
 	}
 	data := map[string]any{"charge_ref": chargeRef, "snap_token": snapToken}
-	for key, value := range midtransChargeURLs(resp.json) {
+	if qrString != "" {
+		data["qr_string"] = qrString
+	}
+	for key, value := range urls {
 		data[key] = value
 	}
 	return data, nil
+}
+
+func (c *charger) midtransCreateCharge(ctx context.Context, snapToken string) (*httpResult, error) {
+	url := "https://app.midtrans.com/snap/v2/transactions/" + snapToken + "/charge"
+	baseHeaders := c.midtransHeaders(snapToken, midtransHeaderOptions{jsonBody: true, source: true})
+	attempts := []map[string]any{{
+		"payment_type":  "gopay",
+		"tokenization":  c.tokenization,
+		"promo_details": nil,
+	}}
+	if !isQRISTokenization(c.tokenization) {
+		base := attempts[0]
+		attempts = make([]map[string]any, 0, midtransChargeRetryLimit)
+		for range midtransChargeRetryLimit {
+			attempts = append(attempts, cloneMap(base))
+		}
+	}
+	if isQRISTokenization(c.tokenization) {
+		attempts = []map[string]any{{
+			"payment_type":  "qris",
+			"qris":          map[string]any{"acquirer": "gopay"},
+			"gross_amount":  "1",
+			"promo_details": nil,
+		}, {
+			"payment_type":  "gopay",
+			"tokenization":  "false",
+			"gross_amount":  "1",
+			"promo_details": nil,
+		}}
+	}
+	var last *httpResult
+	lastErr := ""
+	usedFingerprints := map[string]bool{}
+	for _, body := range attempts {
+		headers, err := c.midtransChargeAttemptHeaders(baseHeaders, usedFingerprints)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ext.request(ctx, http.MethodPost, url, requestOptions{jsonBody: body, headers: headers})
+		if err != nil {
+			return nil, err
+		}
+		last = resp
+		if resp.status == http.StatusOK || resp.status == http.StatusCreated {
+			if err := newMidtransChargeDeniedError(resp.json); err != nil {
+				return nil, err
+			}
+			if isQRISTokenization(c.tokenization) && !midtransChargeLooksUsable(resp.json) {
+				lastErr = fmt.Sprintf("midtrans charge returned unusable qris response: %s", jsonExcerpt(redactMidtransChargeDebug(resp.json), 500))
+				continue
+			}
+			return resp, nil
+		}
+	}
+	if last == nil {
+		return nil, fmt.Errorf("midtrans charge returned empty response")
+	}
+	if lastErr != "" {
+		return nil, fmt.Errorf("%s", lastErr)
+	}
+	return nil, fmt.Errorf("midtrans charge %d: %s", last.status, last.excerpt(500))
+}
+
+func (c *charger) midtransChargeAttemptHeaders(base http.Header, used map[string]bool) (http.Header, error) {
+	fingerprint := c.nextPaymentAttemptFingerprint(used)
+	if c.ext != nil {
+		if err := c.ext.rotateFingerprint(fingerprint); err != nil {
+			return nil, err
+		}
+	}
+	headers := cloneHeader(base)
+	mergeHeader(headers, fingerprint.newAttemptHeaders())
+	headers.Set("sec-fetch-dest", "empty")
+	headers.Set("sec-fetch-mode", "cors")
+	headers.Set("sec-fetch-site", "same-origin")
+	return headers, nil
+}
+
+func (c *charger) nextPaymentAttemptFingerprint(used map[string]bool) browserFingerprint {
+	var fingerprint browserFingerprint
+	for attempt := 0; attempt < 16; attempt++ {
+		fingerprint = randomPaymentBrowserFingerprint(c.cfg.BrowserLocale)
+		key := fingerprint.TLSProfileName + "|" + fingerprint.UserAgent
+		if used == nil || !used[key] {
+			if used != nil {
+				used[key] = true
+			}
+			return fingerprint
+		}
+	}
+	if used != nil {
+		used[fingerprint.TLSProfileName+"|"+fingerprint.UserAgent] = true
+	}
+	return fingerprint
 }
 
 func (c *charger) gopayPaymentValidate(ctx context.Context, chargeRef string) error {
 	query := url.Values{"reference_id": []string{chargeRef}}
 	var last *httpResult
 	for range 8 {
+		headers, err := c.paymentAttemptHeaders(c.gopayHeaders(""))
+		if err != nil {
+			return err
+		}
 		resp, err := c.ext.request(ctx, http.MethodGet, "https://gwa.gopayapi.com/v1/payment/validate", requestOptions{
 			query:   query,
-			headers: c.gopayHeaders(""),
+			headers: headers,
 		})
 		if err != nil {
 			return err
@@ -260,10 +398,14 @@ func (c *charger) gopayPaymentValidate(ctx context.Context, chargeRef string) er
 
 func (c *charger) gopayPaymentConfirm(ctx context.Context, chargeRef string) (string, string, error) {
 	query := url.Values{"reference_id": []string{chargeRef}}
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(""))
+	if err != nil {
+		return "", "", err
+	}
 	resp, err := c.ext.request(ctx, http.MethodPost, "https://gwa.gopayapi.com/v1/payment/confirm", requestOptions{
 		query:    query,
 		jsonBody: map[string]any{"payment_instructions": []any{}},
-		headers:  c.gopayHeaders(""),
+		headers:  headers,
 	})
 	if err != nil {
 		return "", "", err
@@ -284,13 +426,17 @@ func (c *charger) gopayPaymentConfirm(ctx context.Context, chargeRef string) (st
 
 func (c *charger) gopayPaymentProcess(ctx context.Context, chargeRef, pinToken string) error {
 	query := url.Values{"reference_id": []string{chargeRef}}
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(""))
+	if err != nil {
+		return err
+	}
 	resp, err := c.ext.request(ctx, http.MethodPost, "https://gwa.gopayapi.com/v1/payment/process", requestOptions{
 		query: query,
 		jsonBody: map[string]any{"challenge": map[string]any{
 			"type":  "GOPAY_PIN_CHALLENGE",
 			"value": map[string]any{"pin_token": pinToken},
 		}},
-		headers: c.gopayHeaders(""),
+		headers: headers,
 	})
 	if err != nil {
 		return err
@@ -306,7 +452,11 @@ func (c *charger) gopayPaymentProcess(ctx context.Context, chargeRef, pinToken s
 
 func (c *charger) midtransPollStatus(ctx context.Context, snapToken string) (map[string]any, error) {
 	var last string
-	for range statusPollLimit {
+	limit := statusPollLimit
+	if c.requiresManualConfirmation() {
+		limit = qrisStatusPollLimit
+	}
+	for range limit {
 		resp, err := c.ext.request(ctx, http.MethodGet, "https://app.midtrans.com/snap/v1/transactions/"+snapToken+"/status", requestOptions{
 			headers: c.midtransHeaders(snapToken, midtransHeaderOptions{source: true}),
 		})
@@ -352,7 +502,7 @@ func (c *charger) chatGPTVerify(ctx context.Context, csID string) map[string]any
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
 		resp, err := c.cs.request(ctx, http.MethodGet, "https://chatgpt.com/checkout/verify", requestOptions{
-			query: url.Values{"stripe_session_id": []string{csID}, "processor_entity": []string{"openai_llc"}, "plan_type": []string{"plus"}},
+			query: url.Values{"stripe_session_id": []string{csID}, "processor_entity": []string{c.processorEntityOrDefault()}, "plan_type": []string{"plus"}},
 		})
 		if err == nil && resp.status == http.StatusOK {
 			return map[string]any{"state": "succeeded", "cs_id": csID}
@@ -440,7 +590,7 @@ func (c *charger) completeAfterManualConfirmation(ctx context.Context, state map
 		result["charge_ref"] = chargeRef
 		result["midtrans_status"] = stringAt(midtransStatus, "transaction_status")
 	}
-	for _, key := range []string{"deeplink_url", "qr_code_url", "finish_redirect_url", "finish_200_redirect_url"} {
+	for _, key := range []string{"deeplink_url", "qr_code_url", "qr_string", "finish_redirect_url", "finish_200_redirect_url"} {
 		result[key] = stringAt(state, key)
 	}
 	return result, nil
@@ -492,6 +642,26 @@ func midtransChargeDenial(data map[string]any) string {
 		return ""
 	}
 	return "midtrans charge denied: " + jsonExcerpt(data, 500)
+}
+
+type midtransChargeDeniedError struct {
+	data    map[string]any
+	message string
+}
+
+func (e *midtransChargeDeniedError) Error() string {
+	if e == nil {
+		return ""
+	}
+	return e.message
+}
+
+func newMidtransChargeDeniedError(data map[string]any) error {
+	message := midtransChargeDenial(data)
+	if message == "" {
+		return nil
+	}
+	return &midtransChargeDeniedError{data: data, message: message}
 }
 
 func cloneMap(src map[string]any) map[string]any {

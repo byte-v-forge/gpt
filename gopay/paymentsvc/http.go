@@ -13,15 +13,17 @@ import (
 
 	fhttp "github.com/bogdanfinn/fhttp"
 	tlsclient "github.com/bogdanfinn/tls-client"
-	"github.com/bogdanfinn/tls-client/profiles"
 	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
 const defaultTimeout = 30 * time.Second
 
 type httpSession struct {
-	client  tlsclient.HttpClient
-	headers stdhttp.Header
+	client      tlsclient.HttpClient
+	cookieJar   fhttp.CookieJar
+	proxyURL    string
+	headers     stdhttp.Header
+	fingerprint browserFingerprint
 }
 
 type requestOptions struct {
@@ -39,28 +41,104 @@ type httpResult struct {
 	json    map[string]any
 }
 
-func newHTTPSession(proxyURL string) (*httpSession, error) {
+func newHTTPSession(proxyURL string, fingerprints ...browserFingerprint) (*httpSession, error) {
+	fingerprint := randomPaymentBrowserFingerprint(defaultBrowserLocale)
+	if len(fingerprints) > 0 {
+		fingerprint = fingerprints[0].withFallback(defaultBrowserLocale)
+	}
+	session := &httpSession{
+		cookieJar:   tlsclient.NewCookieJar(),
+		proxyURL:    strings.TrimSpace(proxyURL),
+		headers:     make(stdhttp.Header),
+		fingerprint: fingerprint,
+	}
+	if err := session.rebuildClient(fingerprint); err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+func (s *httpSession) rebuildClient(fingerprint browserFingerprint) error {
+	fingerprint = fingerprint.withFallback(defaultBrowserLocale)
 	options := []tlsclient.HttpClientOption{
 		tlsclient.WithTimeoutSeconds(int(defaultTimeout.Seconds())),
-		tlsclient.WithClientProfile(profiles.Chrome_146),
+		tlsclient.WithClientProfile(fingerprint.TLSProfile),
 		tlsclient.WithRandomTLSExtensionOrder(),
 		tlsclient.WithDisableHttp3(),
-		tlsclient.WithCookieJar(tlsclient.NewCookieJar()),
+		tlsclient.WithCookieJar(s.cookieJar),
 	}
-	if proxyURL = strings.TrimSpace(proxyURL); proxyURL != "" {
-		options = append(options, tlsclient.WithProxyUrl(proxyURL))
+	if s.proxyURL != "" {
+		options = append(options, tlsclient.WithProxyUrl(s.proxyURL))
 	}
 	client, err := tlsclient.NewHttpClient(tlsclient.NewNoopLogger(), options...)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &httpSession{client: client, headers: make(stdhttp.Header)}, nil
+	if s.client != nil {
+		s.client.CloseIdleConnections()
+	}
+	s.client = client
+	s.fingerprint = fingerprint
+	return nil
+}
+
+func (s *httpSession) rotateFingerprint(fingerprint browserFingerprint) error {
+	if s == nil {
+		return fmt.Errorf("http session is nil")
+	}
+	fingerprint = fingerprint.withFallback(defaultBrowserLocale)
+	fingerprint.applyBrowserHeaders(s.headers)
+	return s.rebuildClient(fingerprint)
 }
 
 func (s *httpSession) close() {
 	if s != nil && s.client != nil {
 		s.client.CloseIdleConnections()
 	}
+}
+
+func (s *httpSession) cookieHeader(rawURL string) string {
+	if s == nil || s.cookieJar == nil {
+		return ""
+	}
+	target, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	cookies := s.cookieJar.Cookies(target)
+	parts := make([]string, 0, len(cookies))
+	seen := map[string]bool{}
+	for _, cookie := range cookies {
+		if cookie == nil || strings.TrimSpace(cookie.Name) == "" || cookie.Value == "" {
+			continue
+		}
+		if seen[cookie.Name] {
+			continue
+		}
+		seen[cookie.Name] = true
+		parts = append(parts, cookie.Name+"="+cookie.Value)
+	}
+	return strings.Join(parts, "; ")
+}
+
+func mergeCookieHeaders(values ...string) string {
+	parts := make([]string, 0)
+	seen := map[string]bool{}
+	for _, value := range values {
+		for _, raw := range strings.Split(value, ";") {
+			part := strings.TrimSpace(raw)
+			if part == "" || !strings.Contains(part, "=") {
+				continue
+			}
+			name := strings.TrimSpace(strings.SplitN(part, "=", 2)[0])
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, "; ")
 }
 
 func (s *httpSession) request(ctx context.Context, method, rawURL string, opts requestOptions) (*httpResult, error) {

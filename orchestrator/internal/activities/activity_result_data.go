@@ -95,13 +95,16 @@ func paymentPrepareData(resp *pb.PrepareGoPayResponse) map[string]any {
 		return map[string]any{"response_present": false}
 	}
 	return map[string]any{
-		"response_present":    true,
-		"success":             resp.GetSuccess(),
-		"error_message":       resp.GetErrorMessage(),
-		"flow_id":             resp.GetFlowId(),
-		"snap_token_present":  resp.GetSnapToken() != "",
-		"checkout_url":        resp.GetCheckoutUrl(),
-		"checkout_session_id": resp.GetCheckoutSessionId(),
+		"response_present":         true,
+		"success":                  resp.GetSuccess(),
+		"error_message":            resp.GetErrorMessage(),
+		"flow_id":                  resp.GetFlowId(),
+		"snap_token_present":       resp.GetSnapToken() != "",
+		"checkout_url":             resp.GetCheckoutUrl(),
+		"checkout_session_id":      resp.GetCheckoutSessionId(),
+		"retryable_fresh_checkout": resp.GetRetryableFreshCheckout(),
+		"checkout_attempt":         resp.GetCheckoutAttempt(),
+		"stage":                    resp.GetStage(),
 	}
 }
 
@@ -167,6 +170,7 @@ func paymentResultData(resp *pb.GoPayResponse) map[string]any {
 		"awaiting_manual_confirmation": resp.GetAwaitingManualConfirmation(),
 		"deeplink_url":                 resp.GetDeeplinkUrl(),
 		"qr_code_url":                  resp.GetQrCodeUrl(),
+		"qr_string":                    resp.GetQrString(),
 		"finish_redirect_url":          resp.GetFinishRedirectUrl(),
 		"finish_200_redirect_url":      resp.GetFinish_200RedirectUrl(),
 	}

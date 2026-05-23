@@ -67,9 +67,6 @@ func (s *Server) startGoPayAppAuth(ctx context.Context, input GoPayAppOTPStartIn
 		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay login phone is required"))
 	}
 	pin := strings.TrimSpace(input.GetPin())
-	if pin == "" {
-		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay pin is required"))
-	}
 	startedAt := time.Now().Unix()
 	startResp, err := s.gopayClient.AuthStart(ctx, &pb.AuthStartRequest{
 		Phone:       phone,
@@ -153,9 +150,6 @@ func (s *Server) completeGoPayAppAuth(ctx context.Context, input GoPayAppOTPComp
 		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, err)
 	}
 	pin := strings.TrimSpace(input.GetPin())
-	if pin == "" {
-		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay pin is required"))
-	}
 	completeResp, err := s.gopayClient.AuthComplete(ctx, &pb.AuthCompleteRequest{Otp: otp, Pin: pin, StateJson: output.GetStateJson()})
 	output.StateJson = goPayWorkflowStateAfter(output.GetStateJson(), responseStateJSON(completeResp))
 	data["auth_complete"] = authCompleteData(completeResp)
@@ -171,6 +165,23 @@ func (s *Server) completeGoPayAppAuth(ctx context.Context, input GoPayAppOTPComp
 	}
 	if completeResp.GetReady() {
 		return s.finishGoPayAppOTPReady(ctx, input.GetJobId(), stepName, output, data)
+	}
+	if completeResp.GetOtpSent() || strings.TrimSpace(completeResp.GetStage()) == "login_otp_pending" {
+		output.OtpRequired = true
+		output.Stage = completeResp.GetStage()
+		output.Phone = completeResp.GetPhone()
+		output.VerificationMethod = completeResp.GetVerificationMethod()
+		if output.GetOtpChannel() == "" {
+			output.OtpChannel = goPayOTPChannelFromMethod(completeResp.GetVerificationMethod())
+		}
+		output.IssuedAfterUnix = time.Now().Unix()
+		data["otp_required"] = true
+		data["otp_sent_after_complete"] = true
+		data["verification_method"] = output.GetVerificationMethod()
+		data["otp_channel"] = output.GetOtpChannel()
+		data["issued_after_unix"] = output.GetIssuedAfterUnix()
+		s.activityStep(ctx, input.GetJobId(), stepName, false, true).update(data)
+		return output, nil
 	}
 	if completeResp.GetPinSetupRequired() || strings.TrimSpace(completeResp.GetStage()) == "signup_pin_required" {
 		output.PinSetupRequired = true

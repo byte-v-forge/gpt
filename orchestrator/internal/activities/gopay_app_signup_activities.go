@@ -24,8 +24,9 @@ func (s *Server) startGoPayAppSignup(ctx context.Context, input GoPayAppOTPStart
 	otpChannel := normalizeGoPayOTPChannel(input.GetOtpChannel())
 	output.OtpChannel = otpChannel
 	data := map[string]any{
-		"operation":   goPayAppOTPOperationSignup,
-		"otp_channel": otpChannel,
+		"operation":         goPayAppOTPOperationSignup,
+		"otp_channel":       otpChannel,
+		"state_diagnostics": goPayAppStateDiagnostics(stateJSON),
 	}
 	defer func() {
 		output.Data = protoData(data)
@@ -95,6 +96,7 @@ func (s *Server) startGoPayAppSignup(ctx context.Context, input GoPayAppOTPStart
 		output.StateJson, err = goPayStateWithSignupSMSActivationID(output.GetStateJson(), input.GetSmsActivationId())
 	}
 	data["signup_start"] = signupStartData(startResp)
+	data["state_diagnostics_after_start"] = goPayAppStateDiagnostics(output.GetStateJson())
 	if err != nil {
 		return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, fmt.Errorf("gopay signup start: %w", err))
 	}

@@ -8,21 +8,52 @@ import (
 	"github.com/byte-v-forge/gpt/gopay/pb"
 )
 
+func (s *Server) GenerateDeviceProxy(ctx context.Context, _ *pb.GenerateDeviceProxyRequest) (*pb.GenerateDeviceProxyResponse, error) {
+	state, err := s.generateDeviceProxyState(ctx)
+	data := s.deviceProxyDiagnostics(state)
+	if err != nil {
+		return &pb.GenerateDeviceProxyResponse{Success: false, ErrorMessage: err.Error(), StateJson: stateJSON(state)}, nil
+	}
+	return &pb.GenerateDeviceProxyResponse{
+		Success:           true,
+		ProxySlot:         int32(anyInt(data["proxy_slot"])),
+		DynamicEgressSize: int32(anyInt(data["dynamic_egress_size"])),
+		ProxyHash:         anyString(data["proxy_hash"]),
+		DeviceFingerprint: anyString(data["device_fingerprint"]),
+		StateJson:         stateJSON(state),
+	}, nil
+}
+
 func (s *Server) CheckPhone(ctx context.Context, req *pb.CheckPhoneRequest) (*pb.CheckPhoneResponse, error) {
 	phone := normalizePhoneWithConfig(s.cfg, req.GetPhone(), req.GetCountryCode())
 	if phone == "" {
 		return &pb.CheckPhoneResponse{Available: false, Status: "error", ErrorMessage: "phone required"}, nil
 	}
-	result := s.checkPhoneByLoginMethods(ctx, phone, req.GetCountryCode())
+	if strings.TrimSpace(req.GetStateJson()) == "" {
+		return &pb.CheckPhoneResponse{Available: false, Status: "error", ErrorMessage: "generated device proxy state_json required"}, nil
+	}
+	proxyState := s.parseRequestState(req.GetStateJson())
+	if stateString(proxyState, "_gopay_proxy") == "" {
+		return &pb.CheckPhoneResponse{Available: false, Status: "error", ErrorMessage: "generated proxy missing", StateJson: stateJSON(proxyState)}, nil
+	}
+	if len(nestedMap(proxyState["device"])) == 0 {
+		return &pb.CheckPhoneResponse{Available: false, Status: "error", ErrorMessage: "generated device missing", StateJson: stateJSON(proxyState)}, nil
+	}
+	result := s.checkPhoneByLoginMethods(ctx, phone, req.GetCountryCode(), proxyState)
 	status := firstNonEmpty(anyString(result["status"]), "error")
 	errorMessage := anyString(result["error"])
 	if status == "registered" {
 		errorMessage = "PHONE_REGISTERED"
 	}
 	return &pb.CheckPhoneResponse{
-		Available:    anyBool(result["available"]),
-		Status:       status,
-		ErrorMessage: errorMessage,
+		Available:         anyBool(result["available"]),
+		Status:            status,
+		ErrorMessage:      errorMessage,
+		ProxySlot:         int32(anyInt(result["proxy_slot"])),
+		DynamicEgressSize: int32(anyInt(result["dynamic_egress_size"])),
+		ProxyHash:         anyString(result["proxy_hash"]),
+		DeviceFingerprint: anyString(result["device_fingerprint"]),
+		StateJson:         anyString(result["state_json"]),
 	}, nil
 }
 
@@ -48,11 +79,8 @@ func (s *Server) LoginStart(ctx context.Context, req *pb.LoginStartRequest) (*pb
 	if phone == "" {
 		return &pb.LoginStartResponse{Success: false, ErrorMessage: "login phone required", StateJson: stateJSON(state)}, nil
 	}
-	if stage == "login_otp_pending" && stateString(state, "_login_otp_token") != "" && stateString(state, "_login_2fa_token") != "" {
+	if stage == "login_otp_pending" && stateString(state, "_login_otp_token") != "" && stateString(state, "_login_verification_id") != "" {
 		return &pb.LoginStartResponse{Success: true, OtpSent: true, VerificationId: stateString(state, "_login_verification_id"), VerificationMethod: stateString(state, "_login_verification_method"), StateJson: stateJSON(state)}, nil
-	}
-	if strings.TrimSpace(req.GetPin()) == "" {
-		return &pb.LoginStartResponse{Success: false, ErrorMessage: "login pin required", StateJson: stateJSON(state)}, nil
 	}
 	result := s.startLogin(ctx, state, phone, req.GetPin(), req.GetCountryCode(), req.GetOtpChannel())
 	if !anyBool(result["success"]) {
@@ -86,7 +114,15 @@ func (s *Server) LoginComplete(ctx context.Context, req *pb.LoginCompleteRequest
 	if err := s.completeLogin(ctx, state, req.GetOtp()); err != nil {
 		return &pb.LoginCompleteResponse{Success: false, ErrorMessage: err.Error(), StateJson: stateJSON(state)}, nil
 	}
-	return &pb.LoginCompleteResponse{Success: true, Phone: stateString(state, "phone"), StateJson: stateJSON(state)}, nil
+	stage := firstNonEmpty(stateString(state, "stage"), "idle")
+	return &pb.LoginCompleteResponse{
+		Success:            true,
+		Phone:              firstNonEmpty(stateString(state, "phone"), stateString(state, "_login_phone")),
+		OtpSent:            stage == "login_otp_pending",
+		VerificationId:     stateString(state, "_login_verification_id"),
+		VerificationMethod: stateString(state, "_login_verification_method"),
+		StateJson:          stateJSON(state),
+	}, nil
 }
 
 func (s *Server) SignupStart(ctx context.Context, req *pb.SignupStartRequest) (*pb.SignupStartResponse, error) {

@@ -94,8 +94,8 @@ func goPayAddBalanceMethod(addBalance *GoPayAddBalance) string {
 	return ""
 }
 
-func goPayAddBalanceMethodOptions() []string {
-	return []string{"manual_transfer", "envelope", "rekberinaja"}
+func goPayAddBalanceMethodOptions() []any {
+	return []any{"manual_transfer", "envelope", "rekberinaja"}
 }
 
 func goPayOTPWaitInput(jobID, stepName string, start GoPayAppOTPOutput, channel string, activationID string, source string) OTPWaitInput {

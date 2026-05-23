@@ -202,6 +202,19 @@ func (s *Server) RunGoPayPayment(ctx context.Context, req *pb.GoPayPaymentReques
 	return &pb.GoPayPaymentResponse{JobId: jobID, Started: true}, nil
 }
 
+func (s *Server) RunGoPayQRISPaymentActivate(ctx context.Context, req *pb.GoPayQRISPaymentActivateRequest) (*pb.GoPayPaymentResponse, error) {
+	jobID := uuid.NewString()
+	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionGoPayQRISPaymentActivate, jobID)), workflows.GoPayQRISPaymentActivateWorkflow, workflows.GoPayPaymentWorkflowInput{
+		JobId:       jobID,
+		AccountId:   strings.TrimSpace(req.GetAccountId()),
+		SourceJobId: strings.TrimSpace(req.GetSourceJobId()),
+	})
+	if err != nil {
+		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	return &pb.GoPayPaymentResponse{JobId: jobID, Started: true}, nil
+}
+
 func (s *Server) RunGoPayWAPayment(ctx context.Context, req *pb.GoPayWAPaymentRequest) (*pb.GoPayPaymentResponse, error) {
 	jobID := uuid.NewString()
 	input := workflows.GoPayWAPaymentWorkflowInput{
@@ -256,7 +269,7 @@ func (s *Server) ConfirmManualAddBalance(ctx context.Context, req *pb.ConfirmMan
 	if job.Status != statusRunning {
 		return &pb.ConfirmManualAddBalanceResponse{Success: false, JobId: jobID, ErrorMessage: "job is not running: " + job.Status}, nil
 	}
-	if job.Action != actionGoPayPayment {
+	if job.Action != actionGoPayPayment && job.Action != actionGoPayQRISPaymentActivate {
 		return &pb.ConfirmManualAddBalanceResponse{Success: false, JobId: jobID, ErrorMessage: "job does not accept add_balance confirmation: " + job.Action}, nil
 	}
 	if job.LastStep != stepGoPayAppAddBalance {
@@ -280,6 +293,34 @@ func (s *Server) ConfirmManualAddBalance(ctx context.Context, req *pb.ConfirmMan
 		return &pb.ConfirmManualAddBalanceResponse{Success: false, JobId: jobID, ErrorMessage: err.Error()}, nil
 	}
 	return &pb.ConfirmManualAddBalanceResponse{Success: true, JobId: jobID}, nil
+}
+
+func (s *Server) ConfirmManualGoPayPayment(ctx context.Context, req *pb.ConfirmManualGoPayPaymentRequest) (*pb.ConfirmManualGoPayPaymentResponse, error) {
+	jobID := strings.TrimSpace(req.GetJobId())
+	if jobID == "" {
+		return &pb.ConfirmManualGoPayPaymentResponse{Success: false, ErrorMessage: "job_id is required"}, nil
+	}
+	job, err := s.getJob(ctx, jobID)
+	if err != nil {
+		return &pb.ConfirmManualGoPayPaymentResponse{Success: false, JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	if job.Status != statusRunning {
+		return &pb.ConfirmManualGoPayPaymentResponse{Success: false, JobId: jobID, ErrorMessage: "job is not running: " + job.Status}, nil
+	}
+	if job.Action != actionGoPayQRISPaymentActivate && job.Action != actionGoPayPayment {
+		return &pb.ConfirmManualGoPayPaymentResponse{Success: false, JobId: jobID, ErrorMessage: "job does not accept manual gopay payment confirmation: " + job.Action}, nil
+	}
+	if job.LastStep != stepGoPayPayment {
+		return &pb.ConfirmManualGoPayPaymentResponse{Success: false, JobId: jobID, ErrorMessage: "job is not waiting for gopay payment confirmation: " + job.LastStep}, nil
+	}
+	workflowID, ok := contracts.WorkflowID(job.Action, job.ID)
+	if !ok || workflowID == "" {
+		return &pb.ConfirmManualGoPayPaymentResponse{Success: false, JobId: jobID, ErrorMessage: "workflow id not found"}, nil
+	}
+	if err := s.temporal.SignalWorkflow(ctx, workflowID, "", manualGoPayPaymentSignalName, ManualGoPayPaymentSignal{Kind: "manual_qris_payment_confirmed"}); err != nil {
+		return &pb.ConfirmManualGoPayPaymentResponse{Success: false, JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	return &pb.ConfirmManualGoPayPaymentResponse{Success: true, JobId: jobID}, nil
 }
 
 func cloneGoPayAddBalance(value *pb.GoPayAddBalance) *pb.GoPayAddBalance {

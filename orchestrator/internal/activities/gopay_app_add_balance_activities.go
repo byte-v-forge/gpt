@@ -34,6 +34,24 @@ func (s *Server) GoPayAppAddBalanceActivity(ctx context.Context, input GoPayAppA
 	return output, err
 }
 
+func (s *Server) GoPayAppBalanceCheckActivity(ctx context.Context, input GoPayAppStepInput) (GoPayAppStepOutput, error) {
+	output := GoPayAppStepOutput{StateJson: normalizeGoPayWorkflowStateJSON(input.GetStateJson())}
+	resp, nextStateJSON, err := s.validateGoPayAccountTokenForState(ctx, output.GetStateJson())
+	output.StateJson = nextStateJSON
+	data := checkTokenValidData(resp)
+	if err != nil {
+		data["error_message"] = err.Error()
+	} else if resp != nil {
+		output.Stage = resp.GetStage()
+		output.Phone = resp.GetPhone()
+		output.Ready = resp.GetSuccess() && resp.GetTokenValid()
+		output.AccountTokenReady = output.GetReady()
+		data["balance_ready"] = resp.GetHasMinBalance() || resp.GetBalanceAmount() >= 1
+	}
+	output.Data = protoData(data)
+	return output, nil
+}
+
 func (s *Server) runGoPayAddBalance(ctx context.Context, step activityStep, input GoPayAppAddBalanceInput, output *GoPayAppAddBalanceOutput, data map[string]any) (any, error) {
 	addBalance := input.GetAddBalance()
 	if addBalance == nil {

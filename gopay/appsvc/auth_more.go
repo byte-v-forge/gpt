@@ -4,9 +4,76 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/byte-v-forge/gpt/gopay/protocol"
+	gopayapp "github.com/byte-v-forge/gpt/gopay/protocol/app"
 )
+
+type signupProbeBody struct {
+	PhoneNumber               string `json:"phone_number"`
+	CountryCode               string `json:"country_code"`
+	Email                     string `json:"email"`
+	DeviceVerificationTokenID string `json:"device_verification_token_id"`
+	ClientID                  string `json:"client_id"`
+	ClientSecret              string `json:"client_secret"`
+}
+
+type signupMethodsBody struct {
+	CountryCode               string `json:"country_code"`
+	EmailAddress              any    `json:"email_address"`
+	ClientID                  string `json:"client_id"`
+	PhoneNumber               string `json:"phone_number"`
+	ClientSecret              string `json:"client_secret"`
+	Flow                      string `json:"flow"`
+	DeviceVerificationTokenID any    `json:"device_verification_token_id"`
+}
+
+type signupInitiateBody struct {
+	VerificationID            string `json:"verification_id"`
+	Flow                      string `json:"flow"`
+	VerificationMethod        string `json:"verification_method"`
+	CountryCode               string `json:"country_code"`
+	EmailAddress              any    `json:"email_address"`
+	ClientID                  string `json:"client_id"`
+	PhoneNumber               string `json:"phone_number"`
+	ClientSecret              string `json:"client_secret"`
+	IsMultipleMethod          any    `json:"is_multiple_method"`
+	DeviceVerificationTokenID any    `json:"device_verification_token_id"`
+}
+
+type cvsVerifyBody struct {
+	Data               any    `json:"data"`
+	Flow               string `json:"flow"`
+	VerificationID     string `json:"verification_id"`
+	VerificationMethod string `json:"verification_method"`
+	ClientID           string `json:"client_id"`
+	ClientSecret       string `json:"client_secret"`
+}
+
+type gotoAuthClientBody struct {
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+}
+
+type gotoCVSTokenBody struct {
+	AccountID    string `json:"account_id"`
+	ExtUserToken any    `json:"ext_user_token"`
+	GrantType    string `json:"grant_type"`
+	Token        string `json:"token"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+}
+
+type gotoChallengeTokenBody struct {
+	ExtUserToken any    `json:"ext_user_token"`
+	GrantType    string `json:"grant_type"`
+	Token        string `json:"token"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+}
 
 func (s *Server) completeLogin(ctx context.Context, state stateMap, otp string) error {
 	device, err := s.ensureDevice(state)
@@ -20,31 +87,75 @@ func (s *Server) completeLogin(ctx context.Context, state stateMap, otp string) 
 	verificationID := stateString(state, "_login_verification_id")
 	otpToken := stateString(state, "_login_otp_token")
 	method := firstNonEmpty(stateString(state, "_login_verification_method"), "otp_wa")
+	flow := firstNonEmpty(stateString(state, "_login_flow"), "login_2fa")
 	twoFAToken := stateString(state, "_login_2fa_token")
-	if verificationID == "" || otpToken == "" || twoFAToken == "" {
+	if verificationID == "" || otpToken == "" {
+		return fmt.Errorf("login otp state missing")
+	}
+	if flow == "login_2fa" && twoFAToken == "" {
 		return fmt.Errorf("login 2fa state missing")
 	}
-	verifyResp, err := client.Post(ctx, gotoAuthBaseURL+"/cvs/v1/verify", s.authBody(map[string]any{
-		"data":                map[string]any{"otp": strings.TrimSpace(otp), "otp_token": otpToken},
-		"flow":                "login_2fa",
-		"verification_id":     verificationID,
-		"verification_method": method,
-	}))
+	verifyResp, err := client.Post(ctx, gotoAuthBaseURL+"/cvs/v1/verify", cvsVerifyBody{
+		Data:               map[string]any{"otp": strings.TrimSpace(otp), "otp_token": otpToken},
+		Flow:               flow,
+		VerificationID:     verificationID,
+		VerificationMethod: method,
+		ClientID:           s.cfg.GotoClientID,
+		ClientSecret:       s.cfg.GotoClientSecret,
+	})
 	if err != nil {
 		return err
 	}
 	if verifyResp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s", apiError("2fa verify failed", verifyResp))
+		return fmt.Errorf("%s", apiError(flow+" verify failed", verifyResp))
 	}
 	verificationToken := verificationTokenFrom(verifyResp.Data())
 	if verificationToken == "" {
-		return fmt.Errorf("2fa verification_token missing")
+		return fmt.Errorf("%s verification_token missing", flow)
 	}
-	tokenResp, err := client.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/goto-auth/token", s.authBody(map[string]any{
-		"ext_user_token": nil,
-		"grant_type":     "challenge",
-		"token":          twoFAToken,
-	}), http.Header{"Verification-Token": []string{"Bearer " + verificationToken}})
+	if flow == "login_1fa" {
+		accountResp, err := client.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/goto-auth/accountlist", gotoAuthClientBody{
+			ClientID:     s.cfg.GotoClientID,
+			ClientSecret: s.cfg.GotoClientSecret,
+		}, http.Header{"Verification-Token": []string{"Bearer " + verificationToken}})
+		if err != nil {
+			return err
+		}
+		if accountResp.StatusCode != http.StatusOK {
+			return fmt.Errorf("%s", apiError("accountlist failed", accountResp))
+		}
+		accountID := firstAccountID(accountListFrom(accountResp.Data()))
+		oneFAToken := oneFATokenFrom(accountResp.Data())
+		if accountID == "" || oneFAToken == "" {
+			return fmt.Errorf("account_id or 1fa_token missing")
+		}
+		tokenResp, err := client.Post(ctx, gotoAuthBaseURL+"/goto-auth/token", gotoCVSTokenBody{
+			AccountID:    accountID,
+			ExtUserToken: nil,
+			GrantType:    "cvs",
+			Token:        oneFAToken,
+			ClientID:     s.cfg.GotoClientID,
+			ClientSecret: s.cfg.GotoClientSecret,
+		})
+		if err != nil {
+			return err
+		}
+		if tokenResp.StatusCode != http.StatusCreated {
+			if tokenResp.StatusCode == http.StatusForbidden && twoFATokenFrom(tokenResp.Data()) != "" {
+				return s.continueLogin2FA(ctx, client, state, tokenResp)
+			}
+			return fmt.Errorf("%s", apiError("cvs token failed", tokenResp))
+		}
+		s.persistLoginReady(state, tokenResp.Data(), stateString(state, "_login_phone"))
+		return nil
+	}
+	tokenResp, err := client.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/goto-auth/token", gotoChallengeTokenBody{
+		ExtUserToken: nil,
+		GrantType:    "challenge",
+		Token:        twoFAToken,
+		ClientID:     s.cfg.GotoClientID,
+		ClientSecret: s.cfg.GotoClientSecret,
+	}, http.Header{"Verification-Token": []string{"Bearer " + verificationToken}})
 	if err != nil {
 		return err
 	}
@@ -52,6 +163,47 @@ func (s *Server) completeLogin(ctx context.Context, state stateMap, otp string) 
 		return fmt.Errorf("%s", apiError("challenge token failed", tokenResp))
 	}
 	s.persistLoginReady(state, tokenResp.Data(), stateString(state, "_login_phone"))
+	return nil
+}
+
+func (s *Server) continueLogin2FA(ctx context.Context, client *gopayapp.Client, state stateMap, tokenResp *protocol.Response) error {
+	twoFAToken := twoFATokenFrom(tokenResp.Data())
+	verificationID := verificationIDFrom(tokenResp.Data())
+	if twoFAToken == "" || verificationID == "" {
+		return fmt.Errorf("%s", apiError("cvs token 2fa challenge missing", tokenResp))
+	}
+	otpMethods := methodsFrom(tokenResp.Data())
+	defaultMethod := stringForAnyKey(tokenResp.Data(), "default_method", "defaultMethod")
+	previousMethod := stateString(state, "_login_verification_method")
+	method := chooseOTPMethod(otpMethods, "", firstNonEmpty(defaultMethod, previousMethod, "otp_wa"))
+	if method == "" {
+		return fmt.Errorf("2fa otp method unavailable: %v", otpMethods)
+	}
+	phone := stateString(state, "_login_phone")
+	countryCode := stateString(state, "_login_country_code")
+	otpResp, err := client.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/cvs/v1/initiate", signupInitiateBody{
+		VerificationID:            verificationID,
+		Flow:                      "login_2fa",
+		VerificationMethod:        method,
+		CountryCode:               countryCode,
+		EmailAddress:              nil,
+		ClientID:                  s.cfg.GotoClientID,
+		PhoneNumber:               phone,
+		ClientSecret:              s.cfg.GotoClientSecret,
+		IsMultipleMethod:          nil,
+		DeviceVerificationTokenID: nil,
+	}, http.Header{"Authorization": []string{""}})
+	if err != nil {
+		return err
+	}
+	if otpResp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s", apiError("2fa otp initiate failed", otpResp))
+	}
+	otpToken := otpTokenFrom(otpResp.Data())
+	if otpToken == "" {
+		return fmt.Errorf("2fa otp_token missing")
+	}
+	s.persistLoginOTP(state, phone, countryCode, verificationID, method, otpToken, twoFAToken, "login_2fa")
 	return nil
 }
 
@@ -65,13 +217,29 @@ func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, e
 	if name == "" {
 		return map[string]any{"success": false, "error": "signup name missing"}
 	}
+	if cooldown := s.signupCooldownResult(state); cooldown != nil {
+		return cooldown
+	}
 	s.clearSignupState(state, "")
 	s.clearLoginState(state, "")
-	device, rawDevice, err := s.newLogonDevice()
+	device, err := s.ensureDevice(state)
 	if err != nil {
 		return map[string]any{"success": false, "error": err.Error()}
 	}
-	state["device"] = rawDevice
+	if strings.TrimSpace(os.Getenv("GOPAY_APP_VERSION")) == "" && !strings.HasPrefix(strings.TrimSpace(device.AppVersion), "2.7.") {
+		next, rawDevice, err := s.newLogonDevice()
+		if err != nil {
+			return map[string]any{"success": false, "error": err.Error()}
+		}
+		device = next
+		state["device"] = rawDevice
+	}
+	if probeTransactionID := stateString(state, "_signup_probe_transaction_id"); probeTransactionID != "" {
+		device.TransactionID = probeTransactionID
+	} else {
+		state["_signup_probe_transaction_id"] = device.TransactionID
+	}
+	state["device"] = deviceToMap(device)
 	deleteKeys(state, activeTokenKeys...)
 	deleteKeys(state, activeTokenMetaKeys...)
 	deleteKeys(state, tmpTokenKeys...)
@@ -83,19 +251,68 @@ func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, e
 	state["_signup_started_at"] = time.Now().Unix()
 	state["stage"] = "signup"
 	delete(state, "last_error")
-	client, err := s.newClient(ctx, "", s.proxyForState(state), device)
+	proxyURL := s.proxyForState(state)
+	client, err := s.newClient(ctx, "", proxyURL, device)
 	if err != nil {
 		return map[string]any{"success": false, "error": err.Error()}
 	}
-	methodsResp, err := client.Post(ctx, gotoAuthBaseURL+"/cvs/v1/methods", s.authBody(map[string]any{
-		"country_code":                 cc,
-		"device_verification_token_id": nil,
-		"email_address":                nil,
-		"flow":                         "signup",
-		"phone_number":                 normalized,
-	}))
+	supportWarmup := map[string]any{"attempted": true}
+	if warmupResp, err := client.InitiateSupportCustomer(ctx); err != nil {
+		supportWarmup["success"] = false
+		supportWarmup["error"] = err.Error()
+		state["_signup_support_warmup_error"] = err.Error()
+	} else {
+		status := 0
+		if warmupResp != nil {
+			status = warmupResp.StatusCode
+		}
+		supportWarmup["success"] = status >= 200 && status < 300
+		supportWarmup["status_code"] = status
+		state["_signup_support_warmup_status"] = status
+		delete(state, "_signup_support_warmup_error")
+	}
+	state["_signup_support_warmup_at"] = time.Now().Unix()
+	probeResp, err := client.Post(ctx, gotoAuthBaseURL+"/goto-auth/login/methods", signupProbeBody{
+		PhoneNumber:               normalized,
+		CountryCode:               cc,
+		Email:                     "",
+		DeviceVerificationTokenID: "",
+		ClientID:                  s.cfg.GotoClientID,
+		ClientSecret:              s.cfg.GotoClientSecret,
+	})
 	if err != nil {
 		return map[string]any{"success": false, "error": err.Error()}
+	}
+	if probeResp.StatusCode == http.StatusOK || probeResp.StatusCode == http.StatusCreated {
+		return map[string]any{"success": false, "error": "PHONE_REGISTERED", "raw_json": safeJSON(probeResp.Payload)}
+	}
+	if isRateLimited(probeResp) {
+		return s.signupRateLimitResult(state, signupRateLimitScopeProbe, normalized, cc, rateLimitLabel(signupRateLimitScopeProbe), probeResp)
+	}
+	if !loginMethodsInvalidUser(probeResp) && probeResp.StatusCode >= http.StatusBadRequest {
+		return map[string]any{"success": false, "error": apiError("signup phone probe failed", probeResp), "support_warmup": supportWarmup, "raw_json": safeJSON(probeResp.Payload)}
+	}
+	device = device.WithNewTransactionID()
+	state["_signup_cvs_transaction_id"] = device.TransactionID
+	state["device"] = deviceToMap(device)
+	client, err = s.newClient(ctx, "", proxyURL, device)
+	if err != nil {
+		return map[string]any{"success": false, "error": err.Error(), "support_warmup": supportWarmup}
+	}
+	methodsResp, err := client.Post(ctx, gotoAuthBaseURL+"/cvs/v1/methods", signupMethodsBody{
+		CountryCode:               cc,
+		DeviceVerificationTokenID: nil,
+		EmailAddress:              nil,
+		Flow:                      "signup",
+		PhoneNumber:               normalized,
+		ClientID:                  s.cfg.GotoClientID,
+		ClientSecret:              s.cfg.GotoClientSecret,
+	})
+	if err != nil {
+		return map[string]any{"success": false, "error": err.Error()}
+	}
+	if isRateLimited(methodsResp) {
+		return s.signupRateLimitResult(state, signupRateLimitScopeMethods, normalized, cc, rateLimitLabel(signupRateLimitScopeMethods), methodsResp)
 	}
 	if methodsResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("signup methods failed", methodsResp), "raw_json": safeJSON(methodsResp.Payload)}
@@ -107,22 +324,38 @@ func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, e
 		return map[string]any{"success": false, "error": "signup verification_id missing: " + safeJSON(shape), "response_shape": shape}
 	}
 	methods := methodsFrom(methodsData)
-	method := chooseOTPMethod(methods, otpChannel, "otp_sms")
+	defaultMethod := stringForAnyKey(methodsData, "default_method", "defaultMethod")
+	method := chooseOTPMethod(methods, otpChannel, firstNonEmpty(defaultMethod, "otp_wa"))
 	if method == "" {
 		return map[string]any{"success": false, "error": fmt.Sprintf("otp method unavailable: %v", methods), "response_shape": responseShape(methodsResp)}
 	}
-	initResp, err := client.Post(ctx, gotoAuthBaseURL+"/cvs/v1/initiate", s.authBody(map[string]any{
-		"country_code":                 cc,
-		"device_verification_token_id": nil,
-		"email_address":                nil,
-		"flow":                         "signup",
-		"is_multiple_method":           nil,
-		"phone_number":                 normalized,
-		"verification_id":              verificationID,
-		"verification_method":          method,
-	}))
+	initiateDelay := s.signupInitiateDelay()
+	if initiateDelay > 0 {
+		now := time.Now().Unix()
+		state["_signup_initiate_delay_seconds"] = int64(initiateDelay.Seconds())
+		state["_signup_initiate_delay_started_at"] = now
+		if err := sleepWithContext(ctx, initiateDelay); err != nil {
+			return map[string]any{"success": false, "error": err.Error(), "signup_initiate_delay_seconds": int64(initiateDelay.Seconds())}
+		}
+		state["_signup_initiate_delay_finished_at"] = time.Now().Unix()
+	}
+	initResp, err := client.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/cvs/v1/initiate", signupInitiateBody{
+		CountryCode:               cc,
+		DeviceVerificationTokenID: nil,
+		EmailAddress:              nil,
+		Flow:                      "signup",
+		IsMultipleMethod:          nil,
+		PhoneNumber:               normalized,
+		VerificationID:            verificationID,
+		VerificationMethod:        method,
+		ClientID:                  s.cfg.GotoClientID,
+		ClientSecret:              s.cfg.GotoClientSecret,
+	}, nil)
 	if err != nil {
 		return map[string]any{"success": false, "error": err.Error()}
+	}
+	if isRateLimited(initResp) {
+		return s.signupRateLimitResult(state, signupRateLimitScopeInitiate, normalized, cc, rateLimitLabel(signupRateLimitScopeInitiate), initResp)
 	}
 	if initResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("signup otp initiate failed", initResp), "method": method, "raw_json": safeJSON(initResp.Payload)}
@@ -134,8 +367,10 @@ func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, e
 	s.persistSignupOTP(state, verificationID, method, otpToken)
 	return map[string]any{
 		"success": true, "otp_sent": true, "verification_id": verificationID,
-		"method": method, "retry_timer_seconds": initResp.Data()["retry_timer_in_seconds"],
-		"raw_json": safeJSON(initResp.Payload),
+		"method": method, "default_method": defaultMethod, "retry_timer_seconds": initResp.Data()["retry_timer_in_seconds"],
+		"signup_initiate_delay_seconds": int64(initiateDelay.Seconds()),
+		"support_warmup":                supportWarmup,
+		"raw_json":                      safeJSON(initResp.Payload),
 	}
 }
 

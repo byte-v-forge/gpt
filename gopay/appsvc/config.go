@@ -23,7 +23,11 @@ type Config struct {
 	PINClientID                string
 	GotoClientID               string
 	GotoClientSecret           string
-	ProxyPool                  []string
+	DynamicEgress              []string
+	ProxyRuntimeHTTPAddr       string
+	SignupInitiateJitterMin    time.Duration
+	SignupInitiateJitterMax    time.Duration
+	SignupRateLimitCooldown    time.Duration
 	OTPTimeout                 time.Duration
 	TokenRefreshMinTTL         time.Duration
 	ChangePhoneConfirmTimeout  time.Duration
@@ -52,7 +56,11 @@ func ConfigFromEnv() Config {
 		ChangePhoneConfirmTimeout:  8 * time.Second,
 		ChangePhoneConfirmInterval: time.Second,
 		EnvelopeShortlinkTimeout:   10 * time.Second,
-		ProxyPool:                  splitProxyPool(os.Getenv("GOPAY_PROXY_POOL")),
+		DynamicEgress:              splitDynamicEgress(os.Getenv("GOPAY_DYNAMIC_EGRESS")),
+		ProxyRuntimeHTTPAddr:       strings.TrimSpace(os.Getenv("PROXY_RUNTIME_HTTP_ADDR")),
+		SignupInitiateJitterMin:    envSeconds("GOPAY_SIGNUP_INITIATE_JITTER_MIN_SECONDS", 8),
+		SignupInitiateJitterMax:    envSeconds("GOPAY_SIGNUP_INITIATE_JITTER_MAX_SECONDS", 25),
+		SignupRateLimitCooldown:    envSeconds("GOPAY_SIGNUP_RATE_LIMIT_COOLDOWN_SECONDS", 900),
 		MinBalanceRp:               1,
 	}
 }
@@ -94,7 +102,7 @@ func envBool(name string, fallback bool) bool {
 	}
 }
 
-func splitProxyPool(raw string) []string {
+func splitDynamicEgress(raw string) []string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil

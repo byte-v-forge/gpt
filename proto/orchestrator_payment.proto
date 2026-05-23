@@ -87,6 +87,8 @@ message GoPayActivityOutput {
   bool plus_active = 5;
   google.protobuf.Struct data = 6;
   string state_json = 7;
+  bool awaiting_manual_confirmation = 8;
+  string flow_id = 9;
 }
 
 message GoPayPaymentStartOutput {
@@ -107,6 +109,9 @@ message GoPayPaymentPrepareOutput {
   bool use_account_token = 5;
   google.protobuf.Struct data = 6;
   string state_json = 7;
+  bool retryable_fresh_checkout = 8;
+  int32 checkout_attempt = 9;
+  string stage = 10;
 }
 
 message GoPayPaymentCompleteInput {
@@ -121,6 +126,15 @@ message GoPayPaymentCompleteInput {
   google.protobuf.Struct data = 9;
   string state_json = 10;
   string pin = 11;
+  bool wait_for_manual_confirmation = 12;
+}
+
+message GoPayPaymentManualConfirmInput {
+  string job_id = 1;
+  string account_id = 2;
+  string flow_id = 3;
+  google.protobuf.Struct data = 4;
+  string state_json = 5;
 }
 
 message GoPayPaymentOTPResendInput {

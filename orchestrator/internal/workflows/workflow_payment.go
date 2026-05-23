@@ -332,6 +332,107 @@ func activationPaymentData(logonData map[string]any, paymentData map[string]any)
 }
 
 func prepareGoPayPayment(ctx workflow.Context, paymentCtx workflow.Context, input GoPayActivityInput) (GoPayPaymentPrepareOutput, error) {
+	if workflow.GetVersion(ctx, "split-gopay-payment-prepare", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		var prepare GoPayPaymentPrepareOutput
+		err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareActivityName, input).Get(ctx, &prepare)
+		return prepare, err
+	}
+
+	var checkout GoPayPaymentPrepareOutput
+	if err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareCheckoutActivityName, input).Get(ctx, &checkout); err != nil {
+		return checkout, err
+	}
+	input.PreparedFlowId = checkout.GetFlowId()
+	input.CheckoutUrl = checkout.GetCheckoutUrl()
+	input.CheckoutSessionId = checkout.GetCheckoutSessionId()
+
+	var link GoPayPaymentPrepareOutput
+	if err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareLinkActivityName, input).Get(ctx, &link); err != nil {
+		return mergeGoPayPaymentPrepareOutput(checkout, link, nil), err
+	}
+	if link.GetRetryableFreshCheckout() {
+		if workflow.GetVersion(ctx, "gopay-payment-fresh-checkout-without-refresh", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+			input.PreparedFlowId = paymentFlowID(link.GetFlowId(), checkout.GetFlowId())
+			var refresh GoPayPaymentPrepareOutput
+			if err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareRefreshActivityName, input).Get(ctx, &refresh); err != nil {
+				return mergeGoPayPaymentPrepareOutput(checkout, link, &refresh), err
+			}
+			input.PreparedFlowId = paymentFlowID(refresh.GetFlowId(), input.GetPreparedFlowId())
+			input.CheckoutUrl = refresh.GetCheckoutUrl()
+			input.CheckoutSessionId = refresh.GetCheckoutSessionId()
+			var retryLink GoPayPaymentPrepareOutput
+			if err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareLinkActivityName, input).Get(ctx, &retryLink); err != nil {
+				return mergeGoPayPaymentPrepareOutput(refresh, retryLink, nil), err
+			}
+			if retryLink.GetRetryableFreshCheckout() {
+				return mergeGoPayPaymentPrepareOutput(refresh, retryLink, nil), fmt.Errorf("payment prepare link blocked after fresh checkout retry")
+			}
+			return mergeGoPayPaymentPrepareOutput(refresh, retryLink, nil), nil
+		}
+
+		cancelGoPayPayment(ctx, paymentCtx, paymentFlowID(link.GetFlowId(), checkout.GetFlowId()))
+		freshInput := input
+		freshInput.PreparedFlowId = ""
+		freshInput.CheckoutUrl = ""
+		freshInput.CheckoutSessionId = ""
+		var freshCheckout GoPayPaymentPrepareOutput
+		if err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareCheckoutActivityName, freshInput).Get(ctx, &freshCheckout); err != nil {
+			return mergeGoPayPaymentPrepareOutputWithExtra(checkout, link, &freshCheckout, "prepare_checkout_retry"), err
+		}
+		input.PreparedFlowId = freshCheckout.GetFlowId()
+		input.CheckoutUrl = freshCheckout.GetCheckoutUrl()
+		input.CheckoutSessionId = freshCheckout.GetCheckoutSessionId()
+		var retryLink GoPayPaymentPrepareOutput
+		if err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareLinkActivityName, input).Get(ctx, &retryLink); err != nil {
+			return mergeGoPayPaymentPrepareOutputWithExtra(freshCheckout, retryLink, nil, ""), err
+		}
+		if retryLink.GetRetryableFreshCheckout() {
+			return mergeGoPayPaymentPrepareOutputWithExtra(freshCheckout, retryLink, nil, ""), fmt.Errorf("payment prepare link blocked after fresh checkout retry")
+		}
+		return mergeGoPayPaymentPrepareOutputWithExtra(freshCheckout, retryLink, nil, ""), nil
+	}
+	return mergeGoPayPaymentPrepareOutput(checkout, link, nil), nil
+}
+
+func mergeGoPayPaymentPrepareOutput(checkout GoPayPaymentPrepareOutput, link GoPayPaymentPrepareOutput, refresh *GoPayPaymentPrepareOutput) GoPayPaymentPrepareOutput {
+	return mergeGoPayPaymentPrepareOutputWithExtra(checkout, link, refresh, "prepare_checkout_refresh")
+}
+
+func mergeGoPayPaymentPrepareOutputWithExtra(checkout GoPayPaymentPrepareOutput, link GoPayPaymentPrepareOutput, extra *GoPayPaymentPrepareOutput, extraKey string) GoPayPaymentPrepareOutput {
+	out := link
+	if out.GetFlowId() == "" {
+		out.FlowId = checkout.GetFlowId()
+	}
+	if out.GetCheckoutUrl() == "" {
+		out.CheckoutUrl = checkout.GetCheckoutUrl()
+	}
+	if out.GetCheckoutSessionId() == "" {
+		out.CheckoutSessionId = checkout.GetCheckoutSessionId()
+	}
+	if out.GetStateJson() == "" {
+		out.StateJson = checkout.GetStateJson()
+	}
+	data := map[string]any{
+		"prepare_checkout": protoDataMap(checkout.GetData()),
+		"prepare_link":     protoDataMap(link.GetData()),
+	}
+	if extra != nil && strings.TrimSpace(extraKey) != "" {
+		data[extraKey] = protoDataMap(extra.GetData())
+		if out.GetCheckoutUrl() == "" {
+			out.CheckoutUrl = extra.GetCheckoutUrl()
+		}
+		if out.GetCheckoutSessionId() == "" {
+			out.CheckoutSessionId = extra.GetCheckoutSessionId()
+		}
+	}
+	for key, value := range protoDataMap(link.GetData()) {
+		data[key] = value
+	}
+	out.Data = protoData(data)
+	return out
+}
+
+func prepareGoPayPaymentLegacy(ctx workflow.Context, paymentCtx workflow.Context, input GoPayActivityInput) (GoPayPaymentPrepareOutput, error) {
 	var prepare GoPayPaymentPrepareOutput
 	err := workflow.ExecuteActivity(paymentCtx, goPayPaymentPrepareActivityName, input).Get(ctx, &prepare)
 	return prepare, err
@@ -445,20 +546,43 @@ func runGoPayPayment(ctx workflow.Context, paymentCtx workflow.Context, cancelCt
 	}
 
 	var payment GoPayActivityOutput
+	waitForManual := strings.EqualFold(strings.TrimSpace(input.GetTokenization()), "qris")
 	err = workflow.ExecuteActivity(paymentCtx, goPayPaymentCompleteActivityName, GoPayPaymentCompleteInput{
-		JobId:              input.GetJobId(),
-		AccountId:          input.GetAccountId(),
-		FlowId:             start.GetFlowId(),
-		OtpParam:           paymentOTPParam,
-		SubmittedAtParam:   paymentOTPSubmittedAtParam,
-		OtpIssuedAfterUnix: start.GetIssuedAfterUnix(),
-		OtpSource:          otpSource,
-		UseAccountToken:    start.GetUseAccountToken(),
-		Data:               start.GetData(),
-		StateJson:          start.GetStateJson(),
-		Pin:                input.GetPin(),
+		JobId:                     input.GetJobId(),
+		AccountId:                 input.GetAccountId(),
+		FlowId:                    start.GetFlowId(),
+		OtpParam:                  paymentOTPParam,
+		SubmittedAtParam:          paymentOTPSubmittedAtParam,
+		OtpIssuedAfterUnix:        start.GetIssuedAfterUnix(),
+		OtpSource:                 otpSource,
+		UseAccountToken:           start.GetUseAccountToken(),
+		Data:                      start.GetData(),
+		StateJson:                 start.GetStateJson(),
+		Pin:                       input.GetPin(),
+		WaitForManualConfirmation: waitForManual,
 	}).Get(ctx, &payment)
-	return payment, err
+	if err != nil {
+		return payment, err
+	}
+	if !payment.GetAwaitingManualConfirmation() {
+		return payment, nil
+	}
+	if err := waitForManualGoPayPayment(ctx, 1800); err != nil {
+		cancelGoPayPayment(ctx, cancelCtx, paymentFlowID(payment.GetFlowId(), start.GetFlowId()))
+		return payment, err
+	}
+	var confirmed GoPayActivityOutput
+	err = workflow.ExecuteActivity(paymentCtx, goPayPaymentManualConfirmActivityName, GoPayPaymentManualConfirmInput{
+		JobId:     input.GetJobId(),
+		AccountId: input.GetAccountId(),
+		FlowId:    paymentFlowID(payment.GetFlowId(), start.GetFlowId()),
+		Data:      payment.GetData(),
+		StateJson: payment.GetStateJson(),
+	}).Get(ctx, &confirmed)
+	if err != nil {
+		return confirmed, err
+	}
+	return confirmed, nil
 }
 
 func paymentFlowID(values ...string) string {

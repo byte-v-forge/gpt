@@ -183,7 +183,7 @@ func runGoPayAppUserOperationWorkflow(ctx workflow.Context, input GoPayAppWorkfl
 	stepName := goPayAppWorkflowOperationStep(operation)
 	setWorkflowProgress(ctx, progress, stepName)
 
-	out, err := runGoPayAppWorkflowOperationChild(ctx, input.GetJobId(), operation, opts)
+	out, err := runGoPayAppWorkflowOperationChild(ctx, retryCtx, input.GetJobId(), operation, opts)
 	combined[operation] = protoDataMap(out.GetData())
 	if nextStateJSON := strings.TrimSpace(out.GetStateJson()); nextStateJSON != "" {
 		stateJSON = nextStateJSON
@@ -214,12 +214,14 @@ func runGoPayAppUserOperationWorkflow(ctx workflow.Context, input GoPayAppWorkfl
 	return result, nil
 }
 
-func runGoPayAppWorkflowOperationChild(ctx workflow.Context, jobID string, operation string, opts goPayAppOTPOptions) (*GoPayAppStepOutput, error) {
+func runGoPayAppWorkflowOperationChild(ctx workflow.Context, activityCtx workflow.Context, jobID string, operation string, opts goPayAppOTPOptions) (*GoPayAppStepOutput, error) {
 	switch operation {
 	case goPayAppWorkflowOperationLogin:
 		return runGoPayAppEnsureTokenChild(ctx, jobID, opts)
-	case goPayAppWorkflowOperationCheckBal, goPayAppWorkflowOperationCheckPIN:
-		return runGoPayAppEnsureTokenChild(ctx, jobID, opts)
+	case goPayAppWorkflowOperationCheckBal:
+		return runGoPayAppCheckBalance(ctx, activityCtx, jobID, opts)
+	case goPayAppWorkflowOperationCheckPIN:
+		return runGoPayAppCheckPIN(ctx, activityCtx, jobID, opts)
 	case goPayAppWorkflowOperationSignup:
 		return runGoPayAppSignupChild(ctx, jobID, opts, 0)
 	case goPayAppWorkflowOperationCreatePIN:
@@ -229,6 +231,65 @@ func runGoPayAppWorkflowOperationChild(ctx workflow.Context, jobID string, opera
 	default:
 		return &GoPayAppStepOutput{}, fmt.Errorf("unsupported gopay app operation: %s", operation)
 	}
+}
+
+func runGoPayAppCheckBalance(ctx workflow.Context, activityCtx workflow.Context, jobID string, opts goPayAppOTPOptions) (*GoPayAppStepOutput, error) {
+	token, err := runGoPayAppEnsureTokenChild(ctx, jobID, opts)
+	if err != nil {
+		return token, err
+	}
+	stateJSON := strings.TrimSpace(token.GetStateJson())
+	if stateJSON == "" {
+		stateJSON = opts.StateJSON
+	}
+	var status GoPayAppStepOutput
+	if err := workflow.ExecuteActivity(activityCtx, goPayAppStatusActivityName, GoPayAppStepInput{
+		JobId:     jobID,
+		StateJson: stateJSON,
+	}).Get(ctx, &status); err != nil {
+		return &status, err
+	}
+	statusData := protoDataMap(status.GetData())
+	combined := map[string]any{
+		"ensure_token": protoDataMap(token.GetData()),
+		"status":       statusData,
+	}
+	if snapshot, ok := statusData["status"].(map[string]any); ok {
+		for _, key := range []string{"balance_amount", "balance_currency", "has_min_balance"} {
+			if value, ok := snapshot[key]; ok {
+				combined[key] = value
+			}
+		}
+	}
+	status.Data = protoData(combined)
+	status.AccountTokenReady = token.GetAccountTokenReady() || status.GetAccountTokenReady()
+	return &status, nil
+}
+
+func runGoPayAppCheckPIN(ctx workflow.Context, activityCtx workflow.Context, jobID string, opts goPayAppOTPOptions) (*GoPayAppStepOutput, error) {
+	token, err := runGoPayAppEnsureTokenChild(ctx, jobID, opts)
+	if err != nil {
+		return token, err
+	}
+	stateJSON := strings.TrimSpace(token.GetStateJson())
+	if stateJSON == "" {
+		stateJSON = opts.StateJSON
+	}
+	var status GoPayAppStepOutput
+	if err := workflow.ExecuteActivity(activityCtx, goPayAppStatusActivityName, GoPayAppStepInput{
+		JobId:     jobID,
+		StateJson: stateJSON,
+	}).Get(ctx, &status); err != nil {
+		return &status, err
+	}
+	combined := map[string]any{
+		"ensure_token": protoDataMap(token.GetData()),
+		"status":       protoDataMap(status.GetData()),
+		"pin_setup":    status.GetSignupPinComplete(),
+	}
+	status.Data = protoData(combined)
+	status.AccountTokenReady = token.GetAccountTokenReady() || status.GetAccountTokenReady()
+	return &status, nil
 }
 
 func normalizeGoPayAppWorkflowOperation(value string) string {

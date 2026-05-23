@@ -34,10 +34,14 @@ func (p RetryPolicy) normalized() RetryPolicy {
 
 type Client struct {
 	baseURL        *url.URL
-	httpClient     *http.Client
+	httpClient     HTTPDoer
 	defaultHeaders http.Header
 	retry          RetryPolicy
 	logger         Logger
+}
+
+type HTTPDoer interface {
+	Do(*http.Request) (*http.Response, error)
 }
 
 type Option func(*Client) error
@@ -68,6 +72,16 @@ func NewClient(baseURL string, opts ...Option) (*Client, error) {
 }
 
 func WithHTTPClient(httpClient *http.Client) Option {
+	return func(client *Client) error {
+		if httpClient == nil {
+			return &ConfigError{Field: "http_client", Msg: "is nil"}
+		}
+		client.httpClient = httpClient
+		return nil
+	}
+}
+
+func WithHTTPDoer(httpClient HTTPDoer) Option {
 	return func(client *Client) error {
 		if httpClient == nil {
 			return &ConfigError{Field: "http_client", Msg: "is nil"}
@@ -214,6 +228,9 @@ func (c *Client) doOnce(ctx context.Context, method string, target *url.URL, req
 	}
 	copyHeadersExact(httpReq.Header, c.defaultHeaders)
 	copyHeadersExact(httpReq.Header, request.Headers)
+	if host := takeHostHeader(httpReq.Header); host != "" {
+		httpReq.Host = host
+	}
 	resp, err := c.httpClient.Do(httpReq)
 	if err != nil {
 		return nil, err
@@ -245,6 +262,22 @@ func deleteHeader(headers http.Header, key string) {
 			delete(headers, existing)
 		}
 	}
+}
+
+func takeHostHeader(headers http.Header) string {
+	for key, values := range headers {
+		if !strings.EqualFold(key, "Host") {
+			continue
+		}
+		delete(headers, key)
+		for _, value := range values {
+			if value = strings.TrimSpace(value); value != "" {
+				return value
+			}
+		}
+		return ""
+	}
+	return ""
 }
 
 func readResponseBody(body io.Reader) ([]byte, error) {

@@ -2,7 +2,6 @@ package appsvc
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/byte-v-forge/gpt/gopay/pb"
@@ -15,14 +14,6 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	if stateString(state, "stage") == "ready" {
 		_ = s.ensureAccessToken(ctx, state, s.cfg.TokenRefreshMinTTL, false)
 	}
-	device := nestedMap(state["device"])
-	fpParts := []string{anyString(device["profile_id"]), anyString(device["x-phonemake"]), anyString(device["x-phonemodel"]), anyString(device["x-uniqueid"])}
-	var fp []string
-	for _, part := range fpParts {
-		if strings.TrimSpace(part) != "" {
-			fp = append(fp, part)
-		}
-	}
 	errorMessage := stateString(state, "last_error")
 	if stateString(state, "last_token_refresh_error") != "" && !tokenUsable(state, "token", 0) {
 		errorMessage = stateString(state, "last_token_refresh_error")
@@ -30,7 +21,7 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 	return &pb.StatusResponse{
 		Stage:                     firstNonEmpty(stateString(state, "stage"), "idle"),
 		Phone:                     stateString(state, "phone"),
-		DeviceFingerprint:         strings.Join(fp, "/"),
+		DeviceFingerprint:         deviceFingerprintForState(state),
 		DeactivatedAt:             stateInt(state, "deactivated_at"),
 		ErrorMessage:              errorMessage,
 		TokenPresent:              tokenUsable(state, "token", 30*time.Second),
@@ -43,7 +34,7 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 		BalanceAmount:             stateInt(state, "balance_amount"),
 		HasMinBalance:             anyBool(state["has_min_balance"]),
 		BalanceCurrency:           stateString(state, "balance_currency"),
-		PinSetup:                  stateInt(state, "pin_setup_at") > 0,
+		PinSetup:                  anyBool(state["pin_setup"]) || stateInt(state, "pin_setup_at") > 0,
 		PinSetupAtUnix:            stateInt(state, "pin_setup_at"),
 		StateJson:                 stateJSON(state),
 	}, nil

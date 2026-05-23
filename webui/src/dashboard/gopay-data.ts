@@ -3,7 +3,7 @@ import { api, useQuery, useQueryClient } from '@/dashboard/module-kit';
 import { useJobEventCache } from '@/dashboard/modules/workflow/sdk';
 import type { GoPayDashboardStateResponse, Job, JobSnapshot } from './types';
 
-const GO_PAY_JOB_ACTIONS = new Set(['GOPAY_APP', 'GOPAY_PAYMENT_REBIND']);
+const GO_PAY_JOB_ACTIONS = new Set(['GOPAY_APP', 'GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE', 'GOPAY_WA_PAYMENT', 'GOPAY_PAYMENT_REBIND']);
 
 export const gopayQueryKeys = {
   state: ['gpt', 'gopay', 'state', 'local'] as const,

@@ -26,11 +26,15 @@ func (s *Server) startSignupPIN(ctx context.Context, state stateMap, pin, otpCha
 		return map[string]any{"success": false, "error": err.Error()}
 	}
 	profile, _ := client.Get(ctx, customerBaseURL+"/v1/users/profile")
-	if profile != nil && profile.StatusCode == http.StatusOK && boolForAnyKey(profile.Data(), "is_pin_setup", "isPinSetup") {
+	pinSetup := false
+	if profile != nil && profile.StatusCode == http.StatusOK {
+		pinSetup, _ = pinSetupFlagFromProfileData(profile.Data())
+	}
+	if pinSetup {
 		phone = firstNonEmpty(stringForAnyKey(profile.Data(), "phone", "number"), phone)
 		state["phone"] = normalizePhone(phone, "")
 		state["stage"] = "ready"
-		state["pin_setup_at"] = time.Now().Unix()
+		updatePINSetupState(state, true)
 		state["ready_at"] = time.Now().Unix()
 		delete(state, "last_error")
 		deleteKeys(state, signupAccountStateKeys...)
@@ -193,7 +197,7 @@ func (s *Server) completeSignupPIN(ctx context.Context, state stateMap, otp, pin
 	phone := firstNonEmpty(stateString(state, "_signup_phone"), stateString(state, "phone"))
 	state["phone"] = phone
 	state["stage"] = "ready"
-	state["pin_setup_at"] = time.Now().Unix()
+	updatePINSetupState(state, true)
 	state["ready_at"] = time.Now().Unix()
 	delete(state, "last_error")
 	deleteKeys(state, signupAccountStateKeys...)

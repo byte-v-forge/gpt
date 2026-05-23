@@ -1,5 +1,5 @@
 .accountsList {
-  grid-auto-rows: 96px;
+  grid-auto-rows: minmax(96px, auto);
 }
 
 .registrationSummary {

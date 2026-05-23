@@ -10,32 +10,90 @@ import (
 )
 
 const (
-	linkRetryLimit  = 2
-	linkRetrySleep  = 12 * time.Second
-	statusPollLimit = 12
+	linkRetryLimit           = 2
+	linkRetrySleep           = 12 * time.Second
+	statusPollLimit          = 12
+	qrisStatusPollLimit      = 300
+	midtransChargeRetryLimit = 3
 )
 
 func (c *charger) prepareUntilLinking(ctx context.Context, checkoutSessionID, checkoutURL string) (map[string]any, error) {
+	csID, state, err := c.prepareCheckout(ctx, checkoutSessionID, checkoutURL, 1)
+	if err != nil {
+		return nil, err
+	}
+	if stringAt(state, "checkout_supplied") == "true" {
+		return c.prepareCheckoutSessionUntilLinking(ctx, csID)
+	}
+	var lastErr error
+	for attempt := int(intAt(state, "checkout_attempt")); attempt <= 2; attempt++ {
+		if attempt > int(intAt(state, "checkout_attempt")) {
+			var refreshErr error
+			csID, state, refreshErr = c.prepareCheckout(ctx, "", "", attempt)
+			if refreshErr != nil {
+				return nil, refreshErr
+			}
+		}
+		prepared, err := c.prepareCheckoutSessionUntilLinking(ctx, csID)
+		if err == nil {
+			prepared["checkout_attempt"] = attempt
+			return prepared, nil
+		}
+		lastErr = err
+		if !isChatGPTApproveBlocked(err) {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(time.Duration(2+attempt) * time.Second):
+		}
+	}
+	return nil, lastErr
+}
+
+func (c *charger) prepareCheckout(ctx context.Context, checkoutSessionID, checkoutURL string, attempt int) (string, map[string]any, error) {
 	checkoutURL = strings.TrimSpace(checkoutURL)
 	csID := strings.TrimSpace(checkoutSessionID)
 	if csID == "" && checkoutURL != "" {
 		csID = extractCheckoutSessionID(map[string]any{"url": checkoutURL})
 	}
 	if checkoutURL != "" && csID == "" {
-		return nil, fmt.Errorf("checkout_url does not contain checkout_session_id")
+		return "", nil, fmt.Errorf("checkout_url does not contain checkout_session_id")
 	}
 	if csID != "" {
 		if !strings.HasPrefix(csID, "cs_") {
-			return nil, fmt.Errorf("invalid checkout_session_id: %s", csID)
+			return "", nil, fmt.Errorf("invalid checkout_session_id: %s", csID)
 		}
 		c.checkoutURL = firstNonEmpty(checkoutURL, "https://checkout.stripe.com/c/pay/"+csID)
-	} else {
-		var err error
-		csID, err = c.createCheckout(ctx)
-		if err != nil {
-			return nil, err
-		}
+		c.processorEntity = firstNonEmpty(extractProcessorEntityFromURL(checkoutURL), c.processorEntity, "openai_llc")
+		return csID, map[string]any{
+			"state":             "checkout",
+			"cs_id":             csID,
+			"processor_entity":  c.processorEntityOrDefault(),
+			"checkout_url":      c.checkoutURL,
+			"stripe_pk":         c.cfg.StripePublishableKey,
+			"checkout_attempt":  attempt,
+			"checkout_supplied": "true",
+		}, nil
 	}
+
+	csID, err := c.createCheckout(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	return csID, map[string]any{
+		"state":             "checkout",
+		"cs_id":             csID,
+		"processor_entity":  c.processorEntityOrDefault(),
+		"checkout_url":      c.checkoutURL,
+		"stripe_pk":         c.cfg.StripePublishableKey,
+		"checkout_attempt":  attempt,
+		"checkout_supplied": "false",
+	}, nil
+}
+
+func (c *charger) prepareCheckoutSessionUntilLinking(ctx context.Context, csID string) (map[string]any, error) {
 	pmID, err := c.stripeCreatePaymentMethod(ctx, csID)
 	if err != nil {
 		return nil, err
@@ -58,11 +116,12 @@ func (c *charger) prepareUntilLinking(ctx context.Context, checkoutSessionID, ch
 		return nil, err
 	}
 	return map[string]any{
-		"state":        "prepared",
-		"cs_id":        csID,
-		"checkout_url": c.checkoutURL,
-		"stripe_pk":    c.cfg.StripePublishableKey,
-		"snap_token":   snapToken,
+		"state":            "prepared",
+		"cs_id":            csID,
+		"processor_entity": c.processorEntityOrDefault(),
+		"checkout_url":     c.checkoutURL,
+		"stripe_pk":        c.cfg.StripePublishableKey,
+		"snap_token":       snapToken,
 	}, nil
 }
 
@@ -70,6 +129,9 @@ func (c *charger) startUntilOTP(ctx context.Context, checkoutSessionID, checkout
 	prepared, err := c.prepareUntilLinking(ctx, checkoutSessionID, checkoutURL)
 	if err != nil {
 		return nil, err
+	}
+	if c.requiresManualConfirmation() {
+		return c.startPreparedQRISToPaymentCharge(ctx, prepared)
 	}
 	return c.startPreparedLinkingUntilOTP(ctx, prepared, otpChannel)
 }
@@ -134,7 +196,11 @@ func (c *charger) midtransInitLinking(ctx context.Context, snapToken string) (st
 	lastErr := ""
 	bypassTried := false
 	for range linkRetryLimit + 1 {
-		resp, err := c.ext.request(ctx, http.MethodPost, url, requestOptions{jsonBody: body, headers: authHeaders})
+		headers, err := c.paymentAttemptHeaders(authHeaders)
+		if err != nil {
+			return "", err
+		}
+		resp, err := c.ext.request(ctx, http.MethodPost, url, requestOptions{jsonBody: body, headers: headers})
 		if err != nil {
 			return "", err
 		}
@@ -152,7 +218,11 @@ func (c *charger) midtransInitLinking(ctx context.Context, snapToken string) (st
 		}
 		if !bypassTried && linkingRateLimited(resp) {
 			bypassTried = true
-			bypassResp, err := c.ext.request(ctx, http.MethodPost, url, requestOptions{jsonBody: body, headers: baseHeaders})
+			bypassHeaders, err := c.paymentAttemptHeaders(baseHeaders)
+			if err != nil {
+				return "", err
+			}
+			bypassResp, err := c.ext.request(ctx, http.MethodPost, url, requestOptions{jsonBody: body, headers: bypassHeaders})
 			if err != nil {
 				return "", err
 			}
@@ -225,18 +295,40 @@ func midtransRedirectionURL(snapToken string) string {
 }
 
 func extractRedirectToURL(payload map[string]any) string {
-	for _, key := range []string{"next_action", "payment_intent", "setup_intent"} {
-		obj, _ := payload[key].(map[string]any)
-		if obj == nil {
-			continue
-		}
-		action := obj
-		if key != "next_action" {
-			action, _ = obj["next_action"].(map[string]any)
-		}
-		if action != nil && stringAt(action, "type") == "redirect_to_url" {
-			return stringAt(action, "redirect_to_url", "url")
-		}
+	if value := redirectToURLFromAction(objectAt(payload, "next_action")); value != "" {
+		return value
+	}
+	if value := redirectToURLFromIntent(objectAt(payload, "setup_intent")); value != "" {
+		return value
+	}
+	if value := redirectToURLFromIntent(objectAt(payload, "payment_intent")); value != "" {
+		return value
+	}
+	if value := redirectToURLFromIntent(objectAt(payload, "invoice", "payment_intent")); value != "" {
+		return value
 	}
 	return ""
+}
+
+func redirectToURLFromIntent(intent map[string]any) string {
+	return redirectToURLFromAction(objectAt(intent, "next_action"))
+}
+
+func redirectToURLFromAction(action map[string]any) string {
+	if stringAt(action, "type") != "redirect_to_url" {
+		return ""
+	}
+	return stringAt(action, "redirect_to_url", "url")
+}
+
+func objectAt(value map[string]any, path ...string) map[string]any {
+	current := value
+	for _, key := range path {
+		if current == nil {
+			return nil
+		}
+		next, _ := current[key].(map[string]any)
+		current = next
+	}
+	return current
 }

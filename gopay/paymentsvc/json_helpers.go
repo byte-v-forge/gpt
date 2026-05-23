@@ -87,6 +87,37 @@ func extractCheckoutSessionID(data map[string]any) string {
 	return ""
 }
 
+func extractProcessorEntity(data map[string]any) string {
+	for _, key := range []string{"processor_entity", "processorEntity", "merchant_entity"} {
+		if value := strings.TrimSpace(stringAt(data, key)); value != "" {
+			return value
+		}
+	}
+	for _, key := range []string{"url", "stripe_hosted_url", "checkout_url", "success_url", "cancel_url", "return_url"} {
+		if value := extractProcessorEntityFromURL(stringAt(data, key)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func extractProcessorEntityFromURL(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if parsed, err := url.Parse(value); err == nil {
+		if entity := strings.TrimSpace(parsed.Query().Get("processor_entity")); entity != "" {
+			return entity
+		}
+	}
+	matches := regexp.MustCompile(`/checkout/([^/?#]+)/cs_(?:live|test)_[A-Za-z0-9]+`).FindStringSubmatch(value)
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
+	}
+	return ""
+}
+
 func checkoutURLFromResponse(data map[string]any, csID string) string {
 	for _, key := range []string{"url", "stripe_hosted_url", "checkout_url"} {
 		if value := stringAt(data, key); value != "" {
@@ -118,10 +149,55 @@ func extractReferenceFromText(text string) string {
 	if len(match) > 1 {
 		return match[1]
 	}
+	for _, pattern := range []*regexp.Regexp{
+		regexp.MustCompile(`/qris/[A-Za-z0-9_-]+/([A-Za-z0-9-]+)/qr-code(?:[/?#]|$)`),
+		regexp.MustCompile(`/gopay/([A-Za-z0-9-]+)/qr-code(?:[/?#]|$)`),
+	} {
+		match := pattern.FindStringSubmatch(text)
+		if len(match) > 1 {
+			return match[1]
+		}
+	}
+	return ""
+}
+
+var midtransPaymentRefPattern = regexp.MustCompile(`A[0-9]{12,}[A-Za-z0-9]+ID`)
+
+func extractMidtransPaymentRefFromText(text string) string {
+	return midtransPaymentRefPattern.FindString(strings.TrimSpace(text))
+}
+
+func findMidtransPaymentRef(value any) string {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, item := range typed {
+			if found := findMidtransPaymentRef(item); found != "" {
+				return found
+			}
+		}
+	case []any:
+		for _, item := range typed {
+			if found := findMidtransPaymentRef(item); found != "" {
+				return found
+			}
+		}
+	case string:
+		return extractMidtransPaymentRefFromText(typed)
+	}
 	return ""
 }
 
 func extractMidtransChargeReference(data any) string {
+	if ref := findMidtransPaymentRef(data); ref != "" {
+		return ref
+	}
+	if obj, ok := data.(map[string]any); ok {
+		for _, key := range []string{"transaction_id", "charge_ref", "reference_id", "reference", "payment_id", "order_id"} {
+			if value := strings.TrimSpace(stringAt(obj, key)); value != "" {
+				return value
+			}
+		}
+	}
 	var walk func(any, string) string
 	walk = func(value any, path string) string {
 		switch typed := value.(type) {
@@ -164,7 +240,8 @@ func extractMidtransURL(data map[string]any, names ...string) string {
 		if !ok {
 			continue
 		}
-		if wanted[strings.ToLower(stringAt(obj, "name"))] {
+		name := strings.ToLower(stringAt(obj, "name"))
+		if wanted[name] || (strings.Contains(name, "qr") && (wanted["qr_code_url"] || wanted["qr_code"] || wanted["qrcode"])) {
 			if value := stringAt(obj, "url"); value != "" {
 				return value
 			}
@@ -175,11 +252,54 @@ func extractMidtransURL(data map[string]any, names ...string) string {
 
 func midtransChargeURLs(data map[string]any) map[string]string {
 	return map[string]string{
-		"deeplink_url":            extractMidtransURL(data, "deeplink_url", "deeplink"),
-		"qr_code_url":             extractMidtransURL(data, "qr_code_url", "qr_code", "qrcode"),
+		"deeplink_url":            firstNonEmpty(extractMidtransURL(data, "deeplink_url", "deeplink"), stringAt(data, "gopay_deeplink_url")),
+		"qr_code_url":             firstNonEmpty(extractMidtransURL(data, "qr_code_url", "qr_code", "qrcode"), stringAt(data, "qr_string"), stringAt(data, "qris_string"), stringAt(data, "qris_url"), stringAt(data, "gopay_verification_link_url")),
 		"finish_redirect_url":     extractMidtransURL(data, "finish_redirect_url"),
 		"finish_200_redirect_url": extractMidtransURL(data, "finish_200_redirect_url"),
 	}
+}
+
+func midtransChargeLooksUsable(data map[string]any) bool {
+	if extractMidtransChargeReference(data) != "" {
+		return true
+	}
+	if firstNonEmpty(stringAt(data, "qr_string"), stringAt(data, "qris_string")) != "" {
+		return true
+	}
+	urls := midtransChargeURLs(data)
+	return urls["qr_code_url"] != "" || urls["deeplink_url"] != ""
+}
+
+func redactMidtransChargeDebug(data map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, key := range []string{"transaction_id", "order_id", "payment_type", "transaction_status", "status_code", "fraud_status", "expiry_time"} {
+		if value := stringAt(data, key); value != "" {
+			out[key] = value
+		}
+	}
+	for _, key := range []string{"qr_string", "qris_string"} {
+		if stringAt(data, key) != "" {
+			out[key] = "<present>"
+		}
+	}
+	if actions, ok := data["actions"].([]any); ok {
+		items := make([]map[string]string, 0, len(actions))
+		for _, item := range actions {
+			obj, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			items = append(items, map[string]string{
+				"name":   stringAt(obj, "name"),
+				"method": stringAt(obj, "method"),
+				"url":    stringAt(obj, "url"),
+			})
+		}
+		if len(items) > 0 {
+			out["actions"] = items
+		}
+	}
+	return out
 }
 
 func decodeJWTPayload(token string) map[string]any {

@@ -2,7 +2,7 @@ import { numberValue, objectValue, stringValue } from '@/dashboard/module-kit';
 import { stepDetailData } from '@/dashboard/modules/workflow/sdk';
 import type { ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job, WorkflowProgress } from './types';
 
-export const GO_PAY_PAYMENT_CHANNELS: ConcreteGoPayPaymentChannel[] = ['sms', 'wa'];
+export const GO_PAY_PAYMENT_CHANNELS: ConcreteGoPayPaymentChannel[] = ['sms', 'app_wa', 'wa'];
 
 export function paymentChannelValue(value: string): '' | 'gopay_sms' | 'gopay_wa' {
   const normalized = String(value || '').trim().toLowerCase();
@@ -15,16 +15,31 @@ export function paymentChannelValue(value: string): '' | 'gopay_sms' | 'gopay_wa
 }
 
 export function goPayPaymentChannelLabel(value: string) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'app_wa' || normalized === 'gopay_app_wa' || normalized === 'gopay-app-wa') return 'Gopay App-WA';
   const channel = paymentChannelValue(value);
   if (channel === 'gopay_sms') return 'Gopay-SMS';
   if (channel === 'gopay_wa') return 'Gopay-WA';
   return '-';
 }
 
+export function goPayPaymentActionLabel(channel: ConcreteGoPayPaymentChannel) {
+  if (channel === 'wa') return '纯WA支付';
+  return goPayPaymentChannelLabel(channel);
+}
+
+export function goPayPaymentRequestChannel(channel: ConcreteGoPayPaymentChannel): 'sms' | 'wa' {
+  return channel === 'app_wa' ? 'wa' : channel;
+}
+
+export function isPureGoPayWAPaymentChannel(channel: ConcreteGoPayPaymentChannel) {
+  return channel === 'wa';
+}
+
 export function goPayAddBalancePayload(method: ConcreteGoPayAddBalanceMethod) {
   if (method === 'rekberinaja') return { rekberinaja: {} };
   if (method === 'envelope') return { envelope: {} };
-  return { manual_transfer: {} };
+  return { manualTransfer: {} };
 }
 
 export function addBalanceMethodValue(value: string) {
@@ -73,15 +88,43 @@ export function manualAddBalanceView(job: Job) {
   };
 }
 
+export function manualGoPayPaymentView(job: Job) {
+  const data = stepDetailData((job.steps || []).find((item) => item.step_name === 'gopay_payment'));
+  if (!data) return null;
+  const confirmation = objectValue(data.manual_payment_confirmation);
+  const complete = objectValue(data.payment_complete);
+  const required = confirmation.required === true || complete.awaiting_manual_confirmation === true;
+  if (!required) return null;
+  const qrValue = stringValue(complete.qr_string) || stringValue(data.qr_string) || stringValue(complete.qr_code_url);
+  const qrCodeUrl = stringValue(complete.qr_code_url);
+  return {
+    required,
+    confirmed: confirmation.confirmed === true,
+    charge_ref: stringValue(complete.charge_ref),
+    qr_payload: isHttpURL(qrValue) ? '' : qrValue,
+    qr_url: isHttpURL(qrCodeUrl) ? qrCodeUrl : '',
+    deeplink_url: stringValue(complete.deeplink_url)
+  };
+}
+
+export function canConfirmManualGoPayPayment(job: Job, progress: WorkflowProgress | null, payment: ReturnType<typeof manualGoPayPaymentView>) {
+  return !!payment && !payment.confirmed && job.status === 'RUNNING' && ['GOPAY_QRIS_PAYMENT_ACTIVATE', 'GOPAY_PAYMENT'].includes(job.action || '') &&
+    (progress?.step_name === 'gopay_payment' || job.last_step === 'gopay_payment');
+}
+
 export function canConfirmManualAddBalance(job: Job, progress: WorkflowProgress | null, balance: ReturnType<typeof manualAddBalanceView>) {
-  return !!balance && job.status === 'RUNNING' && job.action === 'GOPAY_PAYMENT' && balance.method === 'manual_transfer' &&
+  return !!balance && job.status === 'RUNNING' && ['GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE'].includes(job.action || '') && balance.method === 'manual_transfer' &&
     (progress?.step_name === 'gopay_app_add_balance_confirm' || progress?.step_name === 'gopay_app_add_balance');
 }
 
 export function canSelectGoPayAddBalance(job: Job, progress: WorkflowProgress | null, balance: ReturnType<typeof manualAddBalanceView>) {
-  return job.status === 'RUNNING' && job.action === 'GOPAY_PAYMENT' &&
+  return job.status === 'RUNNING' && ['GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE'].includes(job.action || '') &&
     (progress?.step_name === 'gopay_app_add_balance' || job.last_step === 'gopay_app_add_balance') &&
     (!balance?.method || balance.status === 'awaiting_selection');
+}
+
+function isHttpURL(value: string) {
+  return /^https?:\/\//i.test(String(value || '').trim());
 }
 
 function isManualTransferActivation(value: string) {

@@ -35,6 +35,8 @@ const actionLabels: DisplayLabelMap = {
   AUTOPAY: '自动支付',
   GOPAY_APP: 'GoPay App',
   GOPAY_PAYMENT: 'GoPay 支付',
+  GOPAY_QRIS_PAYMENT_ACTIVATE: 'QRIS激活',
+  GOPAY_WA_PAYMENT: '纯 GoPay-WA 支付',
   GOPAY_PAYMENT_REBIND: 'GoPay 支付换绑',
   REGISTER_AND_ACTIVATE: '注册并激活',
   PROBE_ACCOUNT: '探测账号'

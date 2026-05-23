@@ -30,10 +30,10 @@ func (s *Server) GoPayAppStatusActivity(ctx context.Context, input GoPayAppStepI
 		output.ActivationId = currentGoPaySignupSMSActivationID(output.GetStateJson())
 		output.Ready = goPayStatusTokenReady(statusResp)
 		output.AccountTokenReady = output.GetReady()
+		output.SignupPinComplete = statusResp.GetPinSetup()
 		switch statusResp.GetStage() {
 		case "ready":
 			output.SignupComplete = true
-			output.SignupPinComplete = true
 		case "signup_pin_required", "signup_pin_otp_pending":
 			output.SignupComplete = true
 		}
@@ -41,6 +41,10 @@ func (s *Server) GoPayAppStatusActivity(ctx context.Context, input GoPayAppStepI
 		data["account_token_ready"] = output.GetAccountTokenReady()
 		data["signup_complete"] = output.GetSignupComplete()
 		data["signup_pin_complete"] = output.GetSignupPinComplete()
+		data["pin_setup"] = statusResp.GetPinSetup()
+		if statusResp.GetPinSetupAtUnix() != 0 {
+			data["pin_setup_at_unix"] = statusResp.GetPinSetupAtUnix()
+		}
 		if output.GetActivationId() != "" {
 			data["sms_activation_id"] = output.GetActivationId()
 		}

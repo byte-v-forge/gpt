@@ -50,6 +50,9 @@ func (s *Server) changePhoneStart(ctx context.Context, state stateMap, pin, newP
 		if phoneRegisteredResponse(resp) {
 			return map[string]any{"success": false, "error": "PHONE_REGISTERED"}
 		}
+		if otpTokenFrom(resp.Data()) != "" && resp.StatusCode == http.StatusOK {
+			return storeChangePhoneOTPState(state, phone, resp.Data())
+		}
 		if resp.StatusCode != 461 {
 			return map[string]any{"success": false, "error": apiError("pin challenge failed", resp)}
 		}
@@ -64,7 +67,11 @@ func (s *Server) changePhoneStart(ctx context.Context, state stateMap, pin, newP
 	if resp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("pin submit failed", resp)}
 	}
-	otpToken := otpTokenFrom(resp.Data())
+	return storeChangePhoneOTPState(state, phone, resp.Data())
+}
+
+func storeChangePhoneOTPState(state stateMap, phone string, data any) map[string]any {
+	otpToken := otpTokenFrom(data)
 	if otpToken == "" {
 		return map[string]any{"success": false, "error": "otp_token missing"}
 	}
@@ -72,7 +79,7 @@ func (s *Server) changePhoneStart(ctx context.Context, state stateMap, pin, newP
 	state["_change_phone"] = phone
 	state["_change_otp_token"] = otpToken
 	state["_change_otp_sent_at"] = now
-	state["_change_otp_expires_at"] = now + firstNonZero(intForAnyKey(resp.Data(), "expires_in", "otp_expires_in"), 300)
+	state["_change_otp_expires_at"] = now + firstNonZero(intForAnyKey(data, "expires_in", "otp_expires_in"), 300)
 	state["stage"] = "change_phone_otp_pending"
 	deleteKeys(state, "_checked_change_phone", "_checked_change_phone_status", "last_error")
 	return map[string]any{"success": true, "new_phone": phone, "otp_sent": true}

@@ -57,7 +57,7 @@ func paymentLinkFromGoPayResponse(resp *pb.GoPayResponse) (string, error) {
 	if resp == nil {
 		return "", fmt.Errorf("payment response is empty")
 	}
-	for _, value := range []string{resp.GetDeeplinkUrl(), resp.GetChargeRef()} {
+	for _, value := range []string{resp.GetDeeplinkUrl(), resp.GetQrCodeUrl(), resp.GetChargeRef()} {
 		if link := strings.TrimSpace(value); link != "" {
 			return link, nil
 		}

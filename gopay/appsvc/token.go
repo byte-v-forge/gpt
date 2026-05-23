@@ -136,16 +136,75 @@ func (s *Server) verifyAccessToken(ctx context.Context, state stateMap) map[stri
 				state["phone"] = normalizePhone(phone, "")
 			}
 		}
-		pinSetup := boolForAnyKey(data, "is_pin_setup", "isPinSetup")
-		if pinSetup {
-			state["pin_setup_at"] = time.Now().Unix()
+		pinSetup, pinSetupKnown := pinSetupFlagFromProfileData(data)
+		if pinSetupKnown {
+			updatePINSetupState(state, pinSetup)
 		}
 		state["stage"] = "ready"
 		state["ready_at"] = time.Now().Unix()
 		delete(state, "last_error")
-		return map[string]any{"success": true, "status": 200, "phone": stateString(state, "phone"), "pin_setup": pinSetup}
+		return map[string]any{"success": true, "status": 200, "phone": stateString(state, "phone"), "pin_setup": pinSetupKnown && pinSetup}
 	}
 	return map[string]any{"success": false, "status": resp.StatusCode, "error": apiError("profile failed", resp)}
+}
+
+func (s *Server) refreshPINSetupFromProfile(ctx context.Context, client anyClient, state stateMap) (bool, bool, string) {
+	resp, err := client.Get(ctx, customerBaseURL+"/v1/users/profile")
+	if err != nil {
+		return false, false, err.Error()
+	}
+	if resp.StatusCode != http.StatusOK {
+		return false, false, apiError("pin setup check failed", resp)
+	}
+	pinSetup, ok := pinSetupFlagFromProfileData(resp.Data())
+	if !ok {
+		return false, false, "is_pin_setup missing"
+	}
+	updatePINSetupState(state, pinSetup)
+	return pinSetup, true, ""
+}
+
+func updatePINSetupState(state stateMap, pinSetup bool) {
+	now := time.Now().Unix()
+	state["pin_setup"] = pinSetup
+	state["pin_setup_checked_at"] = now
+	if pinSetup {
+		state["pin_setup_at"] = now
+		return
+	}
+	delete(state, "pin_setup_at")
+}
+
+func pinSetupFlagFromProfileData(value any) (bool, bool) {
+	wanted := map[string]struct{}{
+		normalizeJSONKey("is_pin_setup"): {},
+		normalizeJSONKey("isPinSetup"):   {},
+	}
+	var walk func(any) (bool, bool)
+	walk = func(current any) (bool, bool) {
+		if obj, ok := jsonObject(current); ok {
+			for key, item := range obj {
+				if _, ok := wanted[normalizeJSONKey(key)]; ok {
+					return anyBool(item), true
+				}
+			}
+			for _, item := range obj {
+				if value, ok := walk(item); ok {
+					return value, true
+				}
+			}
+			return false, false
+		}
+		if items, ok := current.([]any); ok {
+			for _, item := range items {
+				if value, ok := walk(item); ok {
+					return value, true
+				}
+			}
+		}
+		return false, false
+	}
+	return walk(value)
 }
 
 func (s *Server) checkTokenValid(ctx context.Context, state stateMap) map[string]any {

@@ -10,9 +10,11 @@ option go_package = "./;pb";
 service GoPayAppWorkflowService {
   rpc RunGoPayApp(GoPayAppRequest) returns (GoPayAppResponse);
   rpc RunGoPayPayment(GoPayPaymentRequest) returns (GoPayPaymentResponse);
+  rpc RunGoPayQRISPaymentActivate(GoPayQRISPaymentActivateRequest) returns (GoPayPaymentResponse);
   rpc RunGoPayWAPayment(GoPayWAPaymentRequest) returns (GoPayPaymentResponse);
   rpc RetryGoPayPaymentRebind(GoPayPaymentRebindRequest) returns (GoPayPaymentResponse);
   rpc ConfirmManualAddBalance(ConfirmManualAddBalanceRequest) returns (ConfirmManualAddBalanceResponse);
+  rpc ConfirmManualGoPayPayment(ConfirmManualGoPayPaymentRequest) returns (ConfirmManualGoPayPaymentResponse);
   rpc GoPayUserStatus(GoPayUserStatusRequest) returns (GoPayUserStatusResponse);
   rpc GoPayUserClearState(GoPayUserClearStateRequest) returns (GoPayUserClearStateResponse);
   rpc GoPayUserSetWAPhone(GoPayUserSetWAPhoneRequest) returns (GoPayUserWAPhoneResponse);
@@ -91,6 +93,13 @@ message GoPayWAPaymentRequest {
   string country_code = 7; // 电话区号，例如 "+62"；为空时 provider 使用 GoPay 默认国家区号
 }
 
+message GoPayQRISPaymentActivateRequest {
+  string account_id = 1;
+  string source_job_id = 2;
+  reserved 3 to 8;
+  reserved "add_balance", "add_balance_confirm_timeout_seconds", "user_id", "gopay_phone", "pin", "country_code";
+}
+
 message GoPayPaymentResponse {
   string job_id = 1;
   bool started = 2;
@@ -162,12 +171,26 @@ message ManualAddBalanceSignal {
   GoPayAddBalance add_balance = 2;
 }
 
+message ManualGoPayPaymentSignal {
+  string kind = 1;
+}
+
 message ConfirmManualAddBalanceRequest {
   string job_id = 1;
   GoPayAddBalance add_balance = 2;
 }
 
 message ConfirmManualAddBalanceResponse {
+  bool success = 1;
+  string job_id = 2;
+  string error_message = 3;
+}
+
+message ConfirmManualGoPayPaymentRequest {
+  string job_id = 1;
+}
+
+message ConfirmManualGoPayPaymentResponse {
   bool success = 1;
   string job_id = 2;
   string error_message = 3;
@@ -552,6 +575,41 @@ message GoPayAppAcquireSignupPhoneOutput {
   int32 max_failures = 4;
   int32 otp_timeout_seconds = 5;
   google.protobuf.Struct data = 6;
+  string state_json = 7;
+}
+
+message GoPayAppGenerateDeviceProxyInput {
+  string job_id = 1;
+}
+
+message GoPayAppGenerateDeviceProxyOutput {
+  string state_json = 1;
+  int32 proxy_slot = 2;
+  int32 dynamic_egress_size = 3;
+  string proxy_hash = 4;
+  string device_fingerprint = 5;
+  google.protobuf.Struct data = 6;
+}
+
+message GoPayAppCheckSignupPhoneInput {
+  string job_id = 1;
+  string activation_id = 2;
+  string phone = 3;
+  string country_code = 4;
+  string state_json = 5;
+}
+
+message GoPayAppCheckSignupPhoneOutput {
+  string activation_id = 1;
+  string phone = 2;
+  string status = 3;
+  bool available = 4;
+  string state_json = 5;
+  int32 proxy_slot = 6;
+  int32 dynamic_egress_size = 7;
+  string proxy_hash = 8;
+  string device_fingerprint = 9;
+  google.protobuf.Struct data = 10;
 }
 
 message GoPayResolveWAPhoneInput {

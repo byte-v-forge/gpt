@@ -24,10 +24,10 @@ import {
 import { AccountChannelTag, AccountSignalBadge, PaymentChannelIcon } from './account-badges';
 import { AccountRunningWorkflowActions } from './account-otp-actions';
 import { OpenAIIcon } from './brand-icons';
-import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentChannelLabel } from './gopay-utils';
-import type { Account, ConcreteGoPayPaymentChannel, Job } from './types';
+import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
+import type { Account, ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onRegister, onLogin, onGoPayPayment, onProbeAccount, onRegisterActivate, onRefreshAccessToken, onDelete, onCopy, onSubmitOTP, onResendOTP }: {
+export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onRegister, onLogin, onGoPayPayment, onProbeAccount, onRegisterActivate, onRefreshAccessToken, onDelete, onCopy, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
@@ -48,6 +48,9 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
   onCopy: (label: string, value: string) => void;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
+  onConfirmManualPayment: (jobId: string) => Promise<void>;
+  onSelectAddBalance: (jobId: string, method: ConcreteGoPayAddBalanceMethod) => Promise<void>;
+  onConfirmAddBalance: (jobId: string) => Promise<void>;
 }) {
   return (
     <RecordList className="accountsList" emptyText="暂无账号。可以先创建账号，或切换为全部状态查看。">
@@ -83,6 +86,9 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
               onDelete={onDelete}
               onSubmitOTP={onSubmitOTP}
               onResendOTP={onResendOTP}
+              onConfirmManualPayment={onConfirmManualPayment}
+              onSelectAddBalance={onSelectAddBalance}
+              onConfirmAddBalance={onConfirmAddBalance}
             />
           </RecordCard>
         );
@@ -120,7 +126,7 @@ function AccountCardIdentity({ account, showSecrets, onCopy }: {
   );
 }
 
-function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onRegister, onLogin, onGoPayPayment, onProbeAccount, onRegisterActivate, onRefreshAccessToken, onDelete, onSubmitOTP, onResendOTP }: {
+function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onRegister, onLogin, onGoPayPayment, onProbeAccount, onRegisterActivate, onRefreshAccessToken, onDelete, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   account: Account;
   accountBusy: boolean;
   currentWorkflow?: Job;
@@ -136,11 +142,14 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
   onDelete: (a: Account) => void;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
+  onConfirmManualPayment: (jobId: string) => Promise<void>;
+  onSelectAddBalance: (jobId: string, method: ConcreteGoPayAddBalanceMethod) => Promise<void>;
+  onConfirmAddBalance: (jobId: string) => Promise<void>;
 }) {
   if (accountBusy && currentWorkflow && !isUserAlreadyExistsAccount(account)) {
     return (
       <RecordActions className="rowActions">
-        <AccountRunningWorkflowActions job={currentWorkflow} busy={busy} onOpenWorkflow={onOpenWorkflow} onSubmitOTP={onSubmitOTP} onResendOTP={onResendOTP} />
+        <AccountRunningWorkflowActions job={currentWorkflow} busy={busy} onOpenWorkflow={onOpenWorkflow} onSubmitOTP={onSubmitOTP} onResendOTP={onResendOTP} onConfirmManualPayment={onConfirmManualPayment} onSelectAddBalance={onSelectAddBalance} onConfirmAddBalance={onConfirmAddBalance} />
       </RecordActions>
     );
   }
@@ -154,7 +163,7 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
   actions.push({ label: '删除账号', icon: <Trash2 size={14} />, onClick: () => onDelete(account), disabled: busy, kind: 'danger' });
 
   const paymentActions: RowActionDescriptor[] = canGoPayPayment(account) ? GO_PAY_PAYMENT_CHANNELS.map((channel) => ({
-    label: goPayPaymentChannelLabel(channel),
+    label: goPayPaymentActionLabel(channel),
     icon: <PaymentChannelIcon channel={channel} />,
     onClick: () => onGoPayPayment(account, channel),
     disabled: busy,

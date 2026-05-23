@@ -36,6 +36,26 @@ message PrepareGoPayResponse {
   string snap_token = 4;
   string checkout_url = 5;
   string checkout_session_id = 6;
+  bool retryable_fresh_checkout = 7;
+  int32 checkout_attempt = 8;
+  string stage = 9;
+}
+
+message PrepareGoPayCheckoutRequest {
+  ChatGPTCredential credential = 1;
+  string tokenization = 2;
+  string checkout_url = 3;
+  string checkout_session_id = 4;
+  string gopay_phone = 5;
+  string gopay_country_code = 6;
+}
+
+message RefreshPrepareGoPayCheckoutRequest {
+  string flow_id = 1;
+}
+
+message PrepareGoPayLinkRequest {
+  string flow_id = 1;
 }
 
 message StartPreparedGoPayRequest {
@@ -139,9 +159,13 @@ message GoPayResponse {
   string qr_code_url = 7;
   string finish_redirect_url = 8;
   string finish_200_redirect_url = 9;
+  string qr_string = 10;
 }
 
 service PaymentService {
+  rpc PrepareGoPayCheckout(PrepareGoPayCheckoutRequest) returns (PrepareGoPayResponse);
+  rpc RefreshPrepareGoPayCheckout(RefreshPrepareGoPayCheckoutRequest) returns (PrepareGoPayResponse);
+  rpc PrepareGoPayLink(PrepareGoPayLinkRequest) returns (PrepareGoPayResponse);
   rpc PrepareGoPay(PrepareGoPayRequest) returns (PrepareGoPayResponse);
   rpc StartPreparedGoPay(StartPreparedGoPayRequest) returns (StartGoPayResponse);
   rpc StartGoPay(StartGoPayRequest) returns (StartGoPayResponse);

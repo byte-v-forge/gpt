@@ -3,16 +3,17 @@ package contracts
 import "strings"
 
 const (
-	ActionRegister            = "REGISTER"
-	ActionActivate            = "ACTIVATE"
-	ActionAutopay             = "AUTOPAY"
-	ActionGoPayApp            = "GOPAY_APP"
-	ActionGoPayPayment        = "GOPAY_PAYMENT"
-	ActionGoPayWAPayment      = "GOPAY_WA_PAYMENT"
-	ActionGoPayPaymentRebind  = "GOPAY_PAYMENT_REBIND"
-	ActionProbeAccount        = "PROBE_ACCOUNT"
-	ActionLoginSession        = "LOGIN_SESSION"
-	ActionRegisterAndActivate = "REGISTER_AND_ACTIVATE"
+	ActionRegister                 = "REGISTER"
+	ActionActivate                 = "ACTIVATE"
+	ActionAutopay                  = "AUTOPAY"
+	ActionGoPayApp                 = "GOPAY_APP"
+	ActionGoPayPayment             = "GOPAY_PAYMENT"
+	ActionGoPayQRISPaymentActivate = "GOPAY_QRIS_PAYMENT_ACTIVATE"
+	ActionGoPayWAPayment           = "GOPAY_WA_PAYMENT"
+	ActionGoPayPaymentRebind       = "GOPAY_PAYMENT_REBIND"
+	ActionProbeAccount             = "PROBE_ACCOUNT"
+	ActionLoginSession             = "LOGIN_SESSION"
+	ActionRegisterAndActivate      = "REGISTER_AND_ACTIVATE"
 )
 
 const (
@@ -32,9 +33,13 @@ const (
 	FetchManualOTPActivityName                   = "FetchManualOTPActivity"
 	EnsureLogonActivityName                      = "EnsureLogonActivity"
 	GoPayPaymentPrepareActivityName              = "GoPayPaymentPrepareActivity"
+	GoPayPaymentPrepareCheckoutActivityName      = "GoPayPaymentPrepareCheckoutActivity"
+	GoPayPaymentPrepareRefreshActivityName       = "GoPayPaymentPrepareRefreshActivity"
+	GoPayPaymentPrepareLinkActivityName          = "GoPayPaymentPrepareLinkActivity"
 	GoPayPaymentStartActivityName                = "GoPayPaymentStartActivity"
 	GoPayPaymentOTPResendActivityName            = "GoPayPaymentOTPResendActivity"
 	GoPayPaymentCompleteActivityName             = "GoPayPaymentCompleteActivity"
+	GoPayPaymentManualConfirmActivityName        = "GoPayPaymentManualConfirmActivity"
 	GoPayPaymentCancelActivityName               = "GoPayPaymentCancelActivity"
 	GoPayResolveWAPhoneActivityName              = "GoPayResolveWAPhoneActivity"
 	GoPayAppLoadStateActivityName                = "GoPayAppLoadStateActivity"
@@ -49,8 +54,11 @@ const (
 	GoPayAppCreatePinRetryActivityName           = "GoPayAppCreatePinRetryActivity"
 	GoPayAppCreatePinCompleteActivityName        = "GoPayAppCreatePinCompleteActivity"
 	GoPayAppAcquireSignupPhoneActivityName       = "GoPayAppAcquireSignupPhoneActivity"
+	GoPayAppGenerateDeviceProxyActivityName      = "GoPayAppGenerateDeviceProxyActivity"
+	GoPayAppCheckSignupPhoneActivityName         = "GoPayAppCheckSignupPhoneActivity"
 	GoPayAppDiscardSignupPhoneActivityName       = "GoPayAppDiscardSignupPhoneActivity"
 	GoPayAppAddBalanceActivityName               = "GoPayAppAddBalanceActivity"
+	GoPayAppBalanceCheckActivityName             = "GoPayAppBalanceCheckActivity"
 	GoPayAppChangePhoneGetNumberActivityName     = "GoPayAppChangePhoneGetNumberActivity"
 	GoPayAppChangePhoneStartActivityName         = "GoPayAppChangePhoneStartActivity"
 	GoPayAppChangePhoneRetryActivityName         = "GoPayAppChangePhoneRetryActivity"
@@ -71,6 +79,7 @@ const (
 	OTPResendSignalName                = "otp_resend_requested"
 	ManualAddBalanceSignalName         = "manual_add_balance_confirmed"
 	GoPayAddBalanceSelectionSignalName = "gopay_add_balance_selected"
+	ManualGoPayPaymentSignalName       = "manual_gopay_payment_confirmed"
 	WorkflowProgressQueryName          = "progress"
 )
 
@@ -90,6 +99,8 @@ func WorkflowID(action string, jobID string) (string, bool) {
 		return "gopay-app-" + jobID, true
 	case ActionGoPayPayment:
 		return "gopay-payment-" + jobID, true
+	case ActionGoPayQRISPaymentActivate:
+		return "gopay-qris-payment-activate-" + jobID, true
 	case ActionGoPayWAPayment:
 		return "gopay-wa-payment-" + jobID, true
 	case ActionGoPayPaymentRebind:
@@ -107,7 +118,7 @@ func WorkflowID(action string, jobID string) (string, bool) {
 
 func ManualOTPWorkflowID(action string, jobID string) (string, bool) {
 	switch strings.TrimSpace(action) {
-	case ActionRegister, ActionActivate, ActionAutopay, ActionGoPayApp, ActionGoPayPayment, ActionGoPayWAPayment, ActionGoPayPaymentRebind, ActionRegisterAndActivate, ActionLoginSession:
+	case ActionRegister, ActionActivate, ActionAutopay, ActionGoPayApp, ActionGoPayPayment, ActionGoPayQRISPaymentActivate, ActionGoPayWAPayment, ActionGoPayPaymentRebind, ActionRegisterAndActivate, ActionLoginSession:
 		return WorkflowID(action, jobID)
 	default:
 		return "", false

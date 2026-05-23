@@ -82,8 +82,19 @@ func (s *Server) AuthComplete(ctx context.Context, req *pb.AuthCompleteRequest) 
 		if err := s.completeLogin(ctx, state, req.GetOtp()); err != nil {
 			return &pb.AuthCompleteResponse{Success: false, ErrorMessage: err.Error(), Mode: "login", Stage: firstNonEmpty(stateString(state, "stage"), "idle"), StateJson: stateJSON(state)}, nil
 		}
-		ready := stateString(state, "stage") == "ready"
-		return &pb.AuthCompleteResponse{Success: true, Mode: "login", Stage: firstNonEmpty(stateString(state, "stage"), "idle"), Phone: stateString(state, "phone"), Ready: ready, StateJson: stateJSON(state)}, nil
+		stage := firstNonEmpty(stateString(state, "stage"), "idle")
+		ready := stage == "ready"
+		return &pb.AuthCompleteResponse{
+			Success:            true,
+			Mode:               "login",
+			Stage:              stage,
+			Phone:              firstNonEmpty(stateString(state, "phone"), stateString(state, "_login_phone")),
+			Ready:              ready,
+			OtpSent:            stage == "login_otp_pending",
+			VerificationId:     stateString(state, "_login_verification_id"),
+			VerificationMethod: stateString(state, "_login_verification_method"),
+			StateJson:          stateJSON(state),
+		}, nil
 	case "signup_otp_pending":
 		result := s.completeSignup(ctx, state, req.GetOtp())
 		ready := anyBool(result["success"]) && stateString(state, "stage") == "ready"

@@ -6,6 +6,7 @@ import {
 } from '@/dashboard/module-kit';
 import type {
   Account,
+  ConcreteGoPayAddBalanceMethod,
   ConcreteGoPayPaymentChannel,
   GoPayDashboardStateResponse,
   Job,
@@ -42,6 +43,9 @@ export type GptAccountsViewProps = {
   onDeleteAccount: (account: Account) => Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
+  onConfirmManualPayment: (jobId: string) => Promise<void>;
+  onSelectAddBalance: (jobId: string, method: ConcreteGoPayAddBalanceMethod) => Promise<void>;
+  onConfirmAddBalance: (jobId: string) => Promise<void>;
   onCopy: (label: string, value: string) => void;
 };
 
@@ -78,6 +82,9 @@ export function GptAccountsView(props: GptAccountsViewProps) {
           onDelete={props.onDeleteAccount}
           onSubmitOTP={props.onSubmitOTP}
           onResendOTP={props.onResendOTP}
+          onConfirmManualPayment={props.onConfirmManualPayment}
+          onSelectAddBalance={props.onSelectAddBalance}
+          onConfirmAddBalance={props.onConfirmAddBalance}
           onCopy={props.onCopy}
         />
       </div>

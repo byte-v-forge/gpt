@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"os"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
 const (
@@ -19,9 +21,31 @@ const (
 	defaultGojekCountry    = "ID"
 	defaultAuthSDKVersion  = "1.0.0"
 	defaultCVSDKVersion    = "1.0.0"
+	defaultSupportSDK      = "0.44.0"
 	defaultAcceptLanguage  = "en-ID"
 	defaultTimezone        = "Asia/Jakarta"
 	defaultUserLocale      = "en_ID"
+	defaultAndroidVersion  = "7.0"
+	defaultXE2             = "ED9A2B38749FBDE9ACA61D6A685B7"
+	defaultPhoneMake       = "HUAWEI"
+	defaultPhoneModel      = "HUAWEI, TRT-AL00A"
+	defaultUniqueID        = "685b86605a047a3e"
+	defaultD1              = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
+	defaultAppsFlyerID     = "1779516675040-8955649077185556133"
+	defaultWidevineID      = "T1B0eHZMQmFWV0h2UlBRSllIeVdlbFNtS1BqcXFiZwA="
+	defaultXM1ConnectionID = "55093"
+	defaultXM1Screen       = "720x1208"
+	defaultXM1WiFiMAC      = "6c:b1:58:31:29:5b"
+	defaultXM1WiFiSSID     = "Bug"
+	defaultXM1Hardware     = "msm8937|1401|8"
+	defaultM1Signature     = "0000000000000000"
+	defaultM1DeviceUUID    = "00000000-0000-0000-0000-000000000000"
+	defaultFirebaseID      = "00000000000000000000000000000000"
+	defaultAdvertisingID   = "00000000-0000-0000-0000-000000000000"
+	defaultAppSetID        = "00000000-0000-0000-0000-000000000000"
+	defaultInstallReferrer = "utm_source=google-play&utm_medium=organic"
+	defaultInstaller       = "com.android.vending"
+	defaultGMSVersion      = "252014000"
 	defaultLocation        = "-6.2000000,106.8000000"
 	defaultLocationAcc     = "0.010999999552965164"
 	defaultPlatform        = "Android"
@@ -29,12 +53,33 @@ const (
 	defaultApplicationType = "GOPAY"
 )
 
+type hardwareProfile struct {
+	AndroidVersion string
+	PhoneMake      string
+	PhoneModel     string
+	Screen         string
+}
+
+var hardwareProfiles = []hardwareProfile{
+	{AndroidVersion: defaultAndroidVersion, PhoneMake: defaultPhoneMake, PhoneModel: defaultPhoneModel, Screen: defaultXM1Screen},
+	{AndroidVersion: "12", PhoneMake: "samsung", PhoneModel: "samsung,SM-A525F", Screen: "1080x2174"},
+	{AndroidVersion: "13", PhoneMake: "samsung", PhoneModel: "samsung,SM-A536E", Screen: "1080x2176"},
+	{AndroidVersion: "13", PhoneMake: "samsung", PhoneModel: "samsung,SM-M336B", Screen: "1080x2193"},
+	{AndroidVersion: "16", PhoneMake: "Xiaomi", PhoneModel: "Redmi,23117RK66C", Screen: "1080x2400"},
+	{AndroidVersion: "13", PhoneMake: "Xiaomi", PhoneModel: "Redmi,2201117TY", Screen: "1080x2177"},
+	{AndroidVersion: "12", PhoneMake: "Xiaomi", PhoneModel: "Redmi,M2101K7BNY", Screen: "1080x2150"},
+	{AndroidVersion: "13", PhoneMake: "OPPO", PhoneModel: "OPPO,CPH2385", Screen: "1080x2172"},
+	{AndroidVersion: "12", PhoneMake: "vivo", PhoneModel: "vivo,V2111", Screen: "1080x2179"},
+}
+
 type DeviceConfig struct {
 	StaticIdentity   bool
 	AppVersion       string
 	AppID            string
 	AppBuild         string
 	AndroidVersion   string
+	PhoneMake        string
+	PhoneModel       string
 	UniqueID         string
 	SessionID        string
 	TransactionID    string
@@ -47,39 +92,67 @@ type DeviceConfig struct {
 	Screen           string
 	WiFiMAC          string
 	WiFiSSID         string
+	M1ConnectionID   string
+	M1Hardware       string
 	M1Signature      string
+	M1SignatureTime  string
+	M1DeviceUUID     string
+	FirebaseID       string
+	AdvertisingID    string
+	AppSetID         string
+	InstallReferrer  string
+	InstallerPackage string
+	GMSVersion       string
 	UserUUID         string
 	DeviceToken      string
+	IMEI             string
+	IPAddress        string
 	Location         string
 	LocationAccuracy string
 	GojekCountryCode string
+	TLSProfileName   string
 }
 
 func DeviceConfigFromEnv() DeviceConfig {
 	return DeviceConfig{
-		StaticIdentity:   envBool("GOPAY_STATIC_DEVICE_IDENTITY", false),
-		AppVersion:       os.Getenv("GOPAY_APP_VERSION"),
-		AppID:            os.Getenv("GOPAY_APP_ID"),
-		AppBuild:         os.Getenv("GOPAY_APP_BUILD"),
-		AndroidVersion:   os.Getenv("GOPAY_ANDROID_VERSION"),
-		UniqueID:         os.Getenv("GOPAY_UNIQUE_ID"),
-		SessionID:        os.Getenv("GOPAY_SESSION_ID"),
-		TransactionID:    os.Getenv("GOPAY_TRANSACTION_ID"),
-		UserAgent:        os.Getenv("GOPAY_USER_AGENT"),
-		D1:               os.Getenv("GOPAY_D1"),
-		XE2:              os.Getenv("GOPAY_X_E2"),
-		AdjTS:            os.Getenv("GOPAY_ADJTS"),
-		AppsFlyerID:      os.Getenv("GOPAY_APPSFLYER_ID"),
-		WidevineID:       os.Getenv("GOPAY_WIDEVINE_ID"),
-		Screen:           os.Getenv("GOPAY_SCREEN"),
-		WiFiMAC:          os.Getenv("GOPAY_WIFI_MAC"),
-		WiFiSSID:         os.Getenv("GOPAY_WIFI_SSID"),
-		M1Signature:      os.Getenv("GOPAY_M1_SIGNATURE"),
-		UserUUID:         os.Getenv("GOPAY_USER_UUID"),
-		DeviceToken:      os.Getenv("GOPAY_DEVICE_TOKEN"),
-		Location:         os.Getenv("GOPAY_LOCATION"),
-		LocationAccuracy: os.Getenv("GOPAY_LOCATION_ACCURACY"),
-		GojekCountryCode: os.Getenv("GOPAY_GOJEK_COUNTRY_CODE"),
+		StaticIdentity:   envBool("GOPAY_STATIC_DEVICE_IDENTITY"),
+		AppVersion:       getenv("GOPAY_APP_VERSION"),
+		AppID:            getenv("GOPAY_APP_ID"),
+		AppBuild:         getenv("GOPAY_APP_BUILD"),
+		AndroidVersion:   getenv("GOPAY_ANDROID_VERSION"),
+		PhoneMake:        getenv("GOPAY_PHONE_MAKE"),
+		PhoneModel:       getenv("GOPAY_PHONE_MODEL"),
+		UniqueID:         getenv("GOPAY_UNIQUE_ID"),
+		SessionID:        getenv("GOPAY_SESSION_ID"),
+		TransactionID:    getenv("GOPAY_TRANSACTION_ID"),
+		UserAgent:        getenv("GOPAY_USER_AGENT"),
+		D1:               getenv("GOPAY_D1"),
+		XE2:              getenv("GOPAY_X_E2"),
+		AdjTS:            getenv("GOPAY_ADJ_TS"),
+		AppsFlyerID:      getenv("GOPAY_APPSFLYER_ID"),
+		WidevineID:       getenv("GOPAY_WIDEVINE_ID"),
+		Screen:           getenv("GOPAY_SCREEN"),
+		WiFiMAC:          getenv("GOPAY_WIFI_MAC"),
+		WiFiSSID:         getenv("GOPAY_WIFI_SSID"),
+		M1ConnectionID:   getenv("GOPAY_M1_CONNECTION_ID"),
+		M1Hardware:       firstNonEmpty(getenv("GOPAY_M1_HARDWARE"), getenv("GOPAY_M1_DEVICE_HARDWARE")),
+		M1Signature:      getenv("GOPAY_M1_SIGNATURE"),
+		M1SignatureTime:  getenv("GOPAY_M1_SIGNATURE_TIME"),
+		M1DeviceUUID:     getenv("GOPAY_M1_DEVICE_UUID"),
+		FirebaseID:       firstNonEmpty(getenv("GOPAY_FIREBASE_APP_INSTANCE_ID"), getenv("GOPAY_FIREBASE_ID")),
+		AdvertisingID:    firstNonEmpty(getenv("GOPAY_ADVERTISING_ID"), getenv("GOPAY_AD_ID")),
+		AppSetID:         getenv("GOPAY_APP_SET_ID"),
+		InstallReferrer:  getenv("GOPAY_INSTALL_REFERRER"),
+		InstallerPackage: getenv("GOPAY_INSTALLER_PACKAGE"),
+		GMSVersion:       firstNonEmpty(getenv("GOPAY_GMS_VERSION"), getenv("GOPAY_PLAY_SERVICES_VERSION")),
+		UserUUID:         getenv("GOPAY_USER_UUID"),
+		DeviceToken:      getenv("GOPAY_DEVICE_TOKEN"),
+		IMEI:             getenv("GOPAY_IMEI"),
+		IPAddress:        firstNonEmpty(getenv("GOPAY_IP_ADDRESS"), getenv("GOPAY_LOCAL_IP_ADDRESS")),
+		Location:         getenv("GOPAY_LOCATION"),
+		LocationAccuracy: getenv("GOPAY_LOCATION_ACCURACY"),
+		GojekCountryCode: getenv("GOPAY_COUNTRY_CODE"),
+		TLSProfileName:   getenv("GOPAY_TLS_PROFILE"),
 	}
 }
 
@@ -105,113 +178,156 @@ type DeviceFingerprint struct {
 	WiFiMAC          string
 	WiFiSSID         string
 	M1ConnectionID   string
+	M1Hardware       string
 	M1Signature      string
+	M1SignatureTime  string
 	M1DeviceUUID     string
+	FirebaseID       string
+	AdvertisingID    string
+	AppSetID         string
+	InstallReferrer  string
+	InstallerPackage string
+	GMSVersion       string
 	UserUUID         string
 	DeviceToken      string
+	IMEI             string
+	IPAddress        string
 	Location         string
 	LocationAccuracy string
 	GojekCountryCode string
+	TLSProfileName   string
 }
 
 func NewDeviceFingerprint(cfg DeviceConfig) (DeviceFingerprint, error) {
-	make := randomBrandWord()
-	model := randomPhoneModel(make)
-	android := firstNonEmpty(cfg.AndroidVersion, fmt.Sprint(randomIntRange(10, 14)))
-	deviceOS := android
-	if !strings.HasPrefix(strings.ToLower(deviceOS), "android") {
-		deviceOS = "Android, " + deviceOS
-	}
+	profile := randomHardwareProfile(cfg.StaticIdentity)
 	appVersion := firstNonEmpty(cfg.AppVersion, defaultAppVersion)
 	appID := firstNonEmpty(cfg.AppID, defaultAppID)
 	appBuild := firstNonEmpty(cfg.AppBuild, defaultAppBuild)
-	d1 := cfg.D1
-	if d1 == "" || !cfg.StaticIdentity {
-		var err error
-		d1, err = randomD1()
-		if err != nil {
-			return DeviceFingerprint{}, err
-		}
-	}
-	widevine := cfg.WidevineID
-	if widevine == "" || !cfg.StaticIdentity {
-		var err error
-		widevine, err = randomBase64(32)
-		if err != nil {
-			return DeviceFingerprint{}, err
-		}
-	}
-	uniqueID := cfg.UniqueID
-	if uniqueID == "" || !cfg.StaticIdentity {
-		uniqueID = randomHex(8)
-	}
-	sessionID := cfg.SessionID
-	if sessionID == "" || !cfg.StaticIdentity {
-		sessionID = uuid.NewString()
-	}
-	transactionID := cfg.TransactionID
-	if transactionID == "" || !cfg.StaticIdentity {
-		transactionID = uuid.NewString()
-	}
+	deviceOS := androidDeviceOS(firstNonEmpty(cfg.AndroidVersion, profile.AndroidVersion))
+	phoneMake := firstNonEmpty(cfg.PhoneMake, profile.PhoneMake)
+	phoneModel := normalizePhoneModel(firstNonEmpty(cfg.PhoneModel, profile.PhoneModel))
+	userAgent := firstNonEmpty(cfg.UserAgent, fmt.Sprintf("GoPay/%s (%s; build:%s; %s)", appVersion, appID, appBuild, deviceOS))
+	uniqueID := firstNonEmpty(cfg.UniqueID, generatedOrStatic(cfg.StaticIdentity, defaultUniqueID, func() string { return randomHex(8) }))
+	d1 := firstNonEmpty(cfg.D1, generatedOrStatic(cfg.StaticIdentity, defaultD1, randomD1))
+	appsFlyerID := firstNonEmpty(cfg.AppsFlyerID, generatedOrStatic(cfg.StaticIdentity, defaultAppsFlyerID, randomAppsFlyerID))
+	widevineID := firstNonEmpty(cfg.WidevineID, generatedOrStatic(cfg.StaticIdentity, defaultWidevineID, randomWidevineID))
+	wifiMAC := strings.ToLower(firstNonEmpty(cfg.WiFiMAC, generatedOrStatic(cfg.StaticIdentity, defaultXM1WiFiMAC, randomWiFiMAC)))
+	wifiSSID := firstNonEmpty(cfg.WiFiSSID, generatedOrStatic(cfg.StaticIdentity, defaultXM1WiFiSSID, randomWiFiSSID))
+	m1ConnectionID := firstNonEmpty(cfg.M1ConnectionID, generatedOrStatic(cfg.StaticIdentity, defaultXM1ConnectionID, randomM1ConnectionID))
+	m1Hardware := firstNonEmpty(cfg.M1Hardware, defaultXM1Hardware)
+	m1Signature := firstNonEmpty(cfg.M1Signature, generatedOrStatic(cfg.StaticIdentity, defaultM1Signature, func() string { return randomHex(8) }))
+	m1SignatureTime := firstNonEmpty(cfg.M1SignatureTime, generatedOrStatic(cfg.StaticIdentity, "0", randomM1SignatureTime))
+	m1DeviceUUID := firstNonEmpty(cfg.M1DeviceUUID, generatedOrStatic(cfg.StaticIdentity, defaultM1DeviceUUID, uuid.NewString))
+	firebaseID := firstNonEmpty(cfg.FirebaseID, generatedOrStatic(cfg.StaticIdentity, defaultFirebaseID, func() string { return randomHex(16) }))
+	advertisingID := firstNonEmpty(cfg.AdvertisingID, generatedOrStatic(cfg.StaticIdentity, defaultAdvertisingID, uuid.NewString))
+	appSetID := firstNonEmpty(cfg.AppSetID, generatedOrStatic(cfg.StaticIdentity, defaultAppSetID, uuid.NewString))
+	deviceToken := strings.TrimSpace(cfg.DeviceToken)
 	return DeviceFingerprint{
 		AppType:          defaultApplicationType,
 		AppVersion:       appVersion,
 		AppID:            appID,
 		Platform:         defaultPlatform,
 		UniqueID:         uniqueID,
-		PhoneMake:        make,
-		PhoneModel:       model,
+		PhoneMake:        phoneMake,
+		PhoneModel:       phoneModel,
 		DeviceOS:         deviceOS,
 		UserType:         defaultUserType,
-		SessionID:        sessionID,
-		TransactionID:    transactionID,
-		UserAgent:        firstNonEmpty(cfg.UserAgent, fmt.Sprintf("GoPay/%s (%s; build:%s; Android, %s)", appVersion, appID, appBuild, android)),
+		SessionID:        firstNonEmpty(cfg.SessionID, uuid.NewString()),
+		TransactionID:    firstNonEmpty(cfg.TransactionID, uuid.NewString()),
+		UserAgent:        userAgent,
 		D1:               d1,
-		XE2:              cfg.XE2,
+		XE2:              firstNonEmpty(cfg.XE2, defaultXE2),
 		AdjTS:            firstNonEmpty(cfg.AdjTS, "host:D"),
-		AppsFlyerID:      firstNonEmpty(cfg.AppsFlyerID, fmt.Sprintf("%d-%d", unixMillis(), randomInt64Range(1_000_000_000_000_000_000, 9_000_000_000_000_000_000))),
-		WidevineID:       widevine,
-		Screen:           firstNonEmpty(cfg.Screen, randomScreen()),
-		WiFiMAC:          firstNonEmpty(cfg.WiFiMAC, randomWiFiMAC()),
-		WiFiSSID:         firstNonEmpty(cfg.WiFiSSID, randomBrandWord()+"_"+randomHex(6)),
-		M1ConnectionID:   fmt.Sprint(randomIntRange(100000, 999999)),
-		M1Signature:      firstNonEmpty(cfg.M1Signature, randomHex(16)),
-		M1DeviceUUID:     uuid.NewString(),
-		UserUUID:         cfg.UserUUID,
-		DeviceToken:      cfg.DeviceToken,
-		Location:         firstNonEmpty(cfg.Location, randomLocation()),
-		LocationAccuracy: firstNonEmpty(cfg.LocationAccuracy, randomLocationAccuracy()),
+		AppsFlyerID:      appsFlyerID,
+		WidevineID:       widevineID,
+		Screen:           firstNonEmpty(cfg.Screen, profile.Screen),
+		WiFiMAC:          wifiMAC,
+		WiFiSSID:         wifiSSID,
+		M1ConnectionID:   m1ConnectionID,
+		M1Hardware:       m1Hardware,
+		M1Signature:      m1Signature,
+		M1SignatureTime:  m1SignatureTime,
+		M1DeviceUUID:     m1DeviceUUID,
+		FirebaseID:       firebaseID,
+		AdvertisingID:    advertisingID,
+		AppSetID:         appSetID,
+		InstallReferrer:  firstNonEmpty(cfg.InstallReferrer, defaultInstallReferrer),
+		InstallerPackage: firstNonEmpty(cfg.InstallerPackage, defaultInstaller),
+		GMSVersion:       firstNonEmpty(cfg.GMSVersion, defaultGMSVersion),
+		UserUUID:         strings.TrimSpace(cfg.UserUUID),
+		DeviceToken:      deviceToken,
+		IMEI:             firstNonEmpty(cfg.IMEI, uniqueID),
+		IPAddress:        firstNonEmpty(cfg.IPAddress, generatedOrStatic(cfg.StaticIdentity, "", randomPrivateIP)),
+		Location:         firstNonEmpty(cfg.Location, defaultLocation),
+		LocationAccuracy: firstNonEmpty(cfg.LocationAccuracy, defaultLocationAcc),
 		GojekCountryCode: firstNonEmpty(cfg.GojekCountryCode, defaultGojekCountry),
+		TLSProfileName:   protocol.ResolveTLSProfileName(cfg.TLSProfileName),
 	}, nil
 }
 
 func (d DeviceFingerprint) XM1() string {
+	if d.usesGoPay27Profile() {
+		return strings.Join([]string{
+			"3:" + firstNonEmpty(d.AppsFlyerID, defaultAppsFlyerID),
+			"4:" + firstNonEmpty(d.M1ConnectionID, defaultXM1ConnectionID),
+			"5:" + firstNonEmpty(d.M1Hardware, defaultXM1Hardware),
+			"6:" + firstNonEmpty(d.WiFiMAC, defaultXM1WiFiMAC),
+			"7:" + firstNonEmpty(d.WiFiSSID, defaultXM1WiFiSSID),
+			"8:" + firstNonEmpty(d.Screen, defaultXM1Screen),
+			"10:0",
+			"11:" + firstNonEmpty(d.WidevineID, defaultWidevineID),
+			"15:" + firstNonEmpty(d.FirebaseID, defaultFirebaseID),
+		}, ",")
+	}
 	return strings.Join([]string{
-		"3:" + firstNonEmpty(d.AppsFlyerID, "0-0"),
-		"4:" + firstNonEmpty(d.M1ConnectionID, "5939"),
-		"5:" + d.PhoneMake + "|3200|2",
-		"6:" + firstNonEmpty(d.WiFiMAC, "02:00:00:00:00:00"),
-		"7:" + firstNonEmpty(d.WiFiSSID, "<unknown ssid>"),
-		"8:" + firstNonEmpty(d.Screen, "1080x2148"),
+		"3:" + firstNonEmpty(d.AppsFlyerID, defaultAppsFlyerID),
+		"4:" + firstNonEmpty(d.M1ConnectionID, defaultXM1ConnectionID),
+		"5:" + firstNonEmpty(d.PhoneMake, defaultPhoneMake) + "|3200|2",
+		"6:" + firstNonEmpty(d.WiFiMAC, defaultXM1WiFiMAC),
+		"7:" + firstNonEmpty(d.WiFiSSID, defaultXM1WiFiSSID),
+		"8:" + firstNonEmpty(d.Screen, defaultXM1Screen),
 		"9:passive,network,fused,gps",
 		"10:1",
-		"11:" + d.WidevineID,
-		"15:" + d.M1Signature,
-		"16:" + d.M1DeviceUUID,
+		"11:" + firstNonEmpty(d.WidevineID, defaultWidevineID),
+		"13:" + firstNonEmpty(d.M1Signature, defaultM1Signature),
+		"14:" + firstNonEmpty(d.M1SignatureTime, "0"),
+		"15:" + firstNonEmpty(d.FirebaseID, defaultFirebaseID),
+		"16:" + firstNonEmpty(d.M1DeviceUUID, defaultM1DeviceUUID),
 	}, ",")
 }
 
-func envBool(name string, fallback bool) bool {
-	value := strings.TrimSpace(os.Getenv(name))
+func (d DeviceFingerprint) usesGoPay27Profile() bool {
+	version := strings.TrimSpace(d.AppVersion)
+	return version == "" || version == "2.7" || strings.HasPrefix(version, "2.7.")
+}
+
+func (d DeviceFingerprint) WithNewTransactionID() DeviceFingerprint {
+	d.TransactionID = uuid.NewString()
+	return d
+}
+
+func androidDeviceOS(value string) string {
+	value = strings.TrimSpace(value)
 	if value == "" {
-		return fallback
+		value = defaultAndroidVersion
 	}
-	switch strings.ToLower(value) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
+	if strings.HasPrefix(strings.ToLower(value), "android") {
+		parts := strings.SplitN(value, ",", 2)
+		if len(parts) == 2 {
+			return strings.TrimSpace(parts[0]) + ", " + strings.TrimSpace(parts[1])
+		}
+		return value
 	}
+	return "Android, " + value
+}
+
+func normalizePhoneModel(value string) string {
+	value = strings.TrimSpace(value)
+	parts := strings.SplitN(value, ",", 2)
+	if len(parts) != 2 {
+		return value
+	}
+	return strings.TrimSpace(parts[0]) + ", " + strings.TrimSpace(parts[1])
 }
 
 func firstNonEmpty(values ...string) string {
@@ -223,134 +339,113 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func randomD1() (string, error) {
-	raw := make([]byte, 32)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
+func generatedOrStatic(static bool, staticValue string, generate func() string) string {
+	if static {
+		return staticValue
 	}
+	return generate()
+}
+
+func randomD1() string {
+	raw := randomBytes(32)
 	parts := make([]string, 0, len(raw))
 	for _, b := range raw {
 		parts = append(parts, fmt.Sprintf("%02X", b))
 	}
-	return strings.Join(parts, ":"), nil
+	return strings.Join(parts, ":")
 }
 
-func randomBase64(size int) (string, error) {
-	raw := make([]byte, size)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
+func randomHardwareProfile(static bool) hardwareProfile {
+	if static || !envBool("GOPAY_RANDOM_HARDWARE_PROFILE") || len(hardwareProfiles) == 0 {
+		return hardwareProfile{
+			AndroidVersion: defaultAndroidVersion,
+			PhoneMake:      defaultPhoneMake,
+			PhoneModel:     defaultPhoneModel,
+			Screen:         defaultXM1Screen,
+		}
 	}
-	return base64.StdEncoding.EncodeToString(raw), nil
+	return hardwareProfiles[randomIntRange(0, len(hardwareProfiles)-1)]
 }
 
-func randomHex(size int) string {
-	raw := make([]byte, size)
-	_, _ = rand.Read(raw)
-	return hex.EncodeToString(raw)
+func randomAppsFlyerID() string {
+	installUnixMillis := time.Now().Add(-time.Duration(randomIntRange(60, 86_400*21)) * time.Second).UnixMilli()
+	return fmt.Sprintf("%d-%09d%010d", installUnixMillis, randomIntRange(100_000_000, 999_999_999), randomIntRange(0, 9_999_999_999))
 }
 
-func randomBrandWord() string {
-	consonants := "bcdfghjklmnpqrstvwxyz"
-	vowels := "aeiou"
-	count := randomIntRange(2, 4)
-	var b strings.Builder
-	for range count {
-		b.WriteByte(consonants[randomIntRange(0, len(consonants)-1)])
-		b.WriteByte(vowels[randomIntRange(0, len(vowels)-1)])
-	}
-	if randomIntRange(0, 99) < 35 {
-		suffixes := "nrsx"
-		b.WriteByte(suffixes[randomIntRange(0, len(suffixes)-1)])
-	}
-	word := b.String()
-	return strings.ToUpper(word[:1]) + word[1:]
-}
-
-func randomPhoneModel(make string) string {
-	prefix := strings.ToUpper(lettersOnly(make))
-	if len(prefix) > 2 {
-		prefix = prefix[:2]
-	}
-	if len(prefix) < 2 {
-		prefix = randomLetters(2)
-	}
-	families := "ACMNPRSVXZ"
-	separator := "-"
-	if randomIntRange(0, 1) == 1 {
-		separator = " "
-	}
-	return fmt.Sprintf("%s, %s%c%s%d", make, prefix, families[randomIntRange(0, len(families)-1)], separator, randomIntRange(1000, 9999))
-}
-
-func randomScreen() string {
-	width := randomIntRange(45, 90) * 16
-	height := width * randomIntRange(195, 228) / 100
-	if height < width+640 {
-		height = width + 640
-	}
-	height = (height / 8) * 8
-	if height > 3200 {
-		height = 3200
-	}
-	return fmt.Sprintf("%dx%d", width, height)
+func randomWidevineID() string {
+	return base64.StdEncoding.EncodeToString(randomBytes(32))
 }
 
 func randomWiFiMAC() string {
-	raw := randomHex(5)
-	parts := []string{"02"}
-	for i := 0; i < len(raw); i += 2 {
-		parts = append(parts, raw[i:i+2])
+	raw := randomBytes(6)
+	raw[0] = (raw[0] | 0x02) & 0xFE
+	parts := make([]string, 0, len(raw))
+	for _, b := range raw {
+		parts = append(parts, fmt.Sprintf("%02x", b))
 	}
 	return strings.Join(parts, ":")
 }
 
-func randomLocation() string {
-	lat := -62_000_000 + randomIntRange(-500_000, 500_000)
-	lon := 1_068_000_000 + randomIntRange(-500_000, 500_000)
-	return fmt.Sprintf("%.7f,%.7f", float64(lat)/10_000_000, float64(lon)/10_000_000)
+func randomWiFiSSID() string {
+	return defaultXM1WiFiSSID
 }
 
-func randomLocationAccuracy() string {
-	return fmt.Sprintf("0.0%d999999552965164", randomIntRange(10, 99))
+func randomM1ConnectionID() string {
+	return fmt.Sprintf("%d", randomIntRange(10000, 99999))
 }
 
-func randomLetters(length int) string {
-	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	var out strings.Builder
-	for range length {
-		out.WriteByte(alphabet[randomIntRange(0, len(alphabet)-1)])
+func randomM1SignatureTime() string {
+	seenAt := time.Now().Add(-time.Duration(randomIntRange(60, 86_400*7)) * time.Second)
+	return fmt.Sprint(seenAt.UnixMilli())
+}
+
+func randomFCMToken() string {
+	return randomURLSafe(11) + ":APA91b" + randomURLSafe(134)
+}
+
+func randomPrivateIP() string {
+	switch randomIntRange(0, 2) {
+	case 0:
+		return fmt.Sprintf("192.168.%d.%d", randomIntRange(0, 50), randomIntRange(2, 254))
+	case 1:
+		return fmt.Sprintf("10.%d.%d.%d", randomIntRange(0, 50), randomIntRange(0, 255), randomIntRange(2, 254))
+	default:
+		return fmt.Sprintf("172.%d.%d.%d", randomIntRange(16, 31), randomIntRange(0, 255), randomIntRange(2, 254))
 	}
-	return out.String()
 }
 
-func lettersOnly(value string) string {
-	var out strings.Builder
-	for _, r := range value {
-		if r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' {
-			out.WriteRune(r)
+func randomURLSafe(size int) string {
+	const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+	raw := randomBytes(size)
+	out := make([]byte, size)
+	for idx, value := range raw {
+		out[idx] = alphabet[int(value)%len(alphabet)]
+	}
+	return string(out)
+}
+
+func randomHex(size int) string {
+	return hex.EncodeToString(randomBytes(size))
+}
+
+func randomBytes(size int) []byte {
+	raw := make([]byte, size)
+	if _, err := rand.Read(raw); err != nil {
+		fallback := []byte(uuid.NewString())
+		for i := range raw {
+			raw[i] = fallback[i%len(fallback)]
 		}
 	}
-	return out.String()
+	return raw
 }
 
-func randomIntRange(minimum, maximum int) int {
-	if maximum <= minimum {
-		return minimum
+func randomIntRange(minValue int, maxValue int) int {
+	if maxValue <= minValue {
+		return minValue
 	}
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(maximum-minimum+1)))
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(maxValue-minValue+1)))
 	if err != nil {
-		return minimum
+		return minValue + int(time.Now().UnixNano()%int64(maxValue-minValue+1))
 	}
-	return minimum + int(n.Int64())
-}
-
-func randomInt64Range(minimum, maximum int64) int64 {
-	if maximum <= minimum {
-		return minimum
-	}
-	n, err := rand.Int(rand.Reader, big.NewInt(maximum-minimum+1))
-	if err != nil {
-		return minimum
-	}
-	return minimum + n.Int64()
+	return minValue + int(n.Int64())
 }

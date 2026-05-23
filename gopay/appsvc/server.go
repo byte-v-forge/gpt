@@ -3,11 +3,13 @@ package appsvc
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/byte-v-forge/gpt/gopay/pb"
@@ -17,8 +19,10 @@ import (
 
 type Server struct {
 	pb.UnimplementedGopayAppServiceServer
-	cfg   Config
-	store *StateStore
+	cfg               Config
+	store             *StateStore
+	checkPhoneProxyMu sync.Mutex
+	checkPhoneProxyIx int
 }
 
 func NewServer(cfg Config) (*Server, error) {
@@ -139,31 +143,31 @@ func (s *Server) tmpClientForState(ctx context.Context, state stateMap) (*gopaya
 }
 
 func (s *Server) proxyForAttempt(attempt int, state stateMap) (string, int, int, error) {
-	if len(s.cfg.ProxyPool) == 0 {
-		return "", 0, 0, fmt.Errorf("GoPay proxy_urls config is required")
+	if len(s.cfg.DynamicEgress) == 0 {
+		return "", 0, 0, fmt.Errorf("GoPay dynamic egress config is required")
 	}
 	if attempt < 1 {
 		attempt = 1
 	}
-	if attempt > len(s.cfg.ProxyPool) {
-		return "", 0, len(s.cfg.ProxyPool), fmt.Errorf("GOPAY_PROXY_POOL exhausted before login methods succeeded")
+	if attempt > len(s.cfg.DynamicEgress) {
+		return "", 0, len(s.cfg.DynamicEgress), fmt.Errorf("GOPAY_DYNAMIC_EGRESS exhausted before login methods succeeded")
 	}
 	current := s.proxyIndex(stateString(state, "_gopay_proxy"))
 	index := 0
 	if current >= 0 && attempt <= 1 {
 		index = current
 	} else if current >= 0 {
-		index = (current + 1) % len(s.cfg.ProxyPool)
+		index = (current + 1) % len(s.cfg.DynamicEgress)
 	}
-	proxyURL := s.cfg.ProxyPool[index]
+	proxyURL := s.cfg.DynamicEgress[index]
 	if state != nil {
 		state["_gopay_proxy"] = proxyURL
 	}
-	return proxyURL, index + 1, len(s.cfg.ProxyPool), nil
+	return proxyURL, index + 1, len(s.cfg.DynamicEgress), nil
 }
 
 func (s *Server) proxyForState(state stateMap) string {
-	if len(s.cfg.ProxyPool) == 0 {
+	if len(s.cfg.DynamicEgress) == 0 {
 		return ""
 	}
 	index := s.proxyIndex(stateString(state, "_gopay_proxy"))
@@ -171,19 +175,124 @@ func (s *Server) proxyForState(state stateMap) string {
 		proxyURL, _, _, _ := s.proxyForAttempt(1, state)
 		return proxyURL
 	}
-	return s.cfg.ProxyPool[index]
+	return s.cfg.DynamicEgress[index]
+}
+
+func (s *Server) nextCheckPhoneProxyState() stateMap {
+	state := stateMap{}
+	if len(s.cfg.DynamicEgress) == 0 {
+		return state
+	}
+	s.checkPhoneProxyMu.Lock()
+	index := s.checkPhoneProxyIx % len(s.cfg.DynamicEgress)
+	s.checkPhoneProxyIx = (index + 1) % len(s.cfg.DynamicEgress)
+	s.checkPhoneProxyMu.Unlock()
+	state["_gopay_proxy"] = s.cfg.DynamicEgress[index]
+	return state
+}
+
+func (s *Server) generateDeviceProxyState(ctx context.Context) (stateMap, error) {
+	state := s.nextCheckPhoneProxyState()
+	sessionData, err := s.createProxyRuntimeSession(ctx)
+	if err != nil {
+		return state, err
+	}
+	for key, value := range sessionData {
+		state[key] = value
+	}
+	_, rawDevice, err := s.newLogonDevice()
+	if err != nil {
+		return state, err
+	}
+	state["device"] = rawDevice
+	return state, nil
+}
+
+func (s *Server) deviceProxyDiagnostics(state stateMap) map[string]any {
+	data := map[string]any{
+		"dynamic_egress_size": len(s.cfg.DynamicEgress),
+	}
+	proxyURL := stateString(state, "_gopay_proxy")
+	if proxyURL != "" {
+		hash := sha256.Sum256([]byte(proxyURL))
+		data["proxy_hash"] = hex.EncodeToString(hash[:])[:12]
+	}
+	if index := s.proxyIndex(proxyURL); index >= 0 {
+		data["proxy_slot"] = index + 1
+	}
+	if hash := stateString(state, "_proxy_runtime_session_hash"); hash != "" {
+		data["proxy_runtime_session_hash"] = hash
+		data["proxy_runtime_pool_endpoints"] = anyInt(state["_proxy_runtime_pool_endpoints"])
+	}
+	if rotated, ok := state["_proxy_runtime_session_rotated"].(bool); ok {
+		data["proxy_runtime_session_rotated"] = rotated
+	}
+	if fp := deviceFingerprintForState(state); fp != "" {
+		data["device_fingerprint"] = fp
+	}
+	return data
+}
+
+func deviceFingerprintForState(state stateMap) string {
+	device := nestedMap(state["device"])
+	if len(device) == 0 {
+		return ""
+	}
+	out := []string{}
+	addPlain := func(label, key string) {
+		if value := anyString(device[key]); value != "" {
+			out = append(out, label+"="+value)
+		}
+	}
+	addHash := func(label, key string) {
+		if value := anyString(device[key]); value != "" {
+			out = append(out, label+"#"+shortHash(value))
+		}
+	}
+	addPlain("profile", "profile_id")
+	addPlain("make", "x-phonemake")
+	addPlain("model", "x-phonemodel")
+	addPlain("os", "x-deviceos")
+	addPlain("screen", "m1_screen")
+	addPlain("tls", "tls_profile")
+	addHash("uid", "x-uniqueid")
+	addHash("session", "x-session-id")
+	addHash("tx", "transaction-id")
+	addHash("d1", "d1")
+	addHash("conn", "m1_connection_id")
+	addHash("widevine", "m1_widevine_id")
+	addHash("wifi", "m1_wifi_mac")
+	addHash("ssid", "m1_wifi_ssid")
+	addHash("sig", "m1_signature")
+	addHash("sig_time", "m1_signature_time")
+	addHash("firebase", "m1_firebase_app_instance_id")
+	addHash("uuid", "m1_device_uuid")
+	addHash("adid", "advertising_id")
+	addHash("appset", "app_set_id")
+	addHash("devtoken", "x-devicetoken")
+	addHash("imei", "x-imei")
+	addHash("ip", "x-ipaddress")
+	if parsed := deviceFromMap(device); parsed.AppID != "" {
+		out = append(out, "x_m1#"+shortHash(parsed.XM1()))
+	}
+	return strings.Join(out, "/")
+}
+
+func shortHash(value string) string {
+	hash := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(hash[:])[:12]
 }
 
 func (s *Server) proxyAttemptLimit() int {
-	if len(s.cfg.ProxyPool) > 0 {
-		return len(s.cfg.ProxyPool)
+	if len(s.cfg.DynamicEgress) > 0 {
+		return len(s.cfg.DynamicEgress)
 	}
 	return 1
 }
 
 func (s *Server) proxyIndex(value string) int {
 	value = strings.TrimSpace(value)
-	for index, item := range s.cfg.ProxyPool {
+	for index, item := range s.cfg.DynamicEgress {
 		if strings.TrimSpace(item) == value {
 			return index
 		}
@@ -195,7 +304,7 @@ func (s *Server) ensureDevice(state stateMap) (gopayapp.DeviceFingerprint, error
 	raw := nestedMap(state["device"])
 	if len(raw) > 0 {
 		device := deviceFromMap(raw)
-		if device.AppID == "" || device.UniqueID == "" {
+		if deviceNeedsBackfill(device) {
 			next, err := gopayapp.NewDeviceFingerprint(gopayapp.DeviceConfigFromEnv())
 			if err != nil {
 				return gopayapp.DeviceFingerprint{}, err
@@ -229,6 +338,19 @@ func (s *Server) newLogonDevice() (gopayapp.DeviceFingerprint, map[string]any, e
 	out["profile_id"] = hex.EncodeToString(rawID)
 	out["profile_created_at"] = time.Now().Unix()
 	return device, out, nil
+}
+
+func deviceNeedsBackfill(device gopayapp.DeviceFingerprint) bool {
+	return device.AppID == "" ||
+		device.UniqueID == "" ||
+		device.TLSProfileName == "" ||
+		device.M1Hardware == "" ||
+		device.IMEI == "" ||
+		device.IPAddress == "" ||
+		device.FirebaseID == "" ||
+		device.AdvertisingID == "" ||
+		device.AppSetID == "" ||
+		device.M1SignatureTime == ""
 }
 
 func apiError(label string, resp *protocol.Response) string {

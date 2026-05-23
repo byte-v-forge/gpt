@@ -6,16 +6,17 @@ import (
 )
 
 const (
-	actionRegister            = contracts.ActionRegister
-	actionActivate            = contracts.ActionActivate
-	actionAutopay             = contracts.ActionAutopay
-	actionGoPayApp            = contracts.ActionGoPayApp
-	actionGoPayPayment        = contracts.ActionGoPayPayment
-	actionGoPayWAPayment      = contracts.ActionGoPayWAPayment
-	actionGoPayPaymentRebind  = contracts.ActionGoPayPaymentRebind
-	actionProbeAccount        = contracts.ActionProbeAccount
-	actionLoginSession        = contracts.ActionLoginSession
-	actionRegisterAndActivate = contracts.ActionRegisterAndActivate
+	actionRegister                 = contracts.ActionRegister
+	actionActivate                 = contracts.ActionActivate
+	actionAutopay                  = contracts.ActionAutopay
+	actionGoPayApp                 = contracts.ActionGoPayApp
+	actionGoPayPayment             = contracts.ActionGoPayPayment
+	actionGoPayQRISPaymentActivate = contracts.ActionGoPayQRISPaymentActivate
+	actionGoPayWAPayment           = contracts.ActionGoPayWAPayment
+	actionGoPayPaymentRebind       = contracts.ActionGoPayPaymentRebind
+	actionProbeAccount             = contracts.ActionProbeAccount
+	actionLoginSession             = contracts.ActionLoginSession
+	actionRegisterAndActivate      = contracts.ActionRegisterAndActivate
 
 	statusCreated           = jobstatus.Created
 	statusRunning           = jobstatus.Running
@@ -57,7 +58,9 @@ const (
 	stepGoPayAppChangePhoneCancel    = "gopay_app_change_phone_cancel"
 	stepGoPayAppChangePhoneComplete  = "gopay_app_change_phone_complete"
 	stepGoPayAppSignupPhone          = "gopay_app_signup_phone"
-	stepGoPayAppResolveWAPhone       = "gopay_app_resolve_wa_phone"
+	stepGoPayAppGenerateDeviceProxy  = "gopay_app_generate_device_proxy"
+	stepGoPayAppCheckPhone           = "gopay_app_check_phone"
+	stepGoPayResolveWAPhone          = "gopay_resolve_wa_phone"
 	stepGoPayAppDeactivate           = "gopay_app_deactivate"
 	stepGoPayAppDeactivateStart      = "gopay_app_deactivate_start"
 	stepGoPayAppDeactivateSMSWait    = "gopay_app_deactivate_sms_wait"
@@ -73,6 +76,9 @@ const (
 	stepGoPayAppSMSFinish            = "gopay_app_sms_finish"
 	stepGoPayAppSMSRequestMore       = "gopay_app_sms_request_more"
 	stepGoPayPaymentPrepare          = "gopay_payment_prepare"
+	stepGoPayPaymentPrepareCheckout  = "gopay_payment_prepare_checkout"
+	stepGoPayPaymentPrepareRefresh   = "gopay_payment_prepare_checkout_refresh"
+	stepGoPayPaymentPrepareLink      = "gopay_payment_prepare_link"
 	stepGoPayPayment                 = "gopay_payment"
 	stepProbePlusTrial               = "probe_plus_trial"
 	stepProbeTier                    = "probe_tier"

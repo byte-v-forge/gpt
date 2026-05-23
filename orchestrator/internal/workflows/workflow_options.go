@@ -16,6 +16,8 @@ const (
 	otpWaitChannelSMS     = otpwait.ChannelSMS
 
 	defaultOTPWaitSeconds = int32(180)
+
+	goPayAddBalancePollInterval = 5 * time.Second
 )
 
 func otpWaitInputChannel(input OTPWaitInput) string {
@@ -177,7 +179,227 @@ func otpWaitStepResultData(input OTPWaitInput, output OTPWaitOutput) map[string]
 	return data
 }
 
-func waitForManualAddBalance(ctx workflow.Context, timeoutSeconds int32) error {
+func waitForManualAddBalance(ctx workflow.Context, activityCtx workflow.Context, jobID string, stateJSON string, timeoutSeconds int32) (string, map[string]any, error) {
+	if workflow.GetVersion(ctx, "gopay-add-balance-poll", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		err := waitForManualAddBalanceLegacy(ctx, timeoutSeconds)
+		return stateJSON, map[string]any{"confirmed": err == nil, "method": "manual_transfer"}, err
+	}
+	return waitForManualAddBalancePolling(ctx, activityCtx, jobID, stateJSON, timeoutSeconds)
+}
+
+func waitForManualAddBalancePolling(ctx workflow.Context, activityCtx workflow.Context, jobID string, stateJSON string, timeoutSeconds int32) (string, map[string]any, error) {
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 1800
+	}
+	timerCtx, cancelTimer := workflow.WithCancel(ctx)
+	defer cancelTimer()
+	timer := workflow.NewTimer(timerCtx, time.Duration(timeoutSeconds)*time.Second)
+	signalCh := workflow.GetSignalChannel(ctx, manualAddBalanceSignalName)
+
+	var lastData map[string]any
+	var lastErr string
+	for {
+		nextStateJSON, checkData, ready, checkErr := checkGoPayAddBalanceReady(ctx, activityCtx, jobID, stateJSON)
+		if nextStateJSON != "" {
+			stateJSON = nextStateJSON
+		}
+		if len(checkData) > 0 {
+			lastData = checkData
+		}
+		if checkErr != "" {
+			lastErr = checkErr
+		}
+		if ready {
+			checkData["confirmed"] = true
+			checkData["auto_confirmed"] = true
+			checkData["method"] = "manual_transfer"
+			return stateJSON, checkData, nil
+		}
+
+		pollCtx, cancelPoll := workflow.WithCancel(ctx)
+		poll := workflow.NewTimer(pollCtx, goPayAddBalancePollInterval)
+		var confirmed bool
+		var timedOut bool
+		var shouldPoll bool
+		selector := workflow.NewSelector(ctx)
+		selector.AddReceive(signalCh, func(c workflow.ReceiveChannel, more bool) {
+			var signal ManualAddBalanceSignal
+			c.Receive(ctx, &signal)
+			confirmed = true
+		})
+		selector.AddFuture(timer, func(f workflow.Future) {
+			timedOut = true
+		})
+		selector.AddFuture(poll, func(f workflow.Future) {
+			shouldPoll = true
+		})
+		selector.Select(ctx)
+		cancelPoll()
+
+		if confirmed {
+			if lastData == nil {
+				lastData = map[string]any{}
+			}
+			lastData["confirmed"] = true
+			lastData["method"] = "manual_transfer"
+			return stateJSON, lastData, nil
+		}
+		if timedOut {
+			if lastErr != "" {
+				return stateJSON, lastData, fmt.Errorf("manual add_balance not confirmed and balance not ready after %ds: %s", timeoutSeconds, lastErr)
+			}
+			return stateJSON, lastData, fmt.Errorf("manual add_balance not confirmed and balance not ready after %ds", timeoutSeconds)
+		}
+		if shouldPoll {
+			continue
+		}
+		return stateJSON, lastData, fmt.Errorf("manual add_balance wait ended unexpectedly")
+	}
+}
+
+func checkGoPayAddBalanceReady(ctx workflow.Context, activityCtx workflow.Context, jobID string, stateJSON string) (string, map[string]any, bool, string) {
+	var status GoPayAppStepOutput
+	if err := workflow.ExecuteActivity(activityCtx, goPayAppBalanceCheckActivityName, GoPayAppStepInput{
+		JobId:     jobID,
+		StateJson: stateJSON,
+	}).Get(ctx, &status); err != nil {
+		return stateJSON, map[string]any{"error_message": err.Error()}, false, err.Error()
+	}
+	data := protoDataMap(status.GetData())
+	nextStateJSON := status.GetStateJson()
+	ready, amount, currency := goPayAddBalanceBalanceReady(data)
+	if ready {
+		data["balance_ready"] = true
+		data["balance_amount"] = amount
+		if currency != "" {
+			data["balance_currency"] = currency
+		}
+		return nextStateJSON, data, true, ""
+	}
+	if message := stringMapValue(data, "error_message"); message != "" {
+		return nextStateJSON, data, false, message
+	}
+	if amount != 0 || currency != "" {
+		return nextStateJSON, data, false, fmt.Sprintf("balance %d %s < 1 IDR", amount, currency)
+	}
+	return nextStateJSON, data, false, ""
+}
+
+func waitForManualGoPayPayment(ctx workflow.Context, timeoutSeconds int32) error {
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 1800
+	}
+	timerCtx, cancelTimer := workflow.WithCancel(ctx)
+	timer := workflow.NewTimer(timerCtx, time.Duration(timeoutSeconds)*time.Second)
+	signalCh := workflow.GetSignalChannel(ctx, manualGoPayPaymentSignalName)
+
+	var confirmed bool
+	var timedOut bool
+	selector := workflow.NewSelector(ctx)
+	selector.AddReceive(signalCh, func(c workflow.ReceiveChannel, more bool) {
+		var signal ManualGoPayPaymentSignal
+		c.Receive(ctx, &signal)
+		confirmed = true
+	})
+	selector.AddFuture(timer, func(f workflow.Future) {
+		timedOut = true
+	})
+	selector.Select(ctx)
+
+	if confirmed {
+		cancelTimer()
+		return nil
+	}
+	if timedOut {
+		return fmt.Errorf("manual gopay payment not confirmed after %ds", timeoutSeconds)
+	}
+	return fmt.Errorf("manual gopay payment wait ended unexpectedly")
+}
+
+func waitForGoPayAddBalanceSelection(ctx workflow.Context, activityCtx workflow.Context, jobID string, stateJSON string, timeoutSeconds int32) (*GoPayAddBalance, string, map[string]any, bool, error) {
+	if workflow.GetVersion(ctx, "gopay-add-balance-poll", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		selected, err := waitForGoPayAddBalanceSelectionLegacy(ctx, activityCtx, jobID, timeoutSeconds)
+		return selected, stateJSON, nil, false, err
+	}
+	return waitForGoPayAddBalanceSelectionPolling(ctx, activityCtx, jobID, stateJSON, timeoutSeconds)
+}
+
+func waitForGoPayAddBalanceSelectionPolling(ctx workflow.Context, activityCtx workflow.Context, jobID string, stateJSON string, timeoutSeconds int32) (*GoPayAddBalance, string, map[string]any, bool, error) {
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = 1800
+	}
+	if err := workflow.ExecuteActivity(activityCtx, startJobStepActivityName, JobStepStartInput{
+		JobId:       jobID,
+		StepName:    stepGoPayAppAddBalance,
+		Recoverable: false,
+		Retryable:   true,
+		Detail: protoData(map[string]any{
+			"status":  "awaiting_selection",
+			"methods": goPayAddBalanceMethodOptions(),
+		}),
+	}).Get(ctx, nil); err != nil {
+		return nil, stateJSON, nil, false, err
+	}
+
+	timerCtx, cancelTimer := workflow.WithCancel(ctx)
+	defer cancelTimer()
+	timer := workflow.NewTimer(timerCtx, time.Duration(timeoutSeconds)*time.Second)
+	signalCh := workflow.GetSignalChannel(ctx, goPayAddBalanceSelectionSignalName)
+	var lastData map[string]any
+	var lastErr string
+	for {
+		nextStateJSON, checkData, ready, checkErr := checkGoPayAddBalanceReady(ctx, activityCtx, jobID, stateJSON)
+		if nextStateJSON != "" {
+			stateJSON = nextStateJSON
+		}
+		if len(checkData) > 0 {
+			lastData = checkData
+		}
+		if checkErr != "" {
+			lastErr = checkErr
+		}
+		if ready {
+			checkData["add_balance_status"] = "balance_ready"
+			checkData["auto_confirmed"] = true
+			return nil, stateJSON, checkData, true, nil
+		}
+
+		pollCtx, cancelPoll := workflow.WithCancel(ctx)
+		poll := workflow.NewTimer(pollCtx, goPayAddBalancePollInterval)
+		var selected *GoPayAddBalance
+		var timedOut bool
+		var shouldPoll bool
+		selector := workflow.NewSelector(ctx)
+		selector.AddReceive(signalCh, func(c workflow.ReceiveChannel, more bool) {
+			var signal ManualAddBalanceSignal
+			c.Receive(ctx, &signal)
+			selected = signal.GetAddBalance()
+		})
+		selector.AddFuture(timer, func(f workflow.Future) {
+			timedOut = true
+		})
+		selector.AddFuture(poll, func(f workflow.Future) {
+			shouldPoll = true
+		})
+		selector.Select(ctx)
+		cancelPoll()
+
+		if timedOut {
+			if lastErr != "" {
+				return nil, stateJSON, lastData, false, fmt.Errorf("add_balance method not selected and balance not ready after %ds: %s", timeoutSeconds, lastErr)
+			}
+			return nil, stateJSON, lastData, false, fmt.Errorf("add_balance method not selected and balance not ready after %ds", timeoutSeconds)
+		}
+		if goPayAddBalanceMethod(selected) != "" {
+			return selected, stateJSON, lastData, false, nil
+		}
+		if shouldPoll {
+			continue
+		}
+	}
+}
+
+func waitForManualAddBalanceLegacy(ctx workflow.Context, timeoutSeconds int32) error {
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 1800
 	}
@@ -208,7 +430,7 @@ func waitForManualAddBalance(ctx workflow.Context, timeoutSeconds int32) error {
 	return fmt.Errorf("manual add_balance wait ended unexpectedly")
 }
 
-func waitForGoPayAddBalanceSelection(ctx workflow.Context, activityCtx workflow.Context, jobID string, timeoutSeconds int32) (*GoPayAddBalance, error) {
+func waitForGoPayAddBalanceSelectionLegacy(ctx workflow.Context, activityCtx workflow.Context, jobID string, timeoutSeconds int32) (*GoPayAddBalance, error) {
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 1800
 	}
@@ -248,6 +470,57 @@ func waitForGoPayAddBalanceSelection(ctx workflow.Context, activityCtx workflow.
 			return selected, nil
 		}
 	}
+}
+
+func goPayAddBalanceBalanceReady(data map[string]any) (bool, int64, string) {
+	source := data
+	if nested, ok := data["status"].(map[string]any); ok && len(nested) > 0 {
+		source = nested
+	}
+	amount := int64MapValue(source, "balance_amount")
+	currency := stringMapValue(source, "balance_currency")
+	return boolMapValue(source, "has_min_balance") || amount >= 1, amount, currency
+}
+
+func boolMapValue(data map[string]any, key string) bool {
+	switch value := data[key].(type) {
+	case bool:
+		return value
+	case string:
+		parsed, _ := strconv.ParseBool(value)
+		return parsed
+	case int:
+		return value != 0
+	case int64:
+		return value != 0
+	case float64:
+		return value != 0
+	default:
+		return false
+	}
+}
+
+func int64MapValue(data map[string]any, key string) int64 {
+	switch value := data[key].(type) {
+	case int:
+		return int64(value)
+	case int64:
+		return value
+	case float64:
+		return int64(value)
+	case string:
+		parsed, _ := strconv.ParseInt(value, 10, 64)
+		return parsed
+	default:
+		return 0
+	}
+}
+
+func stringMapValue(data map[string]any, key string) string {
+	if data[key] == nil {
+		return ""
+	}
+	return fmt.Sprint(data[key])
 }
 
 func atomicActivityOptions(timeout time.Duration) workflow.ActivityOptions {

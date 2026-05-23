@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	pb "orchestrator/pb"
 )
@@ -32,6 +33,29 @@ func goPayWorkflowStateAfter(current, next string) string {
 		return next
 	}
 	return normalizeGoPayWorkflowStateJSON(current)
+}
+
+func goPayWorkflowStateWithPINSetup(stateJSON string, pinSetup bool) string {
+	var state map[string]any
+	if err := json.Unmarshal([]byte(normalizeGoPayWorkflowStateJSON(stateJSON)), &state); err != nil {
+		return normalizeGoPayWorkflowStateJSON(stateJSON)
+	}
+	if state == nil {
+		state = map[string]any{}
+	}
+	now := time.Now().Unix()
+	state["pin_setup"] = pinSetup
+	state["pin_setup_checked_at"] = now
+	if pinSetup {
+		state["pin_setup_at"] = now
+	} else {
+		delete(state, "pin_setup_at")
+	}
+	raw, err := json.Marshal(state)
+	if err != nil {
+		return normalizeGoPayWorkflowStateJSON(stateJSON)
+	}
+	return string(raw)
 }
 
 type goPayStateJSONResponse interface {

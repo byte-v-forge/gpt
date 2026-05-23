@@ -19,9 +19,13 @@ const (
 	fetchManualOTPActivityName                   = contracts.FetchManualOTPActivityName
 	ensureLogonActivityName                      = contracts.EnsureLogonActivityName
 	goPayPaymentPrepareActivityName              = contracts.GoPayPaymentPrepareActivityName
+	goPayPaymentPrepareCheckoutActivityName      = contracts.GoPayPaymentPrepareCheckoutActivityName
+	goPayPaymentPrepareRefreshActivityName       = contracts.GoPayPaymentPrepareRefreshActivityName
+	goPayPaymentPrepareLinkActivityName          = contracts.GoPayPaymentPrepareLinkActivityName
 	goPayPaymentStartActivityName                = contracts.GoPayPaymentStartActivityName
 	goPayPaymentOTPResendActivityName            = contracts.GoPayPaymentOTPResendActivityName
 	goPayPaymentCompleteActivityName             = contracts.GoPayPaymentCompleteActivityName
+	goPayPaymentManualConfirmActivityName        = contracts.GoPayPaymentManualConfirmActivityName
 	goPayPaymentCancelActivityName               = contracts.GoPayPaymentCancelActivityName
 	goPayResolveWAPhoneActivityName              = contracts.GoPayResolveWAPhoneActivityName
 	goPayAppLoadStateActivityName                = contracts.GoPayAppLoadStateActivityName
@@ -36,8 +40,11 @@ const (
 	goPayAppCreatePinRetryActivityName           = contracts.GoPayAppCreatePinRetryActivityName
 	goPayAppCreatePinCompleteActivityName        = contracts.GoPayAppCreatePinCompleteActivityName
 	goPayAppAcquireSignupPhoneActivityName       = contracts.GoPayAppAcquireSignupPhoneActivityName
+	goPayAppGenerateDeviceProxyActivityName      = contracts.GoPayAppGenerateDeviceProxyActivityName
+	goPayAppCheckSignupPhoneActivityName         = contracts.GoPayAppCheckSignupPhoneActivityName
 	goPayAppDiscardSignupPhoneActivityName       = contracts.GoPayAppDiscardSignupPhoneActivityName
 	goPayAppAddBalanceActivityName               = contracts.GoPayAppAddBalanceActivityName
+	goPayAppBalanceCheckActivityName             = contracts.GoPayAppBalanceCheckActivityName
 	goPayAppChangePhoneGetNumberActivityName     = contracts.GoPayAppChangePhoneGetNumberActivityName
 	goPayAppChangePhoneStartActivityName         = contracts.GoPayAppChangePhoneStartActivityName
 	goPayAppChangePhoneRetryActivityName         = contracts.GoPayAppChangePhoneRetryActivityName
@@ -58,5 +65,6 @@ const (
 	otpResendSignalName                = contracts.OTPResendSignalName
 	manualAddBalanceSignalName         = contracts.ManualAddBalanceSignalName
 	goPayAddBalanceSelectionSignalName = contracts.GoPayAddBalanceSelectionSignalName
+	manualGoPayPaymentSignalName       = contracts.ManualGoPayPaymentSignalName
 	workflowProgressQueryName          = contracts.WorkflowProgressQueryName
 )

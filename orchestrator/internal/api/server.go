@@ -52,33 +52,36 @@ type Server struct {
 type ManualOTPSignal = pb.ManualOTPSignal
 type OTPResendSignal = pb.OTPResendSignal
 type ManualAddBalanceSignal = pb.ManualAddBalanceSignal
+type ManualGoPayPaymentSignal = pb.ManualGoPayPaymentSignal
 
 const (
-	actionRegister            = contracts.ActionRegister
-	actionActivate            = contracts.ActionActivate
-	actionAutopay             = contracts.ActionAutopay
-	actionGoPayApp            = contracts.ActionGoPayApp
-	actionGoPayPayment        = contracts.ActionGoPayPayment
-	actionGoPayWAPayment      = contracts.ActionGoPayWAPayment
-	actionGoPayPaymentRebind  = contracts.ActionGoPayPaymentRebind
-	actionProbeAccount        = contracts.ActionProbeAccount
-	actionLoginSession        = contracts.ActionLoginSession
-	actionRegisterAndActivate = contracts.ActionRegisterAndActivate
+	actionRegister                 = contracts.ActionRegister
+	actionActivate                 = contracts.ActionActivate
+	actionAutopay                  = contracts.ActionAutopay
+	actionGoPayApp                 = contracts.ActionGoPayApp
+	actionGoPayPayment             = contracts.ActionGoPayPayment
+	actionGoPayQRISPaymentActivate = contracts.ActionGoPayQRISPaymentActivate
+	actionGoPayWAPayment           = contracts.ActionGoPayWAPayment
+	actionGoPayPaymentRebind       = contracts.ActionGoPayPaymentRebind
+	actionProbeAccount             = contracts.ActionProbeAccount
+	actionLoginSession             = contracts.ActionLoginSession
+	actionRegisterAndActivate      = contracts.ActionRegisterAndActivate
 
 	statusRunning   = jobstatus.Running
 	statusSucceeded = jobstatus.Succeeded
 
-	stepRegisterAccount        = "register_account"
-	stepEnsureLogon            = "ensure_logon"
-	stepGoPayAppAddBalance     = "gopay_app_add_balance"
-	stepGoPayPayment           = "gopay_payment"
-	registrationOTPParam       = "registration_otp"
-	paymentOTPParam            = "payment_otp"
-	manualOTPSignalName        = contracts.ManualOTPSignalName
-	otpResendSignalName        = contracts.OTPResendSignalName
-	manualAddBalanceSignalName = contracts.ManualAddBalanceSignalName
-	registrationOTPSubmit      = "registration_otp_submitted_at_unix"
-	paymentOTPSubmit           = "payment_otp_submitted_at_unix"
+	stepRegisterAccount          = "register_account"
+	stepEnsureLogon              = "ensure_logon"
+	stepGoPayAppAddBalance       = "gopay_app_add_balance"
+	stepGoPayPayment             = "gopay_payment"
+	registrationOTPParam         = "registration_otp"
+	paymentOTPParam              = "payment_otp"
+	manualOTPSignalName          = contracts.ManualOTPSignalName
+	otpResendSignalName          = contracts.OTPResendSignalName
+	manualAddBalanceSignalName   = contracts.ManualAddBalanceSignalName
+	manualGoPayPaymentSignalName = contracts.ManualGoPayPaymentSignalName
+	registrationOTPSubmit        = "registration_otp_submitted_at_unix"
+	paymentOTPSubmit             = "payment_otp_submitted_at_unix"
 )
 
 const (

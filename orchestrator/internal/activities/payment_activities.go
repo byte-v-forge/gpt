@@ -12,6 +12,9 @@ import (
 
 func (s *Server) GoPayPaymentPrepareActivity(ctx context.Context, input GoPayActivityInput) (GoPayPaymentPrepareOutput, error) {
 	output := GoPayPaymentPrepareOutput{}
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepGoPayPaymentPrepare, "preparing gopay payment", goPayPaymentHeartbeatFields(input))
+	defer stopHeartbeat()
+
 	step, err := s.startActivityStep(ctx, input.GetJobId(), stepGoPayPaymentPrepare, false, true)
 	if err != nil {
 		return output, err
@@ -33,8 +36,69 @@ func (s *Server) GoPayPaymentPrepareActivity(ctx context.Context, input GoPayAct
 	return output, step.complete(protoDataMap(output.GetData()), nil)
 }
 
+func (s *Server) GoPayPaymentPrepareCheckoutActivity(ctx context.Context, input GoPayActivityInput) (GoPayPaymentPrepareOutput, error) {
+	output := GoPayPaymentPrepareOutput{}
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepGoPayPaymentPrepareCheckout, "creating gopay payment checkout", goPayPaymentHeartbeatFields(input))
+	defer stopHeartbeat()
+
+	step, err := s.startActivityStep(ctx, input.GetJobId(), stepGoPayPaymentPrepareCheckout, false, true)
+	if err != nil {
+		return output, err
+	}
+	account, err := s.paymentActivityAccount(ctx, &input)
+	if err != nil {
+		return output, step.complete(map[string]any{"error_message": err.Error()}, err)
+	}
+	if account != nil && strings.TrimSpace(input.GetSessionToken()) == "" && strings.TrimSpace(input.GetAccessToken()) == "" {
+		if err := accountEligibleForActivation(account); err != nil {
+			return output, step.complete(map[string]any{"account_id": account.GetAccountId(), "error_message": err.Error()}, err)
+		}
+	}
+
+	output, err = s.prepareGoPayPaymentCheckout(ctx, step, input, account)
+	if err != nil {
+		return output, step.complete(protoDataMap(output.GetData()), err)
+	}
+	return output, step.complete(protoDataMap(output.GetData()), nil)
+}
+
+func (s *Server) GoPayPaymentPrepareRefreshActivity(ctx context.Context, input GoPayActivityInput) (GoPayPaymentPrepareOutput, error) {
+	output := GoPayPaymentPrepareOutput{}
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepGoPayPaymentPrepareRefresh, "refreshing gopay payment checkout", goPayPaymentHeartbeatFields(input))
+	defer stopHeartbeat()
+
+	step, err := s.startActivityStep(ctx, input.GetJobId(), stepGoPayPaymentPrepareRefresh, false, true)
+	if err != nil {
+		return output, err
+	}
+	output, err = s.refreshGoPayPaymentCheckout(ctx, step, input)
+	if err != nil {
+		return output, step.complete(protoDataMap(output.GetData()), err)
+	}
+	return output, step.complete(protoDataMap(output.GetData()), nil)
+}
+
+func (s *Server) GoPayPaymentPrepareLinkActivity(ctx context.Context, input GoPayActivityInput) (GoPayPaymentPrepareOutput, error) {
+	output := GoPayPaymentPrepareOutput{}
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepGoPayPaymentPrepareLink, "linking gopay payment checkout", goPayPaymentHeartbeatFields(input))
+	defer stopHeartbeat()
+
+	step, err := s.startActivityStep(ctx, input.GetJobId(), stepGoPayPaymentPrepareLink, false, true)
+	if err != nil {
+		return output, err
+	}
+	output, err = s.prepareGoPayPaymentLink(ctx, step, input)
+	if err != nil {
+		return output, step.complete(protoDataMap(output.GetData()), err)
+	}
+	return output, step.complete(protoDataMap(output.GetData()), nil)
+}
+
 func (s *Server) GoPayPaymentStartActivity(ctx context.Context, input GoPayActivityInput) (GoPayPaymentStartOutput, error) {
 	output := GoPayPaymentStartOutput{}
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepGoPayPayment, "starting gopay payment", goPayPaymentHeartbeatFields(input))
+	defer stopHeartbeat()
+
 	step, err := s.startActivityStep(ctx, input.GetJobId(), stepGoPayPayment, false, true)
 	if err != nil {
 		return output, err
@@ -58,6 +122,14 @@ func (s *Server) GoPayPaymentStartActivity(ctx context.Context, input GoPayActiv
 }
 
 func (s *Server) GoPayPaymentCompleteActivity(ctx context.Context, input GoPayPaymentCompleteInput) (GoPayActivityOutput, error) {
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepGoPayPayment, "completing gopay payment", map[string]any{
+		"account_id_present": input.GetAccountId() != "",
+		"flow_id_present":    input.GetFlowId() != "",
+		"otp_source":         input.GetOtpSource(),
+		"use_account_token":  input.GetUseAccountToken(),
+	})
+	defer stopHeartbeat()
+
 	step := s.activityStep(ctx, input.GetJobId(), stepGoPayPayment, false, true)
 	stateJSON := normalizeGoPayWorkflowStateJSON(input.GetStateJson())
 	data := protoDataMap(input.GetData())
@@ -86,11 +158,75 @@ func (s *Server) GoPayPaymentCompleteActivity(ctx context.Context, input GoPayPa
 		}
 	}
 
-	result, stateJSON, err := s.completeGoPayPayment(ctx, step, stateJSON, input.GetFlowId(), otp, input.GetUseAccountToken(), input.GetPin(), data)
+	result, stateJSON, err := s.completeGoPayPayment(ctx, step, stateJSON, input.GetFlowId(), otp, input.GetUseAccountToken(), input.GetPin(), input.GetWaitForManualConfirmation(), data)
 	if err != nil {
 		return GoPayActivityOutput{Data: protoData(data), StateJson: stateJSON}, s.completeGoPayPaymentStep(ctx, input.GetJobId(), input.GetAccountId(), data, err)
 	}
 
+	settled := result.GetSuccess() && !result.GetAwaitingManualConfirmation() && result.GetChargeRef() != ""
+	data["payment_settled"] = settled
+	data["payment_async_pending"] = false
+	output := GoPayActivityOutput{
+		ChargeRef:                  result.GetChargeRef(),
+		SnapToken:                  result.GetSnapToken(),
+		PlusTrialEligible:          settled,
+		PlusTrialChecked:           settled,
+		PlusActive:                 settled,
+		AwaitingManualConfirmation: result.GetAwaitingManualConfirmation(),
+		FlowId:                     input.GetFlowId(),
+		Data:                       protoData(data),
+		StateJson:                  stateJSON,
+	}
+	if result.GetAwaitingManualConfirmation() {
+		step.progress("waiting for manual qris payment confirmation", map[string]any{
+			"charge_ref": result.GetChargeRef(),
+			"qr_present": result.GetQrString() != "" || result.GetQrCodeUrl() != "",
+		})
+		step.update(data)
+		return output, nil
+	}
+	return output, step.complete(data, nil)
+}
+
+func (s *Server) GoPayPaymentManualConfirmActivity(ctx context.Context, input GoPayPaymentManualConfirmInput) (GoPayActivityOutput, error) {
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepGoPayPayment, "confirming manual gopay payment", map[string]any{
+		"account_id_present": input.GetAccountId() != "",
+		"flow_id_present":    input.GetFlowId() != "",
+	})
+	defer stopHeartbeat()
+
+	step := s.activityStep(ctx, input.GetJobId(), stepGoPayPayment, false, true)
+	stateJSON := normalizeGoPayWorkflowStateJSON(input.GetStateJson())
+	data := protoDataMap(input.GetData())
+	if data == nil {
+		data = map[string]any{}
+	}
+	flowID := strings.TrimSpace(input.GetFlowId())
+	if flowID == "" {
+		err := fmt.Errorf("flow_id is required")
+		data["manual_payment_confirmation"] = map[string]any{"required": true, "confirmed": false, "error_message": err.Error()}
+		return GoPayActivityOutput{Data: protoData(data), StateJson: stateJSON}, s.completeGoPayPaymentStep(ctx, input.GetJobId(), input.GetAccountId(), data, err)
+	}
+	step.progress("confirming manual qris payment", map[string]any{"flow_id_present": true})
+	result, err := s.paymentClient.ConfirmGoPayPayment(ctx, &pb.ConfirmGoPayPaymentRequest{FlowId: flowID})
+	data["payment_confirm"] = paymentResultData(result)
+	data["payment_result_present"] = result != nil
+	if err != nil {
+		return GoPayActivityOutput{Data: protoData(data), StateJson: stateJSON}, s.completeGoPayPaymentStep(ctx, input.GetJobId(), input.GetAccountId(), data, err)
+	}
+	if result == nil {
+		err = fmt.Errorf("payment confirm returned empty response")
+		return GoPayActivityOutput{Data: protoData(data), StateJson: stateJSON}, s.completeGoPayPaymentStep(ctx, input.GetJobId(), input.GetAccountId(), data, err)
+	}
+	if !result.GetSuccess() {
+		err = fmt.Errorf("payment confirm failed: %s", result.GetErrorMessage())
+		return GoPayActivityOutput{Data: protoData(data), StateJson: stateJSON}, s.completeGoPayPaymentStep(ctx, input.GetJobId(), input.GetAccountId(), data, err)
+	}
+	data["manual_payment_confirmation"] = map[string]any{
+		"required":      true,
+		"auto_expected": false,
+		"confirmed":     true,
+	}
 	output := GoPayActivityOutput{
 		ChargeRef:         result.GetChargeRef(),
 		SnapToken:         result.GetSnapToken(),
@@ -121,6 +257,12 @@ func (s *Server) paymentActivityAccount(ctx context.Context, input *GoPayActivit
 
 func (s *Server) GoPayPaymentOTPResendActivity(ctx context.Context, input GoPayPaymentOTPResendInput) (GoPayPaymentOTPResendOutput, error) {
 	output := GoPayPaymentOTPResendOutput{FlowId: strings.TrimSpace(input.GetFlowId())}
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepGoPayPayment, "resending gopay payment otp", map[string]any{
+		"account_id_present": input.GetAccountId() != "",
+		"flow_id_present":    output.GetFlowId() != "",
+	})
+	defer stopHeartbeat()
+
 	step := s.activityStep(ctx, input.GetJobId(), stepGoPayPayment, false, true)
 	data := protoDataMap(input.GetData())
 	if data == nil {
@@ -190,8 +332,10 @@ func (s *Server) prepareGoPayPayment(ctx context.Context, step activityStep, inp
 		accessToken = strings.TrimSpace(account.GetAccessToken())
 	}
 	tokenization := strings.TrimSpace(input.GetTokenization())
-	checkoutURL := strings.TrimSpace(input.GetCheckoutUrl())
-	checkoutSessionID := strings.TrimSpace(input.GetCheckoutSessionId())
+	suppliedCheckoutURL := strings.TrimSpace(input.GetCheckoutUrl())
+	suppliedCheckoutSessionID := strings.TrimSpace(input.GetCheckoutSessionId())
+	checkoutURL := ""
+	checkoutSessionID := ""
 	gopayPhone := normalizeIndonesiaPhone(input.GetGopayPhone())
 	stateJSON := normalizeGoPayWorkflowStateJSON(input.GetStateJson())
 
@@ -200,8 +344,9 @@ func (s *Server) prepareGoPayPayment(ctx context.Context, step activityStep, inp
 		"session_token_present":  sessionToken != "",
 		"access_token_present":   accessToken != "",
 		"tokenization":           tokenization,
-		"checkout_url_present":   checkoutURL != "",
-		"checkout_session_id":    checkoutSessionID,
+		"checkout_url_present":   suppliedCheckoutURL != "",
+		"checkout_session_id":    suppliedCheckoutSessionID,
+		"checkout_reuse_blocked": suppliedCheckoutURL != "" || suppliedCheckoutSessionID != "",
 		"gopay_phone_present":    gopayPhone != "",
 		"prepared_flow_present":  false,
 		"payment_prepare_called": false,
@@ -219,10 +364,10 @@ func (s *Server) prepareGoPayPayment(ctx context.Context, step activityStep, inp
 	}
 
 	step.progress("preparing gopay payment before user link", map[string]any{
-		"tokenization":         tokenization,
-		"checkout_url_present": checkoutURL != "",
-		"checkout_session_id":  checkoutSessionID,
-		"gopay_phone_present":  gopayPhone != "",
+		"tokenization":              tokenization,
+		"supplied_checkout_present": suppliedCheckoutURL != "" || suppliedCheckoutSessionID != "",
+		"checkout_reuse_blocked":    suppliedCheckoutURL != "" || suppliedCheckoutSessionID != "",
+		"gopay_phone_present":       gopayPhone != "",
 	})
 	prepared, err := s.paymentClient.PrepareGoPay(ctx, &pb.PrepareGoPayRequest{
 		Credential:        paymentCredential(sessionToken, accessToken),
@@ -235,10 +380,7 @@ func (s *Server) prepareGoPayPayment(ctx context.Context, step activityStep, inp
 	data["payment_prepare_called"] = true
 	data["payment_prepare"] = paymentPrepareData(prepared)
 	if prepared != nil {
-		output.FlowId = prepared.GetFlowId()
-		output.SnapToken = prepared.GetSnapToken()
-		output.CheckoutUrl = prepared.GetCheckoutUrl()
-		output.CheckoutSessionId = prepared.GetCheckoutSessionId()
+		applyGoPayPaymentPrepareResponse(&output, prepared)
 		data["prepared_flow_present"] = output.GetFlowId() != ""
 	}
 	step.progress("gopay payment prepared", map[string]any{
@@ -261,6 +403,198 @@ func (s *Server) prepareGoPayPayment(ctx context.Context, step activityStep, inp
 	return output, nil
 }
 
+func (s *Server) prepareGoPayPaymentCheckout(ctx context.Context, step activityStep, input GoPayActivityInput, account *pb.Account) (output GoPayPaymentPrepareOutput, err error) {
+	sessionToken := strings.TrimSpace(input.GetSessionToken())
+	if sessionToken == "" {
+		sessionToken = strings.TrimSpace(account.GetSessionToken())
+	}
+	accessToken := strings.TrimSpace(input.GetAccessToken())
+	if accessToken == "" {
+		accessToken = strings.TrimSpace(account.GetAccessToken())
+	}
+	tokenization := strings.TrimSpace(input.GetTokenization())
+	suppliedCheckoutURL := strings.TrimSpace(input.GetCheckoutUrl())
+	suppliedCheckoutSessionID := strings.TrimSpace(input.GetCheckoutSessionId())
+	gopayPhone := normalizeIndonesiaPhone(input.GetGopayPhone())
+	stateJSON := normalizeGoPayWorkflowStateJSON(input.GetStateJson())
+
+	data := map[string]any{
+		"stage":                  "checkout",
+		"account_id":             account.GetAccountId(),
+		"session_token_present":  sessionToken != "",
+		"access_token_present":   accessToken != "",
+		"tokenization":           tokenization,
+		"checkout_url_present":   suppliedCheckoutURL != "",
+		"checkout_session_id":    suppliedCheckoutSessionID,
+		"checkout_reuse_blocked": suppliedCheckoutURL != "" || suppliedCheckoutSessionID != "",
+		"gopay_phone_present":    gopayPhone != "",
+		"payment_prepare_called": false,
+		"prepared_flow_present":  false,
+	}
+	output = GoPayPaymentPrepareOutput{
+		UseAccountToken: false,
+		StateJson:       stateJSON,
+		Stage:           "checkout",
+	}
+	defer func() {
+		output.StateJson = stateJSON
+		output.Data = protoData(data)
+	}()
+	if sessionToken == "" && accessToken == "" {
+		return output, fmt.Errorf("session_token or access_token is required")
+	}
+
+	step.progress("creating gopay payment checkout", map[string]any{
+		"tokenization":              tokenization,
+		"supplied_checkout_present": suppliedCheckoutURL != "" || suppliedCheckoutSessionID != "",
+		"checkout_reuse_blocked":    suppliedCheckoutURL != "" || suppliedCheckoutSessionID != "",
+		"gopay_phone_present":       gopayPhone != "",
+	})
+	prepared, err := s.paymentClient.PrepareGoPayCheckout(ctx, &pb.PrepareGoPayCheckoutRequest{
+		Credential:        paymentCredential(sessionToken, accessToken),
+		Tokenization:      tokenization,
+		CheckoutUrl:       "",
+		CheckoutSessionId: "",
+		GopayPhone:        gopayPhone,
+		GopayCountryCode:  input.GetCountryCode(),
+	})
+	data["payment_prepare_called"] = true
+	data["payment_prepare_checkout"] = paymentPrepareData(prepared)
+	applyGoPayPaymentPrepareResponse(&output, prepared)
+	data["prepared_flow_present"] = output.GetFlowId() != ""
+	step.progress("gopay payment checkout created", map[string]any{
+		"success":             prepared != nil && prepared.GetSuccess(),
+		"flow_id_present":     output.GetFlowId() != "",
+		"checkout_session_id": output.GetCheckoutSessionId(),
+		"checkout_attempt":    output.GetCheckoutAttempt(),
+	})
+	if err != nil {
+		return output, err
+	}
+	if prepared == nil {
+		return output, fmt.Errorf("payment prepare checkout returned empty response")
+	}
+	if !prepared.GetSuccess() {
+		return output, fmt.Errorf("payment prepare checkout failed: %s", prepared.GetErrorMessage())
+	}
+	if output.GetFlowId() == "" {
+		return output, fmt.Errorf("payment prepare checkout returned empty flow_id")
+	}
+	return output, nil
+}
+
+func (s *Server) refreshGoPayPaymentCheckout(ctx context.Context, step activityStep, input GoPayActivityInput) (output GoPayPaymentPrepareOutput, err error) {
+	flowID := strings.TrimSpace(input.GetPreparedFlowId())
+	stateJSON := normalizeGoPayWorkflowStateJSON(input.GetStateJson())
+	data := map[string]any{
+		"stage":                 "checkout_refresh",
+		"prepared_flow_present": flowID != "",
+	}
+	output = GoPayPaymentPrepareOutput{
+		FlowId:    flowID,
+		StateJson: stateJSON,
+		Stage:     "checkout_refresh",
+	}
+	defer func() {
+		output.StateJson = stateJSON
+		output.Data = protoData(data)
+	}()
+	if flowID == "" {
+		return output, fmt.Errorf("prepared_flow_id is required")
+	}
+
+	step.progress("refreshing gopay payment checkout", map[string]any{
+		"flow_id_present": true,
+	})
+	prepared, err := s.paymentClient.RefreshPrepareGoPayCheckout(ctx, &pb.RefreshPrepareGoPayCheckoutRequest{FlowId: flowID})
+	data["payment_prepare_checkout_refresh"] = paymentPrepareData(prepared)
+	applyGoPayPaymentPrepareResponse(&output, prepared)
+	step.progress("gopay payment checkout refreshed", map[string]any{
+		"success":             prepared != nil && prepared.GetSuccess(),
+		"flow_id_present":     output.GetFlowId() != "",
+		"checkout_session_id": output.GetCheckoutSessionId(),
+		"checkout_attempt":    output.GetCheckoutAttempt(),
+	})
+	if err != nil {
+		return output, err
+	}
+	if prepared == nil {
+		return output, fmt.Errorf("payment prepare checkout refresh returned empty response")
+	}
+	if !prepared.GetSuccess() {
+		return output, fmt.Errorf("payment prepare checkout refresh failed: %s", prepared.GetErrorMessage())
+	}
+	return output, nil
+}
+
+func (s *Server) prepareGoPayPaymentLink(ctx context.Context, step activityStep, input GoPayActivityInput) (output GoPayPaymentPrepareOutput, err error) {
+	flowID := strings.TrimSpace(input.GetPreparedFlowId())
+	stateJSON := normalizeGoPayWorkflowStateJSON(input.GetStateJson())
+	data := map[string]any{
+		"stage":                 "link",
+		"prepared_flow_present": flowID != "",
+	}
+	output = GoPayPaymentPrepareOutput{
+		FlowId:    flowID,
+		StateJson: stateJSON,
+		Stage:     "link",
+	}
+	defer func() {
+		output.StateJson = stateJSON
+		output.Data = protoData(data)
+	}()
+	if flowID == "" {
+		return output, fmt.Errorf("prepared_flow_id is required")
+	}
+
+	step.progress("linking gopay payment checkout", map[string]any{
+		"flow_id_present": true,
+	})
+	prepared, err := s.paymentClient.PrepareGoPayLink(ctx, &pb.PrepareGoPayLinkRequest{FlowId: flowID})
+	data["payment_prepare_link"] = paymentPrepareData(prepared)
+	applyGoPayPaymentPrepareResponse(&output, prepared)
+	step.progress("gopay payment checkout linked", map[string]any{
+		"success":                  prepared != nil && prepared.GetSuccess(),
+		"flow_id_present":          output.GetFlowId() != "",
+		"snap_token_present":       output.GetSnapToken() != "",
+		"retryable_fresh_checkout": output.GetRetryableFreshCheckout(),
+		"checkout_attempt":         output.GetCheckoutAttempt(),
+	})
+	if err != nil {
+		return output, err
+	}
+	if prepared == nil {
+		return output, fmt.Errorf("payment prepare link returned empty response")
+	}
+	if output.GetRetryableFreshCheckout() {
+		data["fresh_checkout_required"] = true
+		return output, nil
+	}
+	if !prepared.GetSuccess() {
+		return output, fmt.Errorf("payment prepare link failed: %s", prepared.GetErrorMessage())
+	}
+	if output.GetFlowId() == "" {
+		return output, fmt.Errorf("payment prepare link returned empty flow_id")
+	}
+	if output.GetSnapToken() == "" {
+		return output, fmt.Errorf("payment prepare link returned empty snap_token")
+	}
+	return output, nil
+}
+
+func applyGoPayPaymentPrepareResponse(output *GoPayPaymentPrepareOutput, resp *pb.PrepareGoPayResponse) {
+	if output == nil || resp == nil {
+		return
+	}
+	output.FlowId = resp.GetFlowId()
+	output.SnapToken = resp.GetSnapToken()
+	output.CheckoutUrl = resp.GetCheckoutUrl()
+	output.CheckoutSessionId = resp.GetCheckoutSessionId()
+	output.RetryableFreshCheckout = resp.GetRetryableFreshCheckout()
+	output.CheckoutAttempt = resp.GetCheckoutAttempt()
+	output.Stage = resp.GetStage()
+}
+
 func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input GoPayActivityInput, account *pb.Account) (output GoPayPaymentStartOutput, err error) {
 	sessionToken := strings.TrimSpace(input.GetSessionToken())
 	if sessionToken == "" {
@@ -280,6 +614,7 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 	preparedFlowID := strings.TrimSpace(input.GetPreparedFlowId())
 	requestedPhone := normalizeIndonesiaPhone(input.GetGopayPhone())
 	accountPhone := ""
+	qrisPayment := strings.EqualFold(tokenization, "qris")
 
 	data := map[string]any{
 		"account_id":             account.GetAccountId(),
@@ -407,7 +742,7 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 		if accountPhone == "" {
 			accountPhone = requestedPhone
 		}
-		if accountPhone == "" {
+		if accountPhone == "" && !qrisPayment {
 			err := fmt.Errorf("gopay phone is required for prepared payment")
 			data["gopay_phone"] = map[string]any{
 				"present":       false,
@@ -416,7 +751,7 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 			return output, err
 		}
 		data["gopay_phone"] = map[string]any{
-			"present": true,
+			"present": accountPhone != "",
 			"phone":   accountPhone,
 		}
 		started, err = s.paymentClient.StartPreparedGoPay(ctx, &pb.StartPreparedGoPayRequest{
@@ -468,7 +803,7 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 	return output, nil
 }
 
-func (s *Server) completeGoPayPayment(ctx context.Context, step activityStep, stateJSON, flowID, otp string, useAccountToken bool, pin string, data map[string]any) (*pb.GoPayResponse, string, error) {
+func (s *Server) completeGoPayPayment(ctx context.Context, step activityStep, stateJSON, flowID, otp string, useAccountToken bool, pin string, waitForManual bool, data map[string]any) (*pb.GoPayResponse, string, error) {
 	stateJSON = normalizeGoPayWorkflowStateJSON(stateJSON)
 	completed := false
 	defer func() {
@@ -499,8 +834,12 @@ func (s *Server) completeGoPayPayment(ctx context.Context, step activityStep, st
 	if result.GetAwaitingManualConfirmation() {
 		data["manual_payment_confirmation"] = map[string]any{
 			"required":      true,
-			"auto_expected": true,
+			"auto_expected": !waitForManual,
 			"confirmed":     false,
+		}
+		if waitForManual {
+			completed = true
+			return result, stateJSON, nil
 		}
 		if !useAccountToken {
 			return nil, stateJSON, fmt.Errorf("payment requires manual confirmation; QR autopay did not settle automatically")
@@ -508,8 +847,8 @@ func (s *Server) completeGoPayPayment(ctx context.Context, step activityStep, st
 
 		replayResp, nextStateJSON, replayErr := s.replayGoPayPaymentLink(ctx, stateJSON, result, pin)
 		stateJSON = nextStateJSON
-		data["gopay_link_payment"] = replayLinkPaymentData(replayResp, replayErr)
-		step.progress("gopay link payment replayed", map[string]any{
+		data["gopay_payment_replay"] = replayLinkPaymentData(replayResp, replayErr)
+		step.progress("gopay payment replayed", map[string]any{
 			"success": replayResp != nil && replayResp.GetSuccess(),
 		})
 		if replayErr != nil {
@@ -578,4 +917,20 @@ func isStalePreparedPaymentFlow(resp *pb.StartGoPayResponse, err error) bool {
 	message = strings.ToLower(message)
 	return strings.Contains(message, "prepared payment flow not found") ||
 		strings.Contains(message, "payment flow not found")
+}
+
+func goPayPaymentHeartbeatFields(input GoPayActivityInput) map[string]any {
+	return map[string]any{
+		"account_id_present":          strings.TrimSpace(input.GetAccountId()) != "",
+		"session_token_present":       strings.TrimSpace(input.GetSessionToken()) != "",
+		"access_token_present":        strings.TrimSpace(input.GetAccessToken()) != "",
+		"use_account_token":           input.GetUseAccountToken(),
+		"tokenization":                strings.TrimSpace(input.GetTokenization()),
+		"checkout_url_present":        strings.TrimSpace(input.GetCheckoutUrl()) != "",
+		"checkout_session_id_present": strings.TrimSpace(input.GetCheckoutSessionId()) != "",
+		"prepared_flow_present":       strings.TrimSpace(input.GetPreparedFlowId()) != "",
+		"gopay_phone_present":         strings.TrimSpace(input.GetGopayPhone()) != "",
+		"skip_account_balance_check":  input.GetSkipAccountBalanceCheck(),
+		"country_code_present":        strings.TrimSpace(input.GetCountryCode()) != "",
+	}
 }

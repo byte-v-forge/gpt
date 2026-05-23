@@ -83,7 +83,44 @@ func (s *Server) GoPayAppChangePhoneGetNumberActivity(ctx context.Context, input
 				continue
 			}
 
-			checkResp, err := s.gopayClient.CheckPhone(ctx, &pb.CheckPhoneRequest{Phone: phone})
+			deviceProxy, err := s.gopayClient.GenerateDeviceProxy(ctx, &pb.GenerateDeviceProxyRequest{})
+			if err != nil {
+				if cancelErr := s.recordChangePhoneFailure(ctx, activationID, &failures, fmt.Sprintf("GenerateDeviceProxy: %v", err)); cancelErr != nil {
+					output.FailureCount = int32(failures)
+					data["failure_count"] = failures
+					data["error_message"] = cancelErr.Error()
+					return data, cancelErr
+				}
+				output.FailureCount = int32(failures)
+				data["failure_count"] = failures
+				continue
+			}
+			if deviceProxy == nil || !deviceProxy.GetSuccess() || strings.TrimSpace(deviceProxy.GetStateJson()) == "" {
+				reason := "GenerateDeviceProxy failed"
+				if deviceProxy != nil && deviceProxy.GetErrorMessage() != "" {
+					reason = fmt.Sprintf("%s: %s", reason, deviceProxy.GetErrorMessage())
+				}
+				if cancelErr := s.recordChangePhoneFailure(ctx, activationID, &failures, reason); cancelErr != nil {
+					output.FailureCount = int32(failures)
+					data["failure_count"] = failures
+					data["error_message"] = cancelErr.Error()
+					return data, cancelErr
+				}
+				output.FailureCount = int32(failures)
+				data["failure_count"] = failures
+				continue
+			}
+			data["check_phone_device_proxy"] = map[string]any{
+				"proxy_slot":          deviceProxy.GetProxySlot(),
+				"dynamic_egress_size": deviceProxy.GetDynamicEgressSize(),
+				"proxy_hash":          deviceProxy.GetProxyHash(),
+				"device_fingerprint":  deviceProxy.GetDeviceFingerprint(),
+			}
+
+			checkResp, err := s.gopayClient.CheckPhone(ctx, &pb.CheckPhoneRequest{
+				Phone:     phone,
+				StateJson: deviceProxy.GetStateJson(),
+			})
 			if err != nil {
 				if cancelErr := s.recordChangePhoneFailure(ctx, activationID, &failures, fmt.Sprintf("CheckPhone: %v", err)); cancelErr != nil {
 					output.FailureCount = int32(failures)
@@ -97,6 +134,10 @@ func (s *Server) GoPayAppChangePhoneGetNumberActivity(ctx context.Context, input
 			}
 			status := checkPhoneStatus(checkResp)
 			data["phone_status"] = status
+			if checkResp != nil {
+				data["check_phone_proxy_hash"] = checkResp.GetProxyHash()
+				data["check_phone_device_fingerprint"] = checkResp.GetDeviceFingerprint()
+			}
 			step.progress("phone availability checked", map[string]any{
 				"activation_id": activationID,
 				"status":        status,

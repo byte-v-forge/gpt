@@ -18,16 +18,20 @@ const (
 	sessionCookieChunkSize    = 4096 - 163
 )
 
-func (s *Server) newChatGPTSession(ctx context.Context, cred credential) (*httpSession, error) {
+func (s *Server) newChatGPTSession(ctx context.Context, cred credential, fingerprints ...browserFingerprint) (*httpSession, error) {
 	if cred.empty() {
 		return nil, fmt.Errorf("auth missing: need session_token or access_token")
 	}
-	session, err := newHTTPSession(s.cfg.CheckoutProxyURL)
+	fingerprint := randomPaymentBrowserFingerprint(s.cfg.BrowserLocale)
+	if len(fingerprints) > 0 {
+		fingerprint = fingerprints[0].withFallback(s.cfg.BrowserLocale)
+	}
+	session, err := newHTTPSession(s.cfg.CheckoutProxyURL, fingerprint)
 	if err != nil {
 		return nil, err
 	}
 	deviceID := uuid.NewString()
-	setChatGPTBrowserHeaders(session, deviceID)
+	setChatGPTBrowserHeaders(session, deviceID, fingerprint)
 	session.headers.Set("Content-Type", "application/json")
 	if cred.accessToken != "" {
 		session.headers.Set("Authorization", "Bearer "+cred.accessToken)
@@ -51,20 +55,20 @@ func (s *Server) newChatGPTSession(ctx context.Context, cred credential) (*httpS
 	return session, nil
 }
 
-func setChatGPTBrowserHeaders(session *httpSession, deviceID string) {
+func setChatGPTBrowserHeaders(session *httpSession, deviceID string, fingerprints ...browserFingerprint) {
 	if session == nil {
 		return
 	}
-	session.headers.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36")
+	fingerprint := session.fingerprint.withFallback(defaultBrowserLocale)
+	if len(fingerprints) > 0 {
+		fingerprint = fingerprints[0].withFallback(defaultBrowserLocale)
+	}
+	fingerprint.applyBrowserHeaders(session.headers)
 	session.headers.Set("Accept", "*/*")
-	session.headers.Set("Accept-Language", "en-US,en;q=0.9")
 	session.headers.Set("Origin", "https://chatgpt.com")
 	session.headers.Set("Referer", "https://chatgpt.com/")
 	session.headers.Set("oai-device-id", strings.TrimSpace(deviceID))
-	session.headers.Set("oai-language", "en-US")
-	session.headers.Set("sec-ch-ua", `"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"`)
-	session.headers.Set("sec-ch-ua-mobile", "?0")
-	session.headers.Set("sec-ch-ua-platform", `"Windows"`)
+	session.headers.Set("oai-language", fingerprint.OAILanguage)
 	session.headers.Set("sec-fetch-dest", "empty")
 	session.headers.Set("sec-fetch-mode", "cors")
 	session.headers.Set("sec-fetch-site", "same-origin")
@@ -72,11 +76,32 @@ func setChatGPTBrowserHeaders(session *httpSession, deviceID string) {
 
 func chatGPTCookieHeader(sessionToken, deviceID string) string {
 	parts := sessionCookieParts(sessionToken)
-	deviceID = strings.TrimSpace(deviceID)
-	if deviceID != "" {
+	deviceID = firstNonEmpty(cookiePartValue(parts, "oai-did"), strings.TrimSpace(deviceID))
+	if deviceID != "" && !hasCookiePart(parts, "oai-did") {
 		parts = append(parts, "oai-did="+deviceID)
 	}
 	return strings.Join(parts, "; ")
+}
+
+func hasCookiePart(parts []string, name string) bool {
+	return cookiePartValue(parts, name) != ""
+}
+
+func cookiePartValue(parts []string, name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	for _, part := range parts {
+		if !strings.Contains(part, "=") {
+			continue
+		}
+		fields := strings.SplitN(part, "=", 2)
+		if strings.TrimSpace(fields[0]) == name {
+			return strings.TrimSpace(fields[1])
+		}
+	}
+	return ""
 }
 
 func sessionCookieParts(value string) []string {
@@ -91,16 +116,26 @@ func sessionCookieParts(value string) []string {
 		raw = token
 	}
 	if strings.Contains(raw, "=") {
-		var found []string
+		var parts []string
+		foundSession := false
+		seen := map[string]bool{}
 		for _, chunk := range strings.Split(raw, ";") {
 			part := strings.Trim(strings.TrimSpace(chunk), `'"`)
+			if !strings.Contains(part, "=") {
+				continue
+			}
 			name := strings.TrimSpace(strings.SplitN(part, "=", 2)[0])
-			if strings.Contains(part, "=") && sessionCookieNameMatches(name) {
-				found = append(found, part)
+			if name == "" || seen[name] {
+				continue
+			}
+			seen[name] = true
+			parts = append(parts, part)
+			if sessionCookieNameMatches(name) {
+				foundSession = true
 			}
 		}
-		if len(found) > 0 {
-			return found
+		if foundSession {
+			return parts
 		}
 	}
 	token := strings.Trim(raw, `'"`)

@@ -1,4 +1,4 @@
-import { Inbox, KeyRound, Search } from 'lucide-react';
+import { Inbox, KeyRound, Search, Zap } from 'lucide-react';
 import { ActionButtonGroup, KVList } from '@/dashboard/module-kit';
 import type { ActionButtonDescriptor, KVDescriptor } from '@/dashboard/module-kit';
 import { MailboxOtpPanel, maskEmail } from '@/dashboard/modules/mailbox/sdk';
@@ -9,10 +9,10 @@ import {
 import { AccountSignalBadge } from './account-badges';
 import { ActivationChannelEditor, TokenEditor } from './account-detail-editors';
 import { accountInboxHint } from './account-mail-utils';
-import { accountSignalText, canLoginSession, canProbeAccount, canRefreshAccessToken, loginActionHint, loginActionLabel, probeAccountHint } from './account-utils';
-import type { Account, AccountMailboxContext, LatestOtp } from './types';
+import { accountSignalText, canGoPayPayment, canLoginSession, canProbeAccount, canRefreshAccessToken, loginActionHint, loginActionLabel, probeAccountHint } from './account-utils';
+import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
 
-export function AccountDetails({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, activationChannel, onCopy, onFetchInbox, onSessionSave, onAccessSave, onActivationChannelSave, onProbeAccount, onLogin, onRefreshAccessToken }: {
+export function AccountDetails({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, activationChannel, onCopy, onFetchInbox, onSessionSave, onAccessSave, onActivationChannelSave, onProbeAccount, onLogin, onGoPayPayment, onRefreshAccessToken }: {
   account: Account;
   showSecrets: boolean;
   busy: boolean;
@@ -28,9 +28,26 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
   onActivationChannelSave: (account: Account, activationChannel: string) => Promise<void>;
   onProbeAccount: (account: Account) => void;
   onLogin: (account: Account) => void;
+  onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onRefreshAccessToken: (account: Account) => Promise<void>;
 }) {
   const accountActions: ActionButtonDescriptor[] = [{
+    id: 'gopay-app-wa-payment',
+    visible: canGoPayPayment(account),
+    label: 'Gopay App-WA',
+    hint: '走 GoPay App 支付流程，OTP 使用 WA 通道',
+    icon: <Zap size={14} />,
+    disabled: busy,
+    onClick: () => onGoPayPayment(account, 'app_wa'),
+  }, {
+    id: 'gopay-wa-payment',
+    visible: canGoPayPayment(account),
+    label: '纯WA支付',
+    hint: '只走 GoPay WA 链接支付，不执行 GoPay App 注册/登录/加余额',
+    icon: <Zap size={14} />,
+    disabled: busy,
+    onClick: () => onGoPayPayment(account, 'wa'),
+  }, {
     id: 'refresh-access-token',
     visible: canRefreshAccessToken(account),
     label: refreshingAccessToken ? '获取中' : '自动获取 Access Token',

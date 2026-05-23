@@ -41,6 +41,8 @@ func goPayStatusSnapshot(resp *pb.StatusResponse, err error) *pb.StatusResponse 
 		snapshot.BalanceAmount = resp.GetBalanceAmount()
 		snapshot.HasMinBalance = resp.GetHasMinBalance()
 		snapshot.BalanceCurrency = resp.GetBalanceCurrency()
+		snapshot.PinSetup = resp.GetPinSetup()
+		snapshot.PinSetupAtUnix = resp.GetPinSetupAtUnix()
 	}
 	if err != nil {
 		snapshot.ErrorMessage = err.Error()
@@ -125,6 +127,10 @@ func goPayStatusSnapshotData(snapshot *pb.StatusResponse) map[string]any {
 			data["balance_currency"] = snapshot.GetBalanceCurrency()
 		}
 	}
+	data["pin_setup"] = snapshot.GetPinSetup()
+	if snapshot.GetPinSetupAtUnix() != 0 {
+		data["pin_setup_at_unix"] = snapshot.GetPinSetupAtUnix()
+	}
 	return data
 }
 
@@ -166,5 +172,7 @@ func goPayStatusSnapshotEmpty(snapshot *pb.StatusResponse) bool {
 		snapshot.GetErrorMessage() == "" &&
 		snapshot.GetBalanceAmount() == 0 &&
 		!snapshot.GetHasMinBalance() &&
-		snapshot.GetBalanceCurrency() == ""
+		snapshot.GetBalanceCurrency() == "" &&
+		!snapshot.GetPinSetup() &&
+		snapshot.GetPinSetupAtUnix() == 0
 }

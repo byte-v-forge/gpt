@@ -5,6 +5,7 @@
 
 .accountsList .recordActions.rowActions {
   width: 100%;
+  grid-template-columns: minmax(0, 1fr);
   justify-content: flex-start;
   justify-items: stretch;
 }

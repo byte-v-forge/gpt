@@ -159,5 +159,8 @@
 .accountMetaTag strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .accountMetaTag.good { color: var(--success); background: var(--success-soft); border-color: #bfe7cc; }
 .accountMetaTag.neutral { color: #475569; background: #f8fafc; border-color: #e2e8f0; }
-.accountChannelTag { max-width: 118px; color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
-.accountPhoneTag { max-width: 92px; }
+.accountMetaTag.iconOnly { justify-content: center; padding: 0; }
+.accountMetaTag.iconOnly .paymentChannelIcon { min-width: 0; gap: 3px; }
+.accountChannelTag { color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
+.accountChannelTag.iconOnly { width: 43px; max-width: 43px; flex: 0 0 43px; }
+.accountPhoneTag.iconOnly { width: 25px; max-width: 25px; flex: 0 0 25px; }

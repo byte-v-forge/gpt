@@ -1,4 +1,4 @@
-import { MessageSquareText, Phone, PhoneOff } from 'lucide-react';
+import { MessageSquareText, Phone, PhoneOff, QrCode } from 'lucide-react';
 import { accountSignalText, accountSignalTone } from './account-utils';
 import type { AccountCodexPhoneState } from './account-utils';
 import { BrandIcon, GoPayWalletIcon } from './brand-icons';
@@ -25,15 +25,23 @@ export function AccountSignalBadge({ account, compact }: { account: Account; com
 
 export function AccountChannelTag({ channel }: { channel: string }) {
   if (!channel || channel === '-') return null;
-  return <span className="accountMetaTag accountChannelTag" title={`渠道: ${channel}`}><em>渠道</em><strong>{channel}</strong></span>;
+  return <span className="accountMetaTag accountChannelTag iconOnly" title={`渠道: ${channel}`} aria-label={`渠道: ${channel}`}>{channelIcon(channel)}</span>;
 }
 
 export function AccountCodexPhoneTag({ state }: { state: AccountCodexPhoneState }) {
   const Icon = state.confirmed ? Phone : PhoneOff;
   return (
-    <span className={`accountMetaTag accountPhoneTag ${state.confirmed ? 'good' : 'neutral'}`} title={state.title}>
+    <span className={`accountMetaTag accountPhoneTag iconOnly ${state.confirmed ? 'good' : 'neutral'}`} title={state.title} aria-label={state.label}>
       <Icon size={13} />
-      <strong>{state.label}</strong>
     </span>
   );
+}
+
+function channelIcon(channel: string) {
+  const normalized = channel.toLowerCase();
+  if (normalized.includes('qris')) return <QrCode size={14} />;
+  if (normalized.includes('sms')) return <PaymentChannelIcon channel="sms" />;
+  if (normalized.includes('app') && normalized.includes('wa')) return <PaymentChannelIcon channel="app_wa" />;
+  if (normalized.includes('wa') || normalized.includes('whatsapp')) return <PaymentChannelIcon channel="wa" />;
+  return <GoPayWalletIcon size={15} />;
 }

@@ -36,7 +36,8 @@ export type AccountCodexPhoneState = {
   title: string;
 };
 
-export function accountCodexPhoneState(account: Account, jobs: Job[]): AccountCodexPhoneState {
+export function accountCodexPhoneState(account: Account, jobs: Job[], confirmedOverride?: boolean): AccountCodexPhoneState {
+  if (typeof confirmedOverride === 'boolean') return codexPhoneState(confirmedOverride);
   const accountState = account as Account & { codex_phone_confirmed?: boolean; codex_phone_label?: string };
   if (accountState.codex_phone_confirmed === true) {
     return codexPhoneState(true, stringValue(accountState.codex_phone_label));

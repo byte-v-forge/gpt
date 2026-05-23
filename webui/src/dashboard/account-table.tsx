@@ -1,4 +1,4 @@
-import { Copy, KeyRound, Phone, Play, Search, Trash2, Zap } from 'lucide-react';
+import { Copy, FileKey, KeyRound, Play, Search, Trash2, Zap } from 'lucide-react';
 import {
   IconActionButton,
   RecordActionButtons,
@@ -161,7 +161,7 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
   if (canRegister(account)) actions.push({ label: '注册账号', icon: <Play size={14} />, onClick: () => onRegister(account), disabled: busy, kind: 'primary' });
   if (canRefreshAccessToken(account)) actions.push({ label: refreshingAccessToken ? '获取中' : '获取 Access', icon: <KeyRound size={14} />, onClick: () => void onRefreshAccessToken(account), disabled: busy || refreshingAccessToken, kind: actions.length ? 'secondary' : 'primary' });
   if (canLoginSession(account)) actions.push({ label: loginActionLabel(account), icon: <KeyRound size={14} />, onClick: () => onLogin(account), disabled: busy, kind: actions.length ? 'secondary' : 'primary' });
-  if (canLoginSession(account)) actions.push({ label: 'Add Phone', icon: <Phone size={14} />, onClick: () => onCodexOAuthAddPhone(account), disabled: busy, kind: 'secondary' });
+  if (canLoginSession(account)) actions.push({ label: '生成 auth.json', icon: <FileKey size={14} />, onClick: () => onCodexOAuthAddPhone(account), disabled: busy, kind: 'secondary' });
   if (canProbeAccount(account)) actions.push({ label: '探测账号', icon: <Search size={14} />, onClick: () => onProbeAccount(account), disabled: busy, kind: 'secondary' });
   actions.push({ label: '删除账号', icon: <Trash2 size={14} />, onClick: () => onDelete(account), disabled: busy, kind: 'danger' });
 

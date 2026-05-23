@@ -1,4 +1,4 @@
-import { Inbox, KeyRound, Phone, Search, Zap } from 'lucide-react';
+import { FileKey, Inbox, KeyRound, Search, Zap } from 'lucide-react';
 import { ActionButtonGroup, KVList } from '@/dashboard/module-kit';
 import type { ActionButtonDescriptor, KVDescriptor } from '@/dashboard/module-kit';
 import { MailboxOtpPanel, maskEmail } from '@/dashboard/modules/mailbox/sdk';
@@ -44,9 +44,9 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
   }, {
     id: 'codex-oauth-add-phone',
     visible: canLoginSession(account),
-    label: 'Add Phone',
-    hint: '自动 OAuth 登录并给账号加手机号，产出 auth.json',
-    icon: <Phone size={14} />,
+    label: '生成 auth.json',
+    hint: '自动 OAuth 登录，必要时完成加手机号，产出 auth.json',
+    icon: <FileKey size={14} />,
     disabled: busy,
     onClick: () => onCodexOAuthAddPhone(account),
   }, {

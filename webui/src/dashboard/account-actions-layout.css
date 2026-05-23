@@ -15,7 +15,7 @@
 
 .splitRowActions {
   width: 100%;
-  justify-content: flex-start;
+  justify-content: space-between;
 }
 
 .rowActionsLeft,
@@ -27,8 +27,15 @@
   gap: 6px;
 }
 
-.rowActionsLeft { justify-content: flex-start; }
-.rowActionsRight { justify-content: flex-start; }
+.rowActionsLeft {
+  flex: 0 0 auto;
+  justify-content: flex-start;
+}
+
+.rowActionsRight {
+  flex: 1 1 auto;
+  justify-content: flex-end;
+}
 
 .activationAction {
   color: #78350f;

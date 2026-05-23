@@ -11,10 +11,10 @@ const (
 	defaultCodexOAuthTokenURL                = "https://auth.openai.com/oauth/token"
 	defaultCodexOAuthScope                   = "openid profile email offline_access api.connectors.read api.connectors.invoke"
 	defaultCodexOAuthPhoneLabel              = "codex-oauth-add-phone"
-	defaultCodexOAuthPhoneProfileKey         = "openai-th"
-	defaultCodexOAuthPhoneCountryISO2        = "TH"
-	defaultCodexOAuthPhoneCountryCallingCode = "66"
-	defaultCodexOAuthPhoneMaxPriceUSD        = "0.067"
+	defaultCodexOAuthPhoneProfileKey         = "openai-us"
+	defaultCodexOAuthPhoneCountryISO2        = "US"
+	defaultCodexOAuthPhoneCountryCallingCode = "1"
+	defaultCodexOAuthPhoneMaxPriceUSD        = "0.15"
 	defaultCodexOAuthPhoneMaxReuseCount      = 3
 	defaultCodexOAuthPhoneWaitSeconds        = 60
 	defaultCodexOAuthPhoneMinReuseRemaining  = 180

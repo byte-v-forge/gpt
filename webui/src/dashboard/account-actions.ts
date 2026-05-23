@@ -3,6 +3,7 @@ import { api, formatUnix, mask, useEventQueryCache, useQuery, useQueryClient, us
 import { latestOtpForEmail, maskEmail, normalizeUiEmail } from '@/dashboard/modules/mailbox/sdk';
 import { goPayPaymentActionLabel, goPayPaymentRequestChannel, isPureGoPayWAPaymentChannel } from './gopay-utils';
 import { mailboxContextForEmail } from './account-mail-utils';
+import { useGptAccountCleanupActions } from './account-cleanup-hook';
 import { accountInboxQueryKey, loadStoredInbox, mailboxEventURL, mergeInboxResponse } from './account-inbox-query';
 import type { MailboxEmailEvent } from './account-inbox-query';
 import type { GptAccountData } from './account-data';
@@ -38,6 +39,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
   const [inboxLoading, setInboxLoading] = useState(false);
   const [syncingMailboxes, setSyncingMailboxes] = useState(false);
   const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
+  const cleanup = useGptAccountCleanupActions(data, setSelectedAccountID, toast);
 
   useEffect(() => { if (data.loadError) toast.showError(data.loadError); }, [data.loadError, toast.showError]);
 
@@ -180,18 +182,11 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     }
   }
 
-  async function deleteAccount(account: Account) {
-    if (!window.confirm(`删除账号 ${account.email || account.account_id}？`)) return;
-    await api(`/api/accounts/${account.account_id}`, { method: 'DELETE' });
-    setSelectedAccountID((prev) => prev === account.account_id ? '' : prev);
-    toast.showOK('账号已删除');
-    await data.invalidate();
-  }
   function goPayAppInput() {
     return { phone: goPayProfile.data?.wa_phone || '', country_code: '+62', pin: goPayProfile.data?.pin || '' };
   }
 
-  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, syncingMailboxes, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, submitJobOTP, resendJobOTP, updateAccount, refreshAccessToken, fetchInbox, syncMailboxes, deleteAccount };
+  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, syncingMailboxes, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, submitJobOTP, resendJobOTP, updateAccount, refreshAccessToken, fetchInbox, syncMailboxes, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
 }
 
 function loadGoPayProfile() {

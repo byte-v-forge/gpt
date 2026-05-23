@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Phone, RefreshCcw } from 'lucide-react';
+import { Eye, EyeOff, Phone, RefreshCcw, Trash2 } from 'lucide-react';
 import {
   PanelHeader,
   ToolbarIconButton
@@ -13,6 +13,7 @@ import type {
 } from './types';
 import { AccountTable, CreateAccountForm } from './accounts';
 import { accountCodexPhoneState, canLoginSession } from './account-utils';
+import { invalidAccountsForCleanup } from './account-cleanup-actions';
 import { OpenAIIcon } from './brand-icons';
 import { GoPayActionsPanel } from './gopay-actions';
 import { GoPayStatusCard } from './gopay';
@@ -25,6 +26,7 @@ export type GptAccountsViewProps = {
   showSecrets: boolean;
   busy: boolean;
   mailboxSyncing: boolean;
+  cleaningInvalidAccounts: boolean;
   runningAccountIds: Set<string>;
   runningWorkflowByAccountID: Map<string, Job>;
   refreshingAccessTokenIds: Set<string>;
@@ -32,6 +34,7 @@ export type GptAccountsViewProps = {
   onError: (message: string) => void;
   onToggleSecrets: () => void;
   onSyncMailboxes: () => void | Promise<void>;
+  onCleanInvalidAccounts: () => void | Promise<void>;
   onSelectAccount: (account: Account) => void;
   onOpenWorkflow: (job: Job) => void | Promise<void>;
   onCancelWorkflow: (jobId: string) => Promise<void>;
@@ -49,6 +52,7 @@ export type GptAccountsViewProps = {
 
 export function GptAccountsView(props: GptAccountsViewProps) {
   const addPhoneAccounts = props.accounts.filter((account) => canLoginSession(account) && !accountCodexPhoneState(account, props.jobs).confirmed);
+  const invalidAccounts = invalidAccountsForCleanup(props.accounts);
   return (
     <section className="workspace singlePaneWorkspace">
       <div className="panel">
@@ -56,6 +60,7 @@ export function GptAccountsView(props: GptAccountsViewProps) {
           <div className="headerControls accountHeaderControls">
             <CreateAccountForm compact domains={props.mailboxDomains} onDone={props.onCreateDone} onError={props.onError} />
             <ToolbarIconButton label={`add phone · ${addPhoneAccounts.length} 个未加手机账号`} icon={<Phone size={15} />} disabled={props.busy || !addPhoneAccounts.length} onClick={() => void props.onCodexOAuthBatchAddPhone(addPhoneAccounts)} />
+            <ToolbarIconButton label={props.cleaningInvalidAccounts ? '清理中' : `清理失效账号 · ${invalidAccounts.length}`} icon={<Trash2 size={15} />} disabled={props.busy || props.cleaningInvalidAccounts} onClick={() => void props.onCleanInvalidAccounts()} />
             <ToolbarIconButton label={props.mailboxSyncing ? '同步邮箱中' : '同步邮箱'} icon={<RefreshCcw size={15} />} disabled={props.busy || props.mailboxSyncing} onClick={() => void props.onSyncMailboxes()} />
             <ToolbarIconButton label={props.showSecrets ? '隐藏敏感信息' : '显示敏感信息'} icon={props.showSecrets ? <EyeOff size={15} /> : <Eye size={15} />} onClick={props.onToggleSecrets} />
           </div>

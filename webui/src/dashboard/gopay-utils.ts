@@ -73,7 +73,7 @@ export function goPayPaymentUserId(job: Job) {
 }
 
 export function manualAddBalanceView(job: Job) {
-  const data = stepDetailData((job.steps || []).find((item) => item.step_name === 'gopay_app_add_balance'));
+  const data = stepDetailData((job.steps || []).find((item) => item.step_name === 'gopay_app_ensure_balance'));
   if (!data) return null;
   const transfer = objectValue(data.manual_transfer);
   return {
@@ -114,12 +114,12 @@ export function canConfirmManualGoPayPayment(job: Job, progress: WorkflowProgres
 
 export function canConfirmManualAddBalance(job: Job, progress: WorkflowProgress | null, balance: ReturnType<typeof manualAddBalanceView>) {
   return !!balance && job.status === 'RUNNING' && ['GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE'].includes(job.action || '') && balance.method === 'manual_transfer' &&
-    (progress?.step_name === 'gopay_app_add_balance_confirm' || progress?.step_name === 'gopay_app_add_balance');
+    (progress?.step_name === 'gopay_app_ensure_balance_confirm' || progress?.step_name === 'gopay_app_ensure_balance');
 }
 
 export function canSelectGoPayAddBalance(job: Job, progress: WorkflowProgress | null, balance: ReturnType<typeof manualAddBalanceView>) {
   return job.status === 'RUNNING' && ['GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE'].includes(job.action || '') &&
-    (progress?.step_name === 'gopay_app_add_balance' || job.last_step === 'gopay_app_add_balance') &&
+    (progress?.step_name === 'gopay_app_ensure_balance' || job.last_step === 'gopay_app_ensure_balance') &&
     (!balance?.method || balance.status === 'awaiting_selection');
 }
 

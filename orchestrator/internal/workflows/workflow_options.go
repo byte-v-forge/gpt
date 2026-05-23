@@ -330,7 +330,7 @@ func waitForGoPayAddBalanceSelectionPolling(ctx workflow.Context, activityCtx wo
 	}
 	if err := workflow.ExecuteActivity(activityCtx, startJobStepActivityName, JobStepStartInput{
 		JobId:       jobID,
-		StepName:    stepGoPayAppAddBalance,
+		StepName:    stepGoPayAppEnsureBalance,
 		Recoverable: false,
 		Retryable:   true,
 		Detail: protoData(map[string]any{
@@ -341,12 +341,33 @@ func waitForGoPayAddBalanceSelectionPolling(ctx workflow.Context, activityCtx wo
 		return nil, stateJSON, nil, false, err
 	}
 
+	nextStateJSON, checkData, ready, checkErr := checkGoPayAddBalanceReady(ctx, activityCtx, jobID, stateJSON)
+	if nextStateJSON != "" {
+		stateJSON = nextStateJSON
+	}
+	if len(checkData) > 0 {
+		checkData["status"] = "checking_balance"
+	}
+	if checkErr != "" {
+		checkData["error_message"] = checkErr
+	}
+	if ready {
+		checkData["status"] = "balance_ready"
+		checkData["method"] = "balance_poll"
+		checkData["ensure_balance_complete"] = true
+		checkData["auto_confirmed"] = true
+		if err := completeGoPayEnsureBalanceStep(ctx, activityCtx, jobID, checkData); err != nil {
+			return nil, stateJSON, checkData, false, err
+		}
+		return nil, stateJSON, checkData, true, nil
+	}
+
 	timerCtx, cancelTimer := workflow.WithCancel(ctx)
 	defer cancelTimer()
 	timer := workflow.NewTimer(timerCtx, time.Duration(timeoutSeconds)*time.Second)
 	signalCh := workflow.GetSignalChannel(ctx, goPayAddBalanceSelectionSignalName)
-	var lastData map[string]any
-	var lastErr string
+	lastData := checkData
+	lastErr := checkErr
 	for {
 		pollCtx, cancelPoll := workflow.WithCancel(ctx)
 		poll := workflow.NewTimer(pollCtx, goPayAddBalancePollInterval)
@@ -391,11 +412,26 @@ func waitForGoPayAddBalanceSelectionPolling(ctx workflow.Context, activityCtx wo
 			lastErr = checkErr
 		}
 		if ready {
-			checkData["add_balance_status"] = "balance_ready"
+			checkData["status"] = "balance_ready"
+			checkData["method"] = "balance_poll"
+			checkData["ensure_balance_complete"] = true
 			checkData["auto_confirmed"] = true
+			if err := completeGoPayEnsureBalanceStep(ctx, activityCtx, jobID, checkData); err != nil {
+				return nil, stateJSON, checkData, false, err
+			}
 			return nil, stateJSON, checkData, true, nil
 		}
 	}
+}
+
+func completeGoPayEnsureBalanceStep(ctx workflow.Context, activityCtx workflow.Context, jobID string, data map[string]any) error {
+	return workflow.ExecuteActivity(activityCtx, completeJobStepActivityName, JobStepCompleteInput{
+		JobId:       jobID,
+		StepName:    stepGoPayAppEnsureBalance,
+		Recoverable: false,
+		Retryable:   true,
+		Result:      protoData(data),
+	}).Get(ctx, nil)
 }
 
 func waitForManualAddBalanceLegacy(ctx workflow.Context, timeoutSeconds int32) error {
@@ -435,7 +471,7 @@ func waitForGoPayAddBalanceSelectionLegacy(ctx workflow.Context, activityCtx wor
 	}
 	if err := workflow.ExecuteActivity(activityCtx, startJobStepActivityName, JobStepStartInput{
 		JobId:       jobID,
-		StepName:    stepGoPayAppAddBalance,
+		StepName:    stepGoPayAppEnsureBalance,
 		Recoverable: false,
 		Retryable:   true,
 		Detail: protoData(map[string]any{

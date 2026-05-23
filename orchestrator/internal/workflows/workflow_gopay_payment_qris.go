@@ -308,7 +308,7 @@ func runGoPayAppBackedWAPaymentWorkflow(ctx workflow.Context, input GoPayPayment
 	}
 
 	if addBalance == nil {
-		setWorkflowProgress(ctx, progress, stepGoPayAppAddBalance)
+		setWorkflowProgress(ctx, progress, stepGoPayAppEnsureBalance)
 		selectedAddBalance, nextStateJSON, balanceData, balanceReady, err := waitForGoPayAddBalanceSelection(ctx, retryCtx, input.GetJobId(), stateJSON, input.GetAddBalanceConfirmTimeoutSeconds())
 		stateJSON = nextStateJSON
 		if err != nil {
@@ -319,7 +319,7 @@ func runGoPayAppBackedWAPaymentWorkflow(ctx workflow.Context, input GoPayPayment
 			if len(balanceData) > 0 {
 				combined["add_balance_check"] = balanceData
 			}
-			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppAddBalance, statusFailedRetryable, false, true, err, combined), nil
+			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsureBalance, statusFailedRetryable, false, true, err, combined), nil
 		}
 		if balanceReady {
 			combined["add_balance"] = balanceData
@@ -335,7 +335,7 @@ func runGoPayAppBackedWAPaymentWorkflow(ctx workflow.Context, input GoPayPayment
 
 	if !result.GetAddBalanceComplete() {
 		var balance GoPayAppAddBalanceOutput
-		setWorkflowProgress(ctx, progress, stepGoPayAppAddBalance)
+		setWorkflowProgress(ctx, progress, stepGoPayAppEnsureBalance)
 		addBalanceCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			StartToCloseTimeout: 5 * time.Minute,
 			RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
@@ -348,7 +348,7 @@ func runGoPayAppBackedWAPaymentWorkflow(ctx workflow.Context, input GoPayPayment
 		}).Get(ctx, &balance); err != nil {
 			stateJSON = balance.GetStateJson()
 			combined["add_balance"] = protoDataMap(balance.GetData())
-			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppAddBalance, statusFailedRetryable, false, true, err, combined), nil
+			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsureBalance, statusFailedRetryable, false, true, err, combined), nil
 		}
 		stateJSON = balance.GetStateJson()
 		combined["add_balance"] = protoDataMap(balance.GetData())
@@ -360,10 +360,10 @@ func runGoPayAppBackedWAPaymentWorkflow(ctx workflow.Context, input GoPayPayment
 			StateJson: stateJSON,
 			Reason:    stateReasonPrefix + "_add_balance",
 		}).Get(ctx, nil); err != nil {
-			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppAddBalance, statusFailedRetryable, false, true, err, combined), nil
+			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsureBalance, statusFailedRetryable, false, true, err, combined), nil
 		}
 		if balance.GetMethod() == "manual_transfer" {
-			setWorkflowProgress(ctx, progress, stepGoPayAppAddBalanceConfirm)
+			setWorkflowProgress(ctx, progress, stepGoPayAppEnsureBalanceConfirm)
 			nextStateJSON, confirmation, err := waitForManualAddBalance(ctx, retryCtx, input.GetJobId(), stateJSON, input.GetAddBalanceConfirmTimeoutSeconds())
 			stateJSON = nextStateJSON
 			if err != nil {
@@ -374,7 +374,7 @@ func runGoPayAppBackedWAPaymentWorkflow(ctx workflow.Context, input GoPayPayment
 				if len(confirmation) > 0 {
 					combined["add_balance_check"] = confirmation
 				}
-				return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppAddBalanceConfirm, statusFailedRetryable, false, true, err, combined), nil
+				return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppEnsureBalanceConfirm, statusFailedRetryable, false, true, err, combined), nil
 			}
 			combined["add_balance_confirmation"] = confirmation
 			result.AddBalanceStatus = "confirmed"

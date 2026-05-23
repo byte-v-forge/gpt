@@ -72,7 +72,7 @@ const (
 
 	stepRegisterAccount          = "register_account"
 	stepEnsureLogon              = "ensure_logon"
-	stepGoPayAppAddBalance       = "gopay_app_add_balance"
+	stepGoPayAppEnsureBalance    = "gopay_app_ensure_balance"
 	stepGoPayPayment             = "gopay_payment"
 	registrationOTPParam         = "registration_otp"
 	paymentOTPParam              = "payment_otp"

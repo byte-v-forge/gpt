@@ -26,7 +26,7 @@ const (
 func (s *Server) GoPayAppAddBalanceActivity(ctx context.Context, input GoPayAppAddBalanceInput) (GoPayAppAddBalanceOutput, error) {
 	output := GoPayAppAddBalanceOutput{StateJson: normalizeGoPayWorkflowStateJSON(input.GetStateJson())}
 	data := map[string]any{}
-	step := s.activityStep(ctx, input.GetJobId(), stepGoPayAppAddBalance, false, true)
+	step := s.activityStep(ctx, input.GetJobId(), stepGoPayAppEnsureBalance, false, true)
 	_, err := step.run(func() (any, error) {
 		return s.runGoPayAddBalance(ctx, step, input, &output, data)
 	})

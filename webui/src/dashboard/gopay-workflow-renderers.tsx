@@ -11,10 +11,10 @@ export function registerGoPayWorkflowRenderers() {
   registered = true;
   registerWorkflowStepRenderers([
     {
-      id: 'gpt.gopay.add_balance',
-      stepNames: ['gopay_app_add_balance'],
+      id: 'gpt.gopay.ensure_balance',
+      stepNames: ['gopay_app_ensure_balance'],
       jobActions: ['GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE'],
-      label: 'GoPay 加余额',
+      label: 'GoPay 确保余额',
       render: (props) => <GoPayAddBalanceStep {...props} />
     },
     {

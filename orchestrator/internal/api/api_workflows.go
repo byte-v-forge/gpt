@@ -272,8 +272,8 @@ func (s *Server) ConfirmManualAddBalance(ctx context.Context, req *pb.ConfirmMan
 	if job.Action != actionGoPayPayment && job.Action != actionGoPayQRISPaymentActivate {
 		return &pb.ConfirmManualAddBalanceResponse{Success: false, JobId: jobID, ErrorMessage: "job does not accept add_balance confirmation: " + job.Action}, nil
 	}
-	if job.LastStep != stepGoPayAppAddBalance {
-		return &pb.ConfirmManualAddBalanceResponse{Success: false, JobId: jobID, ErrorMessage: "job is not waiting for add_balance confirmation: " + job.LastStep}, nil
+	if job.LastStep != stepGoPayAppEnsureBalance {
+		return &pb.ConfirmManualAddBalanceResponse{Success: false, JobId: jobID, ErrorMessage: "job is not waiting for ensure_balance confirmation: " + job.LastStep}, nil
 	}
 	workflowID, ok := contracts.WorkflowID(job.Action, job.ID)
 	if !ok || workflowID == "" {

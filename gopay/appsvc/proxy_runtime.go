@@ -30,7 +30,7 @@ func (s *Server) createProxyRuntimeSession(ctx context.Context) (map[string]any,
 	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 
-	body := []byte(`{"policy":{"mode":"PROXY_SESSION_MODE_STICKY","region":"ID","sticky_ttl_minutes":5,"upstream_kind":"PROXY_UPSTREAM_KIND_DYNAMIC_IP","rotation_mode":"PROXY_ROTATION_MODE_STICKY_SESSION"}}`)
+	body := []byte(`{"force_new":true,"policy":{"mode":"PROXY_SESSION_MODE_STICKY","region":"ID","sticky_ttl_minutes":5,"labels":{"purpose":"gopay_device_proxy","rotation":"active"},"upstream_kind":"PROXY_UPSTREAM_KIND_DYNAMIC_IP","rotation_mode":"PROXY_ROTATION_MODE_STICKY_SESSION"}}`)
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, baseURL+"/api/proxy-runtime/session/new", bytes.NewReader(body))
 	if err != nil {
 		return nil, err

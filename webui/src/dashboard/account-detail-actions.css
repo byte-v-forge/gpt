@@ -120,10 +120,16 @@
   flex: 0 0 auto;
 }
 
-.appDrawer .accountHeaderActions {
+.appDrawer .accountSectionTitle .accountHeaderActions {
+  flex: 1 1 auto;
   width: auto;
   min-width: 0;
+  margin-left: auto;
   justify-content: flex-end;
+}
+
+.appDrawer .accountSectionTitle .accountHeaderActions button {
+  flex: 0 0 auto;
 }
 
 .detailOtpCode em {

@@ -14,7 +14,7 @@ const (
 	defaultCodexOAuthPhoneProfileKey         = "openai-th"
 	defaultCodexOAuthPhoneCountryISO2        = "TH"
 	defaultCodexOAuthPhoneCountryCallingCode = "66"
-	defaultCodexOAuthPhoneMaxPriceUSD        = "0.15"
+	defaultCodexOAuthPhoneMaxPriceUSD        = "0.068"
 	defaultCodexOAuthPhoneMaxReuseCount      = 3
 	defaultCodexOAuthPhoneWaitSeconds        = 60
 	defaultCodexOAuthPhoneMinReuseRemaining  = 180

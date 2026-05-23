@@ -85,6 +85,21 @@ func pressCommand(commandID string, selector *browserautomationv1.BrowserSelecto
 	}
 }
 
+func waitForLoadStateCommand(commandID string, state browserautomationv1.BrowserLoadState, timeout time.Duration, continueOnError bool) *browserautomationv1.BrowserCommand {
+	return &browserautomationv1.BrowserCommand{
+		CommandId:       commandID,
+		CommandKey:      commandID,
+		Timeout:         durationpb.New(timeout),
+		ContinueOnError: continueOnError,
+		Operation: &browserautomationv1.BrowserCommand_WaitForLoadState{
+			WaitForLoadState: &browserautomationv1.WaitForLoadStateCommand{
+				State:   state,
+				Timeout: durationpb.New(timeout),
+			},
+		},
+	}
+}
+
 func waitForSelectorCommand(commandID string, selector *browserautomationv1.BrowserSelector, state browserautomationv1.BrowserSelectorState, timeout time.Duration, continueOnError bool) *browserautomationv1.BrowserCommand {
 	return &browserautomationv1.BrowserCommand{
 		CommandId:       commandID,

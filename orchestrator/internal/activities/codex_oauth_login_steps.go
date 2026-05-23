@@ -66,8 +66,12 @@ func (f *browserAuthFlow) ensureCodexOAuthLoggedIn(ctx context.Context, s *Serve
 
 func (f *browserAuthFlow) submitCodexOAuthEmail(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, email string) error {
 	results, err := f.execute(client, cfg, "codex-oauth-email", []*browserautomationv1.BrowserCommand{
+		waitForLoadStateCommand("wait-email-dom-ready", browserautomationv1.BrowserLoadState_BROWSER_LOAD_STATE_DOM_CONTENT_LOADED, 10*time.Second, true),
+		waitForLoadStateCommand("wait-email-network-idle", browserautomationv1.BrowserLoadState_BROWSER_LOAD_STATE_NETWORK_IDLE, 5*time.Second, true),
+		waitTimeoutCommand("settle-email-page", 750*time.Millisecond),
 		waitForSelectorCommand("wait-email-input", browserAuthEmailSelector(), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 20*time.Second, false),
-		fillCommand("fill-email", browserAuthEmailSelector(), email, 10*time.Second, false),
+		typeTextCommand("type-email", browserAuthEmailSelector(), email, 20*time.Millisecond, 10*time.Second, true, false),
+		waitTimeoutCommand("settle-email-value", 500*time.Millisecond),
 		clickCommand("click-email-continue", browserAuthEmailSubmitSelector(), 10*time.Second, false),
 		waitForSelectorGroupCommand("wait-password-or-otp", selectorGroup(45*time.Second, browserAuthLoginPasswordSelector(), browserAuthLoginOTPSelector()), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 45*time.Second, true),
 		getPageStateCommand("email-state", true, true, false, 5*time.Second),
@@ -84,11 +88,15 @@ func (f *browserAuthFlow) submitCodexOAuthEmail(client browserautomationv1.Brows
 func (f *browserAuthFlow) submitCodexOAuthPassword(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, password string) (int64, error) {
 	issuedAfter := time.Now().Add(-time.Second).Unix()
 	results, err := f.execute(client, cfg, "codex-oauth-password", []*browserautomationv1.BrowserCommand{
+		waitForLoadStateCommand("wait-password-dom-ready", browserautomationv1.BrowserLoadState_BROWSER_LOAD_STATE_DOM_CONTENT_LOADED, 10*time.Second, true),
+		waitTimeoutCommand("settle-password-page", 500*time.Millisecond),
 		waitForSelectorCommand("wait-password-input", browserAuthLoginPasswordSelector(), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 20*time.Second, false),
-		fillCommand("fill-password", browserAuthLoginPasswordSelector(), password, 10*time.Second, false),
+		typeTextCommand("type-password", browserAuthLoginPasswordSelector(), password, 20*time.Millisecond, 10*time.Second, true, false),
+		waitTimeoutCommand("settle-password-value", 500*time.Millisecond),
 		clickCommand("click-password-continue", browserAuthEmailSubmitSelector(), 10*time.Second, false),
 		waitTimeoutCommand("wait-after-password", time.Second),
 		waitForURLCommand("wait-password-callback-url", "http://localhost:*/auth/callback*", false, 5*time.Second, true),
+		waitForURLCommand("wait-password-consent-url", "**/sign-in-with-chatgpt/**", false, 10*time.Second, true),
 		waitForSelectorGroupCommand("wait-post-password", codexOAuthPostPasswordSelectorGroup(60*time.Second), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 60*time.Second, true),
 		getPageStateCommand("password-state", true, true, false, 5*time.Second),
 	})
@@ -96,7 +104,7 @@ func (f *browserAuthFlow) submitCodexOAuthPassword(client browserautomationv1.Br
 		return issuedAfter, err
 	}
 	state := browserAuthPageStateData(results, "password-state")
-	if browserAuthAnyCommandSucceeded(results, "wait-password-callback-url", "wait-post-password") || browserAuthPageHasAny(state, "/auth/callback") {
+	if browserAuthAnyCommandSucceeded(results, "wait-password-callback-url", "wait-password-consent-url", "wait-post-password") || browserAuthPageHasAny(state, "/auth/callback", "/sign-in-with-chatgpt/") {
 		return issuedAfter, nil
 	}
 	return issuedAfter, browserAuthStepError(f.mode, "password", "next_step_missing", state)
@@ -135,6 +143,7 @@ func (f *browserAuthFlow) submitCodexOAuthOTP(client browserautomationv1.Browser
 		clickCommand("click-email-otp-continue", browserAuthEmailSubmitSelector(), 10*time.Second, false),
 		waitTimeoutCommand("wait-after-email-otp", time.Second),
 		waitForURLCommand("wait-email-otp-callback-url", "http://localhost:*/auth/callback*", false, 5*time.Second, true),
+		waitForURLCommand("wait-email-otp-consent-url", "**/sign-in-with-chatgpt/**", false, 10*time.Second, true),
 		waitForSelectorGroupCommand("wait-post-email-otp", codexOAuthPostEmailOTPSelectorGroup(60*time.Second), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 60*time.Second, true),
 		getPageStateCommand("email-otp-state", true, true, false, 5*time.Second),
 	})
@@ -142,7 +151,7 @@ func (f *browserAuthFlow) submitCodexOAuthOTP(client browserautomationv1.Browser
 		return err
 	}
 	state := browserAuthPageStateData(results, "email-otp-state")
-	if browserAuthAnyCommandSucceeded(results, "wait-email-otp-callback-url", "wait-post-email-otp") || browserAuthPageHasAny(state, "/auth/callback") {
+	if browserAuthAnyCommandSucceeded(results, "wait-email-otp-callback-url", "wait-email-otp-consent-url", "wait-post-email-otp") || browserAuthPageHasAny(state, "/auth/callback", "/sign-in-with-chatgpt/") {
 		return nil
 	}
 	return browserAuthStepError(f.mode, "email_otp", "next_step_missing", state)

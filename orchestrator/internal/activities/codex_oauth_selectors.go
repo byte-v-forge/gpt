@@ -52,7 +52,6 @@ func codexOAuthPostPasswordSelectorGroup(timeout time.Duration) *browserautomati
 	return selectorGroup(timeout,
 		browserAuthLoginOTPSelector(),
 		codexOAuthPhoneInputSelector(),
-		codexOAuthConsentSignalSelector(),
 	)
 }
 

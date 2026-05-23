@@ -215,7 +215,32 @@ func runCodexOAuthLoginStages(ctx workflow.Context, progress *WorkflowProgress, 
 		}
 		stage = otp.GetStage()
 	}
+	if !codexOAuthBrowserReadyStage(stage) {
+		return stage, issuedAfter, codexOAuthBrowserStageStepName(stage), fmt.Errorf("codex oauth login stage not ready: %s", stage)
+	}
 	return stage, issuedAfter, "", nil
+}
+
+func codexOAuthBrowserReadyStage(stage string) bool {
+	switch stage {
+	case "add_phone", "consent", "callback":
+		return true
+	default:
+		return false
+	}
+}
+
+func codexOAuthBrowserStageStepName(stage string) string {
+	switch stage {
+	case "email":
+		return stepCodexOAuthBrowserEmail
+	case "password":
+		return stepCodexOAuthBrowserPassword
+	case "email_otp":
+		return stepCodexOAuthBrowserEmailOTP
+	default:
+		return stepCodexOAuthBrowserDetect
+	}
 }
 
 func runCodexOAuthStageActivity(ctx workflow.Context, progress *WorkflowProgress, browserCtx workflow.Context, stepName, activityName string, input CodexOAuthBrowserStepInput, data map[string]any) (string, int64, string, error) {

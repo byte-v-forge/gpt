@@ -94,7 +94,11 @@ const (
 	stepLoginSessionComplete         = "login_session_complete"
 	stepCodexOAuthAcquirePhone       = "codex_oauth_acquire_phone"
 	stepCodexOAuthBrowserStart       = "codex_oauth_browser_start"
-	stepCodexOAuthBrowserLogin       = "codex_oauth_browser_login"
+	stepCodexOAuthBrowserDetect      = "codex_oauth_browser_detect"
+	stepCodexOAuthBrowserEmail       = "codex_oauth_browser_email"
+	stepCodexOAuthBrowserPassword    = "codex_oauth_browser_password"
+	stepCodexOAuthBrowserEmailOTP    = "codex_oauth_browser_email_otp"
+	stepCodexOAuthBrowserAddPhone    = "codex_oauth_browser_add_phone"
 	stepCodexOAuthBrowserComplete    = "codex_oauth_browser_complete"
 	stepCodexOAuthReleasePhone       = "codex_oauth_release_phone"
 

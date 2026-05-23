@@ -2,14 +2,14 @@ package activities
 
 import "context"
 
-func (s *Server) CodexOAuthLoginBrowserActivity(ctx context.Context, input CodexOAuthLoginBrowserInput) (CodexOAuthLoginBrowserOutput, error) {
+func (s *Server) CodexOAuthAddPhoneBrowserActivity(ctx context.Context, input CodexOAuthAddPhoneBrowserInput) (CodexOAuthAddPhoneBrowserOutput, error) {
 	cfg := s.codexOAuthConfig.withDefaults()
 	label := cfg.label(input.GetLabel())
-	output := CodexOAuthLoginBrowserOutput{PhoneReuseCount: input.GetPhone().GetReuseCount(), PhoneReuseLimit: input.GetPhone().GetReuseLimit()}
+	output := CodexOAuthAddPhoneBrowserOutput{PhoneReuseCount: input.GetPhone().GetReuseCount(), PhoneReuseLimit: input.GetPhone().GetReuseLimit()}
 	data := codexOAuthBrowserData(label, input.GetPhone())
-	step := s.activityStep(ctx, input.GetJobId(), stepCodexOAuthBrowserLogin, false, true)
+	step := s.activityStep(ctx, input.GetJobId(), stepCodexOAuthBrowserAddPhone, false, true)
 	_, err := step.run(func() (any, error) {
-		stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepCodexOAuthBrowserLogin, "logging in codex oauth browser", data)
+		stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepCodexOAuthBrowserAddPhone, "handling codex oauth add phone", data)
 		defer stopHeartbeat()
 		account, err := s.codexOAuthBrowserAccount(ctx, input.GetAccountId())
 		if err != nil {
@@ -18,11 +18,6 @@ func (s *Server) CodexOAuthLoginBrowserActivity(ctx context.Context, input Codex
 		}
 		flow, err := s.newCodexOAuthBrowserSessionFlow(ctx, account, input.GetJobId(), label, input.GetPhone(), cfg, input.GetAllowAddPhone(), false, input.GetSession(), data)
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
-		}
-		if err := flow.ensureLoggedIn(); err != nil {
-			flow.releasePhoneOnFailure()
 			data["error_message"] = err.Error()
 			return data, err
 		}

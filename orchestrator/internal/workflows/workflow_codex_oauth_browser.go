@@ -126,25 +126,32 @@ func runCodexOAuthBrowserActivities(ctx workflow.Context, progress *WorkflowProg
 		return run, stepCodexOAuthBrowserStart, fmt.Errorf("codex oauth browser session missing")
 	}
 
-	setWorkflowProgress(ctx, progress, stepCodexOAuthBrowserLogin)
-	var login CodexOAuthLoginBrowserOutput
-	if err := workflow.ExecuteActivity(browserCtx, codexOAuthLoginBrowserActivityName, CodexOAuthLoginBrowserInput{
-		JobId:         input.JobID,
-		AccountId:     input.AccountID,
-		Label:         input.Label,
-		Phone:         input.Phone,
-		AllowAddPhone: input.AllowAddPhone,
-		Session:       session,
-	}).Get(ctx, &login); err != nil {
-		mergeCodexOAuthRunData(run.data, protoDataMap(login.GetData()))
-		run.addPhoneRequired = login.GetAddPhoneRequired() || strings.Contains(strings.ToLower(err.Error()), "add_phone_required")
-		return run, stepCodexOAuthBrowserLogin, err
+	stage, issuedAfter, failedStep, err := runCodexOAuthLoginStages(ctx, progress, browserCtx, input, session, run.data)
+	if err != nil {
+		return run, failedStep, err
 	}
-	mergeCodexOAuthRunData(run.data, protoDataMap(login.GetData()))
-	run.addPhoneConfirmed = login.GetAddPhoneConfirmed()
-	run.addPhoneRequired = login.GetAddPhoneRequired()
-	run.phoneReuseCount = login.GetPhoneReuseCount()
-	run.phoneReuseLimit = login.GetPhoneReuseLimit()
+	if input.Phone != nil || stage == "add_phone" {
+		setWorkflowProgress(ctx, progress, stepCodexOAuthBrowserAddPhone)
+		var addPhone CodexOAuthAddPhoneBrowserOutput
+		if err := workflow.ExecuteActivity(browserCtx, codexOAuthAddPhoneBrowserActivityName, CodexOAuthAddPhoneBrowserInput{
+			JobId:         input.JobID,
+			AccountId:     input.AccountID,
+			Label:         input.Label,
+			Phone:         input.Phone,
+			AllowAddPhone: input.AllowAddPhone,
+			Session:       session,
+		}).Get(ctx, &addPhone); err != nil {
+			mergeCodexOAuthRunData(run.data, protoDataMap(addPhone.GetData()))
+			run.addPhoneRequired = addPhone.GetAddPhoneRequired() || strings.Contains(strings.ToLower(err.Error()), "add_phone_required")
+			return run, stepCodexOAuthBrowserAddPhone, err
+		}
+		mergeCodexOAuthRunData(run.data, protoDataMap(addPhone.GetData()))
+		run.addPhoneConfirmed = addPhone.GetAddPhoneConfirmed()
+		run.addPhoneRequired = addPhone.GetAddPhoneRequired()
+		run.phoneReuseCount = addPhone.GetPhoneReuseCount()
+		run.phoneReuseLimit = addPhone.GetPhoneReuseLimit()
+	}
+	_ = issuedAfter
 
 	setWorkflowProgress(ctx, progress, stepCodexOAuthBrowserComplete)
 	var complete CodexOAuthCompleteBrowserOutput
@@ -161,6 +168,57 @@ func runCodexOAuthBrowserActivities(ctx workflow.Context, progress *WorkflowProg
 	mergeCodexOAuthRunData(run.data, protoDataMap(complete.GetData()))
 	run.authSecretKey = complete.GetAuthSecretKey()
 	return run, "", nil
+}
+
+func runCodexOAuthLoginStages(ctx workflow.Context, progress *WorkflowProgress, browserCtx workflow.Context, input codexOAuthBrowserWorkflowInput, session *CodexOAuthBrowserSession, data map[string]any) (string, int64, string, error) {
+	stepInput := CodexOAuthBrowserStepInput{JobId: input.JobID, AccountId: input.AccountID, Label: input.Label, Session: session}
+	stage, issuedAfter, failedStep, err := runCodexOAuthStageActivity(ctx, progress, browserCtx, stepCodexOAuthBrowserDetect, codexOAuthDetectBrowserStageActivityName, stepInput, data)
+	if err != nil {
+		return stage, issuedAfter, failedStep, err
+	}
+	if stage == "email" {
+		stage, issuedAfter, failedStep, err = runCodexOAuthStageActivity(ctx, progress, browserCtx, stepCodexOAuthBrowserEmail, codexOAuthSubmitEmailActivityName, stepInput, data)
+		if err != nil {
+			return stage, issuedAfter, failedStep, err
+		}
+	}
+	if stage == "password" {
+		stage, issuedAfter, failedStep, err = runCodexOAuthStageActivity(ctx, progress, browserCtx, stepCodexOAuthBrowserPassword, codexOAuthSubmitPasswordActivityName, stepInput, data)
+		if err != nil {
+			return stage, issuedAfter, failedStep, err
+		}
+	}
+	if stage == "email_otp" {
+		if issuedAfter <= 0 {
+			issuedAfter = workflow.Now(ctx).Add(-time.Second).Unix()
+		}
+		setWorkflowProgress(ctx, progress, stepCodexOAuthBrowserEmailOTP)
+		var otp CodexOAuthBrowserStageOutput
+		err := workflow.ExecuteActivity(browserCtx, codexOAuthSubmitEmailOTPActivityName, CodexOAuthSubmitEmailOTPInput{
+			JobId:           input.JobID,
+			AccountId:       input.AccountID,
+			Label:           input.Label,
+			Session:         session,
+			IssuedAfterUnix: issuedAfter,
+		}).Get(ctx, &otp)
+		mergeCodexOAuthRunData(data, protoDataMap(otp.GetData()))
+		if err != nil {
+			return otp.GetStage(), issuedAfter, stepCodexOAuthBrowserEmailOTP, err
+		}
+		stage = otp.GetStage()
+	}
+	return stage, issuedAfter, "", nil
+}
+
+func runCodexOAuthStageActivity(ctx workflow.Context, progress *WorkflowProgress, browserCtx workflow.Context, stepName, activityName string, input CodexOAuthBrowserStepInput, data map[string]any) (string, int64, string, error) {
+	setWorkflowProgress(ctx, progress, stepName)
+	var out CodexOAuthBrowserStageOutput
+	err := workflow.ExecuteActivity(browserCtx, activityName, input).Get(ctx, &out)
+	mergeCodexOAuthRunData(data, protoDataMap(out.GetData()))
+	if err != nil {
+		return out.GetStage(), out.GetEmailOtpIssuedAfterUnix(), stepName, err
+	}
+	return out.GetStage(), out.GetEmailOtpIssuedAfterUnix(), "", nil
 }
 
 func mergeCodexOAuthRunData(dst map[string]any, src map[string]any) {

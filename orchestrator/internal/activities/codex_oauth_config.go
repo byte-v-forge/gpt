@@ -16,7 +16,7 @@ const (
 	defaultCodexOAuthPhoneCountryCallingCode = "66"
 	defaultCodexOAuthPhoneMaxPriceUSD        = "0.067"
 	defaultCodexOAuthPhoneMaxReuseCount      = 3
-	defaultCodexOAuthPhoneWaitSeconds        = 120
+	defaultCodexOAuthPhoneWaitSeconds        = 60
 	defaultCodexOAuthPhoneMinReuseRemaining  = 300
 )
 

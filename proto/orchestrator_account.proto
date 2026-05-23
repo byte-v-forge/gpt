@@ -418,7 +418,30 @@ message CodexOAuthStartBrowserOutput {
   string phone_label = 5;
 }
 
-message CodexOAuthLoginBrowserInput {
+message CodexOAuthBrowserStepInput {
+  string job_id = 1;
+  string account_id = 2;
+  string label = 3;
+  CodexOAuthBrowserSession session = 4;
+}
+
+message CodexOAuthSubmitEmailOTPInput {
+  string job_id = 1;
+  string account_id = 2;
+  string label = 3;
+  CodexOAuthBrowserSession session = 4;
+  int64 issued_after_unix = 5;
+}
+
+message CodexOAuthBrowserStageOutput {
+  bool success = 1;
+  string error_message = 2;
+  google.protobuf.Struct data = 3;
+  string stage = 4;
+  int64 email_otp_issued_after_unix = 5;
+}
+
+message CodexOAuthAddPhoneBrowserInput {
   string job_id = 1;
   string account_id = 2;
   string label = 3;
@@ -427,7 +450,7 @@ message CodexOAuthLoginBrowserInput {
   CodexOAuthBrowserSession session = 6;
 }
 
-message CodexOAuthLoginBrowserOutput {
+message CodexOAuthAddPhoneBrowserOutput {
   bool success = 1;
   string error_message = 2;
   google.protobuf.Struct data = 3;

@@ -1,11 +1,11 @@
 .paymentIconAction {
-  width: 58px;
-  min-width: 58px;
+  width: 74px;
+  min-width: 74px;
 }
 
 .splitRowActions {
   width: 100%;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
 .rowActionsLeft,
@@ -18,12 +18,13 @@
 }
 
 .rowActionsLeft { justify-content: flex-start; }
-.rowActionsRight { justify-content: flex-end; margin-left: auto; }
+.rowActionsRight { justify-content: flex-start; }
 
 .activationAction {
-  color: #b45309;
-  background: #fffbeb;
-  border-color: #fde68a;
+  color: #78350f;
+  background: #facc15;
+  border-color: #eab308;
+  box-shadow: 0 1px 0 rgba(120, 53, 15, 0.18);
 }
 
 .activationAction svg { color: currentColor; }

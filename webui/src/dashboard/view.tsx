@@ -59,8 +59,8 @@ export function GptAccountsView(props: GptAccountsViewProps) {
         <PanelHeader title="GPT账号" icon={<OpenAIIcon size={16} />}>
           <div className="headerControls accountHeaderControls">
             <CreateAccountForm compact domains={props.mailboxDomains} onDone={props.onCreateDone} onError={props.onError} />
-            <ToolbarIconButton label={`add phone · ${addPhoneAccounts.length} 个未加手机账号`} icon={<Phone size={15} />} disabled={props.busy || !addPhoneAccounts.length} onClick={() => void props.onCodexOAuthBatchAddPhone(addPhoneAccounts)} />
-            <ToolbarIconButton label={props.cleaningInvalidAccounts ? '清理中' : `清理失效账号 · ${invalidAccounts.length}`} icon={<Trash2 size={15} />} disabled={props.busy || props.cleaningInvalidAccounts} onClick={() => void props.onCleanInvalidAccounts()} />
+            {addPhoneAccounts.length > 0 && <ToolbarIconButton label={`add phone · ${addPhoneAccounts.length} 个未加手机账号`} icon={<Phone size={15} />} disabled={props.busy} onClick={() => void props.onCodexOAuthBatchAddPhone(addPhoneAccounts)} />}
+            {invalidAccounts.length > 0 && <ToolbarIconButton label={props.cleaningInvalidAccounts ? '清理中' : `清理失效账号 · ${invalidAccounts.length}`} icon={<Trash2 size={15} />} disabled={props.busy || props.cleaningInvalidAccounts} onClick={() => void props.onCleanInvalidAccounts()} />}
             <ToolbarIconButton label={props.mailboxSyncing ? '同步邮箱中' : '同步邮箱'} icon={<RefreshCcw size={15} />} disabled={props.busy || props.mailboxSyncing} onClick={() => void props.onSyncMailboxes()} />
             <ToolbarIconButton label={props.showSecrets ? '隐藏敏感信息' : '显示敏感信息'} icon={props.showSecrets ? <EyeOff size={15} /> : <Eye size={15} />} onClick={props.onToggleSecrets} />
           </div>

@@ -38,11 +38,16 @@
   justify-content: flex-end;
 }
 
-.activationAction {
-  color: #78350f;
-  background: #facc15;
-  border-color: #eab308;
-  box-shadow: 0 1px 0 rgba(120, 53, 15, 0.18);
+.iconActionButton.activationAction {
+  color: #854d0e;
+  background: #fef3c7;
+  border-color: #fde68a;
+  box-shadow: none;
+}
+
+.iconActionButton.activationAction:hover:not(:disabled) {
+  background: #fde68a;
+  border-color: #fcd34d;
 }
 
 .activationAction svg { color: currentColor; }

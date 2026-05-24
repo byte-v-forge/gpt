@@ -6,7 +6,7 @@ require (
 	github.com/bogdanfinn/fhttp v0.6.8
 	github.com/bogdanfinn/tls-client v1.14.0
 	github.com/byte-v-forge/browser-automation v0.1.1-0.20260521050844-ade90ecde3e4
-	github.com/byte-v-forge/sms v0.1.1-0.20260521055714-8193c07347e9
+	github.com/byte-v-forge/sms v0.1.1-0.20260524150136-e9fa160228a4
 	github.com/byte-v-forge/workflow-runtime v0.3.1-0.20260519081429-c1beebeabff0
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2

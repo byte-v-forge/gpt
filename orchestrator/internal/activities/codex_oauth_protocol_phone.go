@@ -83,6 +83,10 @@ func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *codexOA
 		return false, fmt.Errorf("sms phone number is empty")
 	}
 	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/add-phone/send", "https://auth.openai.com/add-phone", map[string]any{"phone_number": phoneNumber})
+	smsIssuedAfter := codexOAuthProtocolResponseSentAtUnix(client, resp)
+	if smsIssuedAfter > 0 {
+		data["phone_otp_issued_after_unix"] = smsIssuedAfter
+	}
 	if err != nil {
 		return false, err
 	}
@@ -105,14 +109,19 @@ func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *codexOA
 	} else if err := s.markSMSMessageSent(ctx, phone.GetActivationId(), "codex-oauth-sent-"+input.GetJobId()); err != nil {
 		data["sms_mark_sent_error"] = err.Error()
 	}
-	code, err := s.waitSMSCode(ctx, phone.GetActivationId(), cfg.PhoneFirstWaitSeconds)
+	code, err := s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneFirstWaitSeconds, smsIssuedAfter)
 	if err != nil {
 		data["sms_first_wait_error"] = err.Error()
-		_, _ = client.postJSON(ctx, "https://auth.openai.com/api/accounts/phone-otp/resend", "https://auth.openai.com/phone-verification", map[string]any{})
+		resend, _ := client.postJSON(ctx, "https://auth.openai.com/api/accounts/phone-otp/resend", "https://auth.openai.com/phone-verification", map[string]any{})
+		resendIssuedAfter := codexOAuthProtocolResponseSentAtUnix(client, resend)
+		if resendIssuedAfter > 0 {
+			smsIssuedAfter = resendIssuedAfter
+			data["phone_otp_resend_issued_after_unix"] = resendIssuedAfter
+		}
 		if addErr := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-resend-"+input.GetJobId()); addErr != nil {
 			data["sms_resend_request_error"] = addErr.Error()
 		}
-		code, err = s.waitSMSCode(ctx, phone.GetActivationId(), cfg.PhoneResendWaitSeconds)
+		code, err = s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneResendWaitSeconds, smsIssuedAfter)
 		if err != nil {
 			return false, fmt.Errorf("phone_sms_timeout: %w", err)
 		}

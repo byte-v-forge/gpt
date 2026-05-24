@@ -16,8 +16,8 @@ github.com/bogdanfinn/websocket v1.5.5-barnius h1:bY+qnxpai1qe7Jmjx+Sds/cmOSpuuL
 github.com/bogdanfinn/websocket v1.5.5-barnius/go.mod h1:gvvEw6pTKHb7yOiFvIfAFTStQWyrm25BMVCTj5wRSsI=
 github.com/byte-v-forge/browser-automation v0.1.1-0.20260521050844-ade90ecde3e4 h1:Rj8a/vJX4UCkndRRUvSf5SyKUr5o87nWKSsA9Om6DdI=
 github.com/byte-v-forge/browser-automation v0.1.1-0.20260521050844-ade90ecde3e4/go.mod h1:AVmSiSAgZy1VvDnlg42BBYbeaJqOKQyt5RBP7fg74o4=
-github.com/byte-v-forge/sms v0.1.1-0.20260521055714-8193c07347e9 h1:jGnDsdeL6GTZaRsYkuGca9gBMGGEQKFG5fNLZYc8UVE=
-github.com/byte-v-forge/sms v0.1.1-0.20260521055714-8193c07347e9/go.mod h1:i7n0tGMQayOctX6cmj4HlrKGaj1inXsYzXHSy15U9Nk=
+github.com/byte-v-forge/sms v0.1.1-0.20260524150136-e9fa160228a4 h1:OH7OKhYXjxjiW1qx5QCjewtAfRDYPEd11Cdo+4Kgjqs=
+github.com/byte-v-forge/sms v0.1.1-0.20260524150136-e9fa160228a4/go.mod h1:i7n0tGMQayOctX6cmj4HlrKGaj1inXsYzXHSy15U9Nk=
 github.com/byte-v-forge/workflow-runtime v0.3.1-0.20260519081429-c1beebeabff0 h1:D2Kw47Y2lQsaMXNqVjwhsxEPgy+leU3+Fd9ecHIM2tk=
 github.com/byte-v-forge/workflow-runtime v0.3.1-0.20260519081429-c1beebeabff0/go.mod h1:UMag4r7wCgWEN82m/nktvww+Nc8zHvkYUI1yalN+e9Y=
 github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UFvs=

@@ -69,6 +69,10 @@ func normalizeAcquireNumberRequest(request *smsv1.AcquireNumberRequest) {
 }
 
 func (s *Server) waitSMSCode(ctx context.Context, activationID string, timeoutSeconds int32) (string, error) {
+	return s.waitSMSCodeIssuedAfter(ctx, activationID, timeoutSeconds, 0)
+}
+
+func (s *Server) waitSMSCodeIssuedAfter(ctx context.Context, activationID string, timeoutSeconds int32, issuedAfterUnix int64) (string, error) {
 	if s.smsClient == nil {
 		return "", fmt.Errorf("sms client not configured")
 	}
@@ -77,9 +81,10 @@ func (s *Server) waitSMSCode(ctx context.Context, activationID string, timeoutSe
 	}
 	timeout := time.Duration(timeoutSeconds) * time.Second
 	resp, err := s.smsClient.WaitForCode(ctx, &smsv1.WaitForCodeRequest{
-		ActivationId: activationID,
-		Timeout:      durationOrNil(timeout),
-		PollInterval: durationOrNil(defaultSMSPollInterval),
+		ActivationId:    activationID,
+		Timeout:         durationOrNil(timeout),
+		PollInterval:    durationOrNil(defaultSMSPollInterval),
+		IssuedAfterUnix: issuedAfterUnix,
 	})
 	if err != nil {
 		return "", fmt.Errorf("WaitForCode: %w", err)

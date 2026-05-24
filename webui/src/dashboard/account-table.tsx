@@ -23,26 +23,21 @@ import { OpenAIIcon } from './brand-icons';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegister, onRegisterProtocol, onLogin, onLoginProtocol, onCodexOAuthAddPhone, onCodexOAuthProtocol, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegisterProtocol, onLoginProtocol, onCodexOAuthProtocol, onGoPayPayment, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
   showSecrets: boolean;
   runningAccountIds: Set<string>;
   runningWorkflowByAccountID: Map<string, Job>;
-  refreshingAccessTokenIds: Set<string>;
   busy: boolean;
   onSelect: (a: Account) => void;
   onOpenWorkflow: (job: Job) => void;
   onCancelWorkflow: (jobId: string) => Promise<void>;
-  onRegister: (a: Account) => void;
   onRegisterProtocol: (a: Account) => void;
-  onLogin: (a: Account) => void;
   onLoginProtocol: (a: Account) => void;
-  onCodexOAuthAddPhone: (a: Account) => void;
   onCodexOAuthProtocol: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
-  onRefreshAccessToken: (a: Account) => Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
   onConfirmManualPayment: (jobId: string) => Promise<void>;
@@ -54,7 +49,6 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
       {accounts.map((account) => {
         const accountBusy = runningAccountIds.has(account.account_id);
         const currentWorkflow = runningWorkflowByAccountID.get(account.account_id);
-        const refreshingAccessToken = refreshingAccessTokenIds.has(account.account_id);
         const activationChannel = accountActivationChannel(account, jobs);
         const phoneState = accountCodexPhoneState(account, jobs);
         return (
@@ -74,17 +68,12 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
               accountBusy={accountBusy}
               currentWorkflow={currentWorkflow}
               busy={busy}
-              refreshingAccessToken={refreshingAccessToken}
               onOpenWorkflow={onOpenWorkflow}
               onCancelWorkflow={onCancelWorkflow}
-              onRegister={onRegister}
               onRegisterProtocol={onRegisterProtocol}
-              onLogin={onLogin}
               onLoginProtocol={onLoginProtocol}
-              onCodexOAuthAddPhone={onCodexOAuthAddPhone}
               onCodexOAuthProtocol={onCodexOAuthProtocol}
               onGoPayPayment={onGoPayPayment}
-              onRefreshAccessToken={onRefreshAccessToken}
               onSubmitOTP={onSubmitOTP}
               onResendOTP={onResendOTP}
               onConfirmManualPayment={onConfirmManualPayment}
@@ -112,22 +101,17 @@ function AccountCardIdentity({ account, showSecrets }: {
   );
 }
 
-function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onCancelWorkflow, onRegister, onRegisterProtocol, onLogin, onLoginProtocol, onCodexOAuthAddPhone, onCodexOAuthProtocol, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+function AccountRowActions({ account, accountBusy, currentWorkflow, busy, onOpenWorkflow, onCancelWorkflow, onRegisterProtocol, onLoginProtocol, onCodexOAuthProtocol, onGoPayPayment, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   account: Account;
   accountBusy: boolean;
   currentWorkflow?: Job;
   busy: boolean;
-  refreshingAccessToken: boolean;
   onOpenWorkflow: (job: Job) => void;
   onCancelWorkflow: (jobId: string) => Promise<void>;
-  onRegister: (a: Account) => void;
   onRegisterProtocol: (a: Account) => void;
-  onLogin: (a: Account) => void;
   onLoginProtocol: (a: Account) => void;
-  onCodexOAuthAddPhone: (a: Account) => void;
   onCodexOAuthProtocol: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
-  onRefreshAccessToken: (a: Account) => Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
   onConfirmManualPayment: (jobId: string) => Promise<void>;
@@ -156,7 +140,7 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
       <div className="rowActionsMain splitRowActions">
         <div className="rowActionsLeft"><RecordActionButtons actions={leftActions} /></div>
         <div className="rowActionsRight">
-          <AccountRowAuthGroups account={account} busy={busy} refreshingAccessToken={refreshingAccessToken} onRegister={onRegister} onRegisterProtocol={onRegisterProtocol} onLogin={onLogin} onLoginProtocol={onLoginProtocol} onCodexOAuthAddPhone={onCodexOAuthAddPhone} onCodexOAuthProtocol={onCodexOAuthProtocol} onRefreshAccessToken={onRefreshAccessToken} />
+          <AccountRowAuthGroups account={account} busy={busy} onRegisterProtocol={onRegisterProtocol} onLoginProtocol={onLoginProtocol} onCodexOAuthProtocol={onCodexOAuthProtocol} />
         </div>
       </div>
     </RecordActions>

@@ -34,7 +34,6 @@ export type GptAccountsViewProps = {
   cleaningInvalidAccounts: boolean;
   runningAccountIds: Set<string>;
   runningWorkflowByAccountID: Map<string, Job>;
-  refreshingAccessTokenIds: Set<string>;
   onCreateDone: (message: string) => Promise<void>;
   onError: (message: string) => void;
   onToggleSecrets: () => void;
@@ -43,15 +42,11 @@ export type GptAccountsViewProps = {
   onSelectAccount: (account: Account) => void;
   onOpenWorkflow: (job: Job) => void | Promise<void>;
   onCancelWorkflow: (jobId: string) => Promise<void>;
-  onRegister: (account: Account) => void | Promise<void>;
   onRegisterProtocol: (account: Account) => void | Promise<void>;
-  onLogin: (account: Account) => void | Promise<void>;
   onLoginProtocol: (account: Account) => void | Promise<void>;
-  onCodexOAuthAddPhone: (account: Account) => void | Promise<void>;
   onCodexOAuthProtocol: (account: Account) => void | Promise<void>;
   onCodexOAuthBatchAddPhone: (accounts: Account[]) => void | Promise<void>;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
-  onRefreshAccessToken: (account: Account) => Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
   onConfirmManualPayment: (jobId: string) => Promise<void>;
@@ -82,19 +77,14 @@ export function GptAccountsView(props: GptAccountsViewProps) {
           showSecrets={props.showSecrets}
           runningAccountIds={props.runningAccountIds}
           runningWorkflowByAccountID={props.runningWorkflowByAccountID}
-          refreshingAccessTokenIds={props.refreshingAccessTokenIds}
           busy={props.busy}
           onSelect={props.onSelectAccount}
           onOpenWorkflow={props.onOpenWorkflow}
           onCancelWorkflow={props.onCancelWorkflow}
-          onRegister={props.onRegister}
           onRegisterProtocol={props.onRegisterProtocol}
-          onLogin={props.onLogin}
           onLoginProtocol={props.onLoginProtocol}
-          onCodexOAuthAddPhone={props.onCodexOAuthAddPhone}
           onCodexOAuthProtocol={props.onCodexOAuthProtocol}
           onGoPayPayment={props.onGoPayPayment}
-          onRefreshAccessToken={props.onRefreshAccessToken}
           onSubmitOTP={props.onSubmitOTP}
           onResendOTP={props.onResendOTP}
           onConfirmManualPayment={props.onConfirmManualPayment}

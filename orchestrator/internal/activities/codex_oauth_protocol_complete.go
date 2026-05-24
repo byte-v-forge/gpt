@@ -58,7 +58,11 @@ func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input C
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		tokens, err := exchangeCodexOAuthToken(ctx, cfg, code, verifier)
+		tokenCfg := cfg
+		if strings.TrimSpace(tokenCfg.ProtocolProxyURL) != "" {
+			tokenCfg.TokenProxyURL = tokenCfg.ProtocolProxyURL
+		}
+		tokens, err := exchangeCodexOAuthToken(ctx, tokenCfg, code, verifier)
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err

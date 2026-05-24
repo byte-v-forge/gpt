@@ -29,6 +29,7 @@ func (s *Server) GoPayAppBalanceCheckActivity(ctx context.Context, input GoPayAp
 	resp, nextStateJSON, err := s.validateGoPayAccountTokenForState(ctx, output.GetStateJson())
 	output.StateJson = nextStateJSON
 	data := checkTokenValidData(resp)
+	s.syncGoPayBalanceCheckState(ctx, output.GetStateJson(), data)
 	if err != nil {
 		data["error_message"] = err.Error()
 	} else if resp != nil {
@@ -58,17 +59,48 @@ func (s *Server) GoPayAppBalanceCheckActivity(ctx context.Context, input GoPayAp
 				"balance_amount":   data["balance_amount"],
 				"balance_currency": data["balance_currency"],
 				"source":           data["source"],
+				"status":           "balance_ready",
 			})
 		} else {
 			step.progress("checking gopay balance", map[string]any{
 				"balance_amount":   data["balance_amount"],
 				"balance_currency": data["balance_currency"],
 				"error_message":    data["error_message"],
+				"methods":          goPayAddBalanceSelectionMethods(),
+				"status":           "awaiting_selection",
 			})
 		}
 	}
 	output.Data = protoData(data)
 	return output, nil
+}
+
+func (s *Server) syncGoPayBalanceCheckState(ctx context.Context, stateJSON string, data map[string]any) {
+	if !goPayWorkflowStatePresent(stateJSON) {
+		return
+	}
+	if goPayWorkflowStateHasAnyKey(stateJSON, "_signup_sms_activation_id", "signup_sms_activation_id") {
+		data["state_sync_skipped"] = "sms_activation_state"
+		return
+	}
+	storedStateJSON, err := s.loadGoPayAppState(ctx)
+	if err != nil {
+		data["state_sync_error"] = err.Error()
+		return
+	}
+	if !goPaySameStoredAccountState(storedStateJSON, stateJSON) {
+		data["state_sync_skipped"] = "account_state_mismatch"
+		return
+	}
+	if err := s.saveGoPayAppState(ctx, stateJSON); err != nil {
+		data["state_sync_error"] = err.Error()
+		return
+	}
+	data["state_synced"] = true
+}
+
+func goPayAddBalanceSelectionMethods() []string {
+	return []string{"manual_transfer", "envelope", "rekberinaja"}
 }
 
 func goPayBalanceCheckDataReady(data map[string]any) bool {

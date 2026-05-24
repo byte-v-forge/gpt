@@ -28,9 +28,46 @@ func goPayWorkflowStatePresent(stateJSON string) bool {
 	return len(state) > 0
 }
 
-func goPayCachedBalanceReadyData(stateJSON, source string) (map[string]any, bool) {
+func goPayWorkflowStateHasAnyKey(stateJSON string, keys ...string) bool {
+	state := goPayWorkflowStateMap(stateJSON)
+	if len(state) == 0 {
+		return false
+	}
+	for _, key := range keys {
+		if _, ok := state[key]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func goPaySameStoredAccountState(storedStateJSON, nextStateJSON string) bool {
+	stored := goPayWorkflowStateMap(storedStateJSON)
+	next := goPayWorkflowStateMap(nextStateJSON)
+	if len(stored) == 0 || len(next) == 0 {
+		return false
+	}
+	for _, key := range []string{"phone"} {
+		storedValue := stringMapValue(stored, key)
+		nextValue := stringMapValue(next, key)
+		if storedValue != "" && nextValue != "" && storedValue != nextValue {
+			return false
+		}
+	}
+	return true
+}
+
+func goPayWorkflowStateMap(stateJSON string) map[string]any {
 	var state map[string]any
-	if err := json.Unmarshal([]byte(normalizeGoPayWorkflowStateJSON(stateJSON)), &state); err != nil || len(state) == 0 {
+	if err := json.Unmarshal([]byte(normalizeGoPayWorkflowStateJSON(stateJSON)), &state); err != nil {
+		return nil
+	}
+	return state
+}
+
+func goPayCachedBalanceReadyData(stateJSON, source string) (map[string]any, bool) {
+	state := goPayWorkflowStateMap(stateJSON)
+	if len(state) == 0 {
 		return nil, false
 	}
 	amount := int64MapValue(state, "balance_amount")

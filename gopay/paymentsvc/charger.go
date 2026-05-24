@@ -30,9 +30,6 @@ const stripeCheckoutVersion = "2025-03-31.basil; checkout_server_update_beta=v1;
 
 func (s *Server) newCharger(ctx context.Context, cred credential, phone, countryCode, pin, tokenization string) (*charger, error) {
 	fingerprint := stablePaymentBrowserFingerprint(s.cfg.BrowserLocale, s.cfg.BrowserFingerprint, s.cfg.BrowserDeviceID)
-	if _, err := s.ensurePaymentProxyAvailable(ctx, fingerprint); err != nil {
-		return nil, err
-	}
 	cs, err := s.newChatGPTSession(ctx, cred, fingerprint)
 	if err != nil {
 		return nil, err

@@ -87,15 +87,15 @@ func (c *codexOAuthProtocolHTTPClient) get(ctx context.Context, rawURL, referer 
 	return c.request(ctx, fhttp.MethodGet, rawURL, referer, acceptHTML, nil)
 }
 
-func (c *codexOAuthProtocolHTTPClient) postJSON(ctx context.Context, rawURL, referer string, payload any) (*codexOAuthProtocolHTTPResponse, error) {
+func (c *codexOAuthProtocolHTTPClient) postJSON(ctx context.Context, rawURL, referer string, payload any, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
-	return c.request(ctx, fhttp.MethodPost, rawURL, referer, false, body)
+	return c.request(ctx, fhttp.MethodPost, rawURL, referer, false, body, extraHeaders...)
 }
 
-func (c *codexOAuthProtocolHTTPClient) request(ctx context.Context, method, rawURL, referer string, acceptHTML bool, body []byte) (*codexOAuthProtocolHTTPResponse, error) {
+func (c *codexOAuthProtocolHTTPClient) request(ctx context.Context, method, rawURL, referer string, acceptHTML bool, body []byte, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -105,6 +105,13 @@ func (c *codexOAuthProtocolHTTPClient) request(ctx context.Context, method, rawU
 		return nil, err
 	}
 	req.Header = codexOAuthProtocolHeaders(referer, c.deviceID(), acceptHTML, body != nil)
+	for _, headers := range extraHeaders {
+		for key, value := range headers {
+			if strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
+				req.Header.Set(key, value)
+			}
+		}
+	}
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err

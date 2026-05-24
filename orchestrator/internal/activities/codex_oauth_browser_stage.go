@@ -48,6 +48,9 @@ func (f *codexOAuthBrowserFlow) addPhoneToCodexOAuthAccount() error {
 	if err := f.server.markCodexPhoneSuccess(f.ctx, f.phone, f.account.GetAccountId(), f.jobID, f.label); err != nil {
 		return f.fail(err)
 	}
+	if err := f.writeAccountPhoneConfirmation(); err != nil {
+		return err
+	}
 	return nil
 }
 

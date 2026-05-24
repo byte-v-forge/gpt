@@ -16,7 +16,7 @@ const (
 	defaultCodexOAuthPhoneCountryCallingCode = "66"
 	defaultCodexOAuthPhoneMaxPriceUSD        = "0.068"
 	defaultCodexOAuthPhoneMaxReuseCount      = 3
-	defaultCodexOAuthPhoneWaitSeconds        = 60
+	defaultCodexOAuthPhoneWaitSeconds        = 120
 	defaultCodexOAuthPhoneMinReuseRemaining  = 180
 	defaultCodexOAuthProtocolTLSProfile      = "chrome_146"
 )

@@ -147,6 +147,19 @@ func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgre
 		result.run.addPhoneRequired = addPhone.GetAddPhoneRequired()
 		result.run.phoneReuseCount = addPhone.GetPhoneReuseCount()
 		result.run.phoneReuseLimit = addPhone.GetPhoneReuseLimit()
+		stage, _, failedStep, err = runCodexOAuthLoginStages(ctx, progress, browserCtx, codexOAuthBrowserWorkflowInput{
+			JobID:                       input.JobID,
+			AccountID:                   input.AccountID,
+			Label:                       input.Label,
+			AllowAddPhone:               true,
+			MarkPhoneConfirmedOnSuccess: true,
+		}, session, result.run.data)
+		if err != nil {
+			return result, failedStep, err
+		}
+		if stage == "add_phone" {
+			return result, stepCodexOAuthBrowserAddPhone, fmt.Errorf("phone_rejected: add phone still required after otp submit")
+		}
 	}
 
 	setWorkflowProgress(ctx, progress, stepCodexOAuthBrowserComplete)
@@ -312,6 +325,13 @@ func runCodexOAuthBrowserActivities(ctx workflow.Context, progress *WorkflowProg
 		run.addPhoneRequired = addPhone.GetAddPhoneRequired()
 		run.phoneReuseCount = addPhone.GetPhoneReuseCount()
 		run.phoneReuseLimit = addPhone.GetPhoneReuseLimit()
+		stage, issuedAfter, failedStep, err = runCodexOAuthLoginStages(ctx, progress, browserCtx, input, session, run.data)
+		if err != nil {
+			return run, failedStep, err
+		}
+		if stage == "add_phone" {
+			return run, stepCodexOAuthBrowserAddPhone, fmt.Errorf("phone_rejected: add phone still required after otp submit")
+		}
 	}
 	_ = issuedAfter
 

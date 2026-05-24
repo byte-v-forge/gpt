@@ -50,6 +50,7 @@ func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Ser
 	if phone.GetReused() {
 		if err := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-additional-"+jobID); err != nil {
 			data["sms_request_additional_error"] = err.Error()
+			return false, fmt.Errorf("phone_expired: request additional sms code failed: %w", err)
 		}
 	} else if err := s.markSMSMessageSent(ctx, phone.GetActivationId(), "codex-oauth-sent-"+jobID); err != nil {
 		data["sms_mark_sent_error"] = err.Error()

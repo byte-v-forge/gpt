@@ -25,6 +25,7 @@ type CodexOAuthConfig struct {
 	RedirectURI                   string
 	AuthURL                       string
 	TokenURL                      string
+	TokenProxyURL                 string
 	Scope                         string
 	PhoneLabel                    string
 	PhoneProfileKey               string
@@ -50,6 +51,7 @@ func (c CodexOAuthConfig) withDefaults() CodexOAuthConfig {
 	if strings.TrimSpace(c.TokenURL) == "" {
 		c.TokenURL = defaultCodexOAuthTokenURL
 	}
+	c.TokenProxyURL = strings.TrimSpace(c.TokenProxyURL)
 	if strings.TrimSpace(c.Scope) == "" {
 		c.Scope = defaultCodexOAuthScope
 	}

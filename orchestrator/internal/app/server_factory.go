@@ -36,6 +36,7 @@ func activityConfig(cfg orchestratorConfig, deps *orchestratorDependencies) acti
 			RedirectURI:                   cfg.CodexOAuthRedirectURI,
 			AuthURL:                       cfg.CodexOAuthAuthURL,
 			TokenURL:                      cfg.CodexOAuthTokenURL,
+			TokenProxyURL:                 cfg.CodexOAuthTokenProxyURL,
 			Scope:                         cfg.CodexOAuthScope,
 			PhoneLabel:                    cfg.CodexOAuthPhoneLabel,
 			PhoneProfileKey:               cfg.CodexOAuthPhoneProfileKey,

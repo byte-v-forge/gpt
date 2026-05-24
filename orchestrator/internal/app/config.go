@@ -35,6 +35,7 @@ type orchestratorConfig struct {
 	CodexOAuthRedirectURI                   string
 	CodexOAuthAuthURL                       string
 	CodexOAuthTokenURL                      string
+	CodexOAuthTokenProxyURL                 string
 	CodexOAuthScope                         string
 	CodexOAuthPhoneLabel                    string
 	CodexOAuthPhoneProfileKey               string
@@ -115,6 +116,7 @@ func loadOrchestratorConfig() orchestratorConfig {
 		CodexOAuthRedirectURI:                   envDefault("CODEX_OAUTH_REDIRECT_URI", "http://localhost:1455/auth/callback"),
 		CodexOAuthAuthURL:                       envDefault("CODEX_OAUTH_AUTH_URL", "https://auth.openai.com/oauth/authorize"),
 		CodexOAuthTokenURL:                      envDefault("CODEX_OAUTH_TOKEN_URL", "https://auth.openai.com/oauth/token"),
+		CodexOAuthTokenProxyURL:                 envDefault("CODEX_OAUTH_TOKEN_PROXY_URL", ""),
 		CodexOAuthScope:                         envDefault("CODEX_OAUTH_SCOPE", "openid profile email offline_access api.connectors.read api.connectors.invoke"),
 		CodexOAuthPhoneLabel:                    envDefault("CODEX_OAUTH_PHONE_LABEL", "codex-oauth-add-phone"),
 		CodexOAuthPhoneProfileKey:               envDefault("CODEX_OAUTH_PHONE_PROFILE_KEY", "openai-th"),

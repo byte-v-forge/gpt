@@ -78,6 +78,7 @@ func codexOAuthCodeFromCallback(rawURL string) (string, string, error) {
 }
 
 func exchangeCodexOAuthToken(ctx context.Context, cfg CodexOAuthConfig, code, verifier string) (codexOAuthTokenResponse, error) {
+	cfg = cfg.withDefaults()
 	form := url.Values{}
 	form.Set("grant_type", "authorization_code")
 	form.Set("client_id", cfg.ClientID)
@@ -90,7 +91,10 @@ func exchangeCodexOAuthToken(ctx context.Context, cfg CodexOAuthConfig, code, ve
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	client := &http.Client{Timeout: 45 * time.Second}
+	client, err := codexOAuthTokenHTTPClient(cfg)
+	if err != nil {
+		return codexOAuthTokenResponse{}, err
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return codexOAuthTokenResponse{}, err
@@ -111,6 +115,21 @@ func exchangeCodexOAuthToken(ctx context.Context, cfg CodexOAuthConfig, code, ve
 		return codexOAuthTokenResponse{}, fmt.Errorf("codex oauth token response missing required tokens")
 	}
 	return tokens, nil
+}
+
+func codexOAuthTokenHTTPClient(cfg CodexOAuthConfig) (*http.Client, error) {
+	client := &http.Client{Timeout: 45 * time.Second}
+	if cfg.TokenProxyURL == "" {
+		return client, nil
+	}
+	proxyURL, err := url.Parse(cfg.TokenProxyURL)
+	if err != nil {
+		return nil, fmt.Errorf("codex oauth token proxy url invalid")
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = http.ProxyURL(proxyURL)
+	client.Transport = transport
+	return client, nil
 }
 
 func buildCodexAuthJSON(tokens codexOAuthTokenResponse) ([]byte, error) {

@@ -16,6 +16,7 @@ const (
 	browserAuthCompleteActivityName              = contracts.BrowserAuthCompleteActivityName
 	browserAuthCancelActivityName                = contracts.BrowserAuthCancelActivityName
 	protocolAuthStartActivityName                = contracts.ProtocolAuthStartActivityName
+	protocolUseProxyActivityName                 = contracts.ProtocolUseProxyActivityName
 	protocolAuthWaitActivityName                 = contracts.ProtocolAuthWaitActivityName
 	protocolAuthCompleteActivityName             = contracts.ProtocolAuthCompleteActivityName
 	protocolAuthCancelActivityName               = contracts.ProtocolAuthCancelActivityName

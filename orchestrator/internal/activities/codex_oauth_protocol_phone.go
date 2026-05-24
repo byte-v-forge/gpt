@@ -23,6 +23,9 @@ func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input C
 		}
 		if !input.GetAllowAddPhone() {
 			data["add_phone_required"] = true
+			if err := s.markCodexOAuthNeedPhone(ctx, account.GetAccountId(), label, data); err != nil {
+				data["account_phone_need_write_error"] = err.Error()
+			}
 			return data, codexOAuthAddPhoneRequiredError()
 		}
 		if err := ensureCodexOAuthPhoneUsableForSMS(input.GetPhone(), cfg); err != nil {
@@ -52,6 +55,12 @@ func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input C
 		if err := s.markCodexPhoneSuccess(ctx, input.GetPhone(), account.GetAccountId(), input.GetJobId(), label); err != nil {
 			data["error_message"] = err.Error()
 			return data, err
+		}
+		if state.PhonePresent {
+			if err := s.markCodexOAuthPhoneConfirmed(ctx, account.GetAccountId(), label, data); err != nil {
+				data["error_message"] = err.Error()
+				return data, err
+			}
 		}
 		output.Success = true
 		output.AddPhoneConfirmed = state.PhonePresent
@@ -129,6 +138,9 @@ func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *codexOA
 	data["add_phone_confirmed"] = state.PhonePresent
 	data["add_phone_required"] = !state.PhonePresent
 	if !state.PhonePresent {
+		if err := s.markCodexOAuthNeedPhone(ctx, input.GetAccountId(), input.GetLabel(), data); err != nil {
+			data["account_phone_need_write_error"] = err.Error()
+		}
 		return true, fmt.Errorf("phone_rejected: add phone status not confirmed")
 	}
 	return true, nil

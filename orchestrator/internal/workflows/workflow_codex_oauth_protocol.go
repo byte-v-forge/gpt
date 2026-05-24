@@ -50,6 +50,12 @@ func runCodexOAuthProtocolActivities(ctx workflow.Context, progress *WorkflowPro
 		}
 	}()
 
+	proxyData, failedStep, err := runProtocolUseProxy(ctx, progress, protocolCtx, input.JobID, input.AccountID, "codex_oauth")
+	mergeCodexOAuthRunData(run.data, proxyData)
+	if err != nil {
+		return run, failedStep, err
+	}
+
 	setWorkflowProgress(ctx, progress, stepCodexOAuthProtocolStart)
 	var start CodexOAuthStartBrowserOutput
 	if err := workflow.ExecuteActivity(protocolCtx, codexOAuthStartProtocolActivityName, CodexOAuthStartBrowserInput{JobId: input.JobID, AccountId: input.AccountID, Label: input.Label}).Get(ctx, &start); err != nil {

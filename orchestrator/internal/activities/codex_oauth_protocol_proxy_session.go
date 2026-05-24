@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -22,11 +23,18 @@ type codexOAuthProtocolProxySessionResponse struct {
 	} `json:"pool"`
 }
 
+type codexOAuthProtocolProxyProbeResult struct {
+	IP      string
+	Country string
+}
+
 func (s *Server) startCodexOAuthProtocolProxySession(ctx context.Context, cfg CodexOAuthConfig, purpose string, data map[string]any) error {
 	baseURL := strings.TrimRight(strings.TrimSpace(cfg.ProtocolProxyRuntimeHTTPAddr), "/")
 	if baseURL == "" {
 		data["protocol_proxy_session_skipped"] = true
-		return nil
+		probe, err := probeCodexOAuthProtocolProxyEgress(ctx, cfg)
+		recordCodexOAuthProtocolProxyProbe(data, probe)
+		return err
 	}
 
 	var lastErr error
@@ -44,11 +52,13 @@ func (s *Server) startCodexOAuthProtocolProxySession(ctx context.Context, cfg Co
 			data["protocol_proxy_probe_error"] = codexOAuthProtocolSafeText(err.Error(), 180)
 			continue
 		}
-		if err := probeCodexOAuthProtocolProxyEgress(ctx, cfg); err != nil {
+		probe, err := probeCodexOAuthProtocolProxyEgress(ctx, cfg)
+		if err != nil {
 			lastErr = err
 			data["protocol_proxy_probe_error"] = codexOAuthProtocolSafeText(err.Error(), 180)
 			continue
 		}
+		recordCodexOAuthProtocolProxyProbe(data, probe)
 		data["protocol_proxy_probe_ok"] = true
 		return nil
 	}
@@ -112,6 +122,18 @@ func recordCodexOAuthProtocolProxySession(data map[string]any, purpose string, p
 	data["protocol_proxy_pool_endpoints"] = len(parsed.Pool.Endpoints)
 	if parsed.Session.SessionID != "" {
 		data["protocol_proxy_session_hash"] = shortStateHash(parsed.Session.SessionID)
+	}
+}
+
+func recordCodexOAuthProtocolProxyProbe(data map[string]any, probe codexOAuthProtocolProxyProbeResult) {
+	if data == nil {
+		return
+	}
+	if strings.TrimSpace(probe.IP) != "" {
+		data["protocol_proxy_exit_ip"] = strings.TrimSpace(probe.IP)
+	}
+	if strings.TrimSpace(probe.Country) != "" {
+		data["protocol_proxy_exit_country"] = strings.TrimSpace(probe.Country)
 	}
 }
 
@@ -186,27 +208,67 @@ func codexOAuthProtocolProxyAddr(proxyURL string) (string, error) {
 	return parsed.Host, nil
 }
 
-func probeCodexOAuthProtocolProxyEgress(ctx context.Context, cfg CodexOAuthConfig) error {
+func probeCodexOAuthProtocolProxyEgress(ctx context.Context, cfg CodexOAuthConfig) (codexOAuthProtocolProxyProbeResult, error) {
 	if strings.TrimSpace(cfg.ProtocolProxyURL) == "" {
-		return nil
+		return codexOAuthProtocolProxyProbeResult{}, fmt.Errorf("protocol proxy url is required")
 	}
 	probeCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 	client, err := newCodexOAuthProtocolHTTPClient(cfg, &codexOAuthProtocolState{})
 	if err != nil {
-		return err
+		return codexOAuthProtocolProxyProbeResult{}, err
 	}
+	probe := probeCodexOAuthProtocolProxyExitIP(probeCtx, client)
 	resp, err := client.get(probeCtx, "https://chatgpt.com/api/auth/csrf", protocolAuthChatGPTLoginURL, false)
 	if err != nil {
-		return fmt.Errorf("protocol proxy csrf probe: %w", err)
+		return probe, fmt.Errorf("protocol proxy csrf probe: %w", err)
 	}
 	if err := codexOAuthProtocolRequireOK(resp, "protocol proxy csrf probe"); err != nil {
-		return err
+		return probe, err
 	}
 	if strings.TrimSpace(stringAny(codexOAuthProtocolResponseJSON(resp)["csrfToken"])) == "" {
-		return fmt.Errorf("protocol proxy csrf probe token missing")
+		return probe, fmt.Errorf("protocol proxy csrf probe token missing")
 	}
-	return nil
+	if strings.TrimSpace(probe.IP) == "" {
+		return probe, fmt.Errorf("protocol proxy exit ip probe missing")
+	}
+	return probe, nil
+}
+
+func probeCodexOAuthProtocolProxyExitIP(ctx context.Context, client *codexOAuthProtocolHTTPClient) codexOAuthProtocolProxyProbeResult {
+	if client == nil {
+		return codexOAuthProtocolProxyProbeResult{}
+	}
+	if resp, err := client.get(ctx, "https://cloudflare.com/cdn-cgi/trace", "https://cloudflare.com/", false); err == nil && resp != nil && resp.StatusCode == http.StatusOK {
+		probe := parseCodexOAuthCloudflareTrace(string(resp.Body))
+		if strings.TrimSpace(probe.IP) != "" {
+			return probe
+		}
+	}
+	if resp, err := client.get(ctx, "https://api.ipify.org?format=json", "https://api.ipify.org/", false); err == nil && resp != nil && resp.StatusCode == http.StatusOK {
+		ip := strings.TrimSpace(stringAny(codexOAuthProtocolResponseJSON(resp)["ip"]))
+		if ip != "" {
+			return codexOAuthProtocolProxyProbeResult{IP: ip}
+		}
+	}
+	return codexOAuthProtocolProxyProbeResult{}
+}
+
+func parseCodexOAuthCloudflareTrace(body string) codexOAuthProtocolProxyProbeResult {
+	var probe codexOAuthProtocolProxyProbeResult
+	for _, line := range strings.Split(body, "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(strings.ToLower(key)) {
+		case "ip":
+			probe.IP = strings.TrimSpace(value)
+		case "loc":
+			probe.Country = strings.TrimSpace(value)
+		}
+	}
+	return probe
 }
 
 func codexOAuthProtocolSleepContext(ctx context.Context, duration time.Duration) error {
@@ -218,4 +280,15 @@ func codexOAuthProtocolSleepContext(ctx context.Context, duration time.Duration)
 	case <-timer.C:
 		return nil
 	}
+}
+
+func logCodexOAuthProtocolProxyUse(accountID string, mode string, data map[string]any) {
+	log.Printf(
+		"[protocol-proxy] use proxy account_id=%s mode=%s exit_ip=%s exit_country=%s session=%s",
+		strings.TrimSpace(accountID),
+		strings.TrimSpace(mode),
+		strings.TrimSpace(stringAny(data["protocol_proxy_exit_ip"])),
+		strings.TrimSpace(stringAny(data["protocol_proxy_exit_country"])),
+		strings.TrimSpace(stringAny(data["protocol_proxy_session_hash"])),
+	)
 }

@@ -29,9 +29,9 @@ export function AccountChannelTag({ channel }: { channel: string }) {
 }
 
 export function AccountCodexPhoneTag({ state }: { state: AccountCodexPhoneState }) {
-  const Icon = state.confirmed ? Phone : PhoneOff;
+  const Icon = state.confirmed || state.tone === 'bad' ? Phone : PhoneOff;
   return (
-    <span className={`accountMetaTag accountPhoneTag iconOnly ${state.confirmed ? 'good' : 'neutral'}`} title={state.title} aria-label={state.label}>
+    <span className={`accountMetaTag accountPhoneTag iconOnly ${state.tone}`} title={state.title} aria-label={state.label}>
       <Icon size={13} />
     </span>
   );

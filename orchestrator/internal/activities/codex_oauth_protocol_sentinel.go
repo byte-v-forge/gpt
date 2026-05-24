@@ -16,9 +16,10 @@ import (
 )
 
 const (
+	codexOAuthSentinelVersion = "20260219f9f6"
 	codexOAuthSentinelReqURL  = "https://sentinel.openai.com/backend-api/sentinel/req"
-	codexOAuthSentinelReferer = "https://sentinel.openai.com/backend-api/sentinel/frame.html"
-	codexOAuthSentinelSDKURL  = "https://sentinel.openai.com/sentinel/20260124ceb8/sdk.js"
+	codexOAuthSentinelReferer = "https://sentinel.openai.com/backend-api/sentinel/frame.html?sv=" + codexOAuthSentinelVersion
+	codexOAuthSentinelSDKURL  = "https://sentinel.openai.com/sentinel/" + codexOAuthSentinelVersion + "/sdk.js"
 )
 
 type codexOAuthSentinelGenerator struct {
@@ -44,6 +45,10 @@ func codexOAuthProtocolSentinelHeader(ctx context.Context, client *codexOAuthPro
 	if data != nil {
 		data["sentinel_flow"] = flow
 		data["sentinel_token_present"] = true
+		var parsed map[string]any
+		if json.Unmarshal([]byte(token), &parsed) == nil {
+			data["sentinel_t_present"] = strings.TrimSpace(stringAny(parsed["t"])) != ""
+		}
 	}
 	return map[string]string{"openai-sentinel-token": token}
 }
@@ -59,6 +64,13 @@ func (c *codexOAuthProtocolHTTPClient) sentinelToken(ctx context.Context, flow s
 			c.state.DeviceID = deviceID
 		}
 	}
+	if token, err := c.sentinelTokenQuickJS(ctx, deviceID, flow); err == nil && strings.TrimSpace(token) != "" {
+		return token, nil
+	}
+	return c.sentinelTokenPure(ctx, deviceID, flow)
+}
+
+func (c *codexOAuthProtocolHTTPClient) sentinelTokenPure(ctx context.Context, deviceID, flow string) (string, error) {
 	generator := newCodexOAuthSentinelGenerator(deviceID, codexOAuthProtocolUserAgent)
 	body, err := codexOAuthJSONNoEscape(map[string]string{
 		"p":    generator.requirementsToken(),

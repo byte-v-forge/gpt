@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net/url"
 	"strings"
 	"time"
@@ -37,10 +38,6 @@ func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input BrowserAut
 	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "starting protocol auth", data)
 	defer stopHeartbeat()
 
-	if err := s.startCodexOAuthProtocolProxySession(ctx, cfg, "account_"+input.GetMode(), data); err != nil {
-		output.Data = protoData(data)
-		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
-	}
 	state, err := newProtocolAuthState()
 	if err != nil {
 		output.Data = protoData(data)
@@ -400,11 +397,11 @@ func (s *Server) protocolAuthValidateEmailOTP(ctx context.Context, client *codex
 func (s *Server) protocolAuthCreateAccount(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, error) {
 	name, birthdate := protocolAuthProfile(account)
 	data["profile_name_present"] = name != ""
-	data["profile_birthdate_fixed"] = birthdate == "2000-01-01"
+	data["profile_birthdate_randomized"] = birthdate != ""
 	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/create_account", "https://auth.openai.com/about-you", map[string]any{
 		"name":      name,
 		"birthdate": birthdate,
-	}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "oauth_create_account"))
+	}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "create_account"))
 	if err != nil {
 		return "", err
 	}
@@ -596,9 +593,9 @@ func protocolAuthCompleteStepName(mode string) (string, error) {
 func protocolAuthProfile(account *pb.Account) (string, string) {
 	name := protocolAuthDisplayName(account)
 	if name == "" {
-		name = browserAuthDefaultRegistrationName
+		name = protocolAuthRandomDisplayName()
 	}
-	return name, "2000-01-01"
+	return name, protocolAuthRandomBirthdate()
 }
 
 func protocolAuthDisplayName(account *pb.Account) string {
@@ -620,4 +617,14 @@ func protocolAuthDisplayName(account *pb.Account) string {
 		}
 	}
 	return strings.TrimSpace(out.String())
+}
+
+func protocolAuthRandomDisplayName() string {
+	first := []string{"James", "John", "Robert", "Michael", "William", "David", "Richard", "Joseph", "Thomas", "Charles", "Mary", "Patricia", "Jennifer", "Linda", "Elizabeth", "Barbara", "Susan", "Jessica", "Sarah", "Karen"}
+	last := []string{"Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez", "Wilson", "Anderson", "Taylor", "Thomas"}
+	return first[rand.Intn(len(first))] + " " + last[rand.Intn(len(last))]
+}
+
+func protocolAuthRandomBirthdate() string {
+	return fmt.Sprintf("%04d-%02d-%02d", rand.Intn(16)+1985, rand.Intn(12)+1, rand.Intn(28)+1)
 }

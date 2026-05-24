@@ -34,14 +34,17 @@ export type AccountCodexPhoneState = {
   confirmed: boolean;
   label: string;
   title: string;
+  tone: 'good' | 'neutral' | 'bad';
 };
 
 export function accountCodexPhoneState(account: Account, jobs: Job[]): AccountCodexPhoneState {
-  const accountState = account as Account & { codex_phone_confirmed?: boolean; codex_phone_label?: string };
-  if (accountState.codex_phone_confirmed === true) return codexPhoneState(true, stringValue(accountState.codex_phone_label));
-  if (accountState.codex_phone_confirmed === false) return codexPhoneState(false, stringValue(accountState.codex_phone_label));
+  const accountState = account as Account & { codex_phone_confirmed?: boolean; codex_phone_label?: string; codex_phone_status?: string };
+  const status = normalizeCodexPhoneStatus(accountState.codex_phone_status);
+  if (status === 'CONFIRMED' || accountState.codex_phone_confirmed === true) return codexPhoneState(true, stringValue(accountState.codex_phone_label));
   const protocol = latestProtocolPhoneState(account, jobs);
   if (protocol) return protocol;
+  if (status === 'OAUTH_NEED_PHONE') return oauthNeedPhoneState(stringValue(accountState.codex_phone_label));
+  if (accountState.codex_phone_confirmed === false) return codexPhoneState(false, stringValue(accountState.codex_phone_label));
   const latest = jobs
     .filter((job) => job.account_id === account.account_id && job.action === 'CODEX_OAUTH_ADD_PHONE')
     .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
@@ -52,10 +55,10 @@ export function accountCodexPhoneState(account: Account, jobs: Job[]): AccountCo
       return codexPhoneState(true, stringValue(result.phone_label) || stringValue(result.label), numberValue(result.phone_reuse_count), numberValue(result.phone_reuse_limit));
     }
     if (job.status === 'SUCCEEDED' && confirmed === false) {
-      return { confirmed: false, label: '未加手机', title: 'OAuth 已完成，但该账号未出现 add phone' };
+      return { confirmed: false, label: '未加手机', title: 'OAuth 已完成，但该账号未出现 add phone', tone: 'neutral' };
     }
   }
-  return { confirmed: false, label: '未加手机', title: '未确认 add phone' };
+  return { confirmed: false, label: '未加手机', title: '未确认 add phone', tone: 'neutral' };
 }
 
 
@@ -67,13 +70,23 @@ function latestProtocolPhoneState(account: Account, jobs: Job[]): AccountCodexPh
   if (boolResult(result.client_auth_phone_present) === true) {
     return codexPhoneState(true, stringValue(result.client_auth_phone_verification_channel) || 'dump');
   }
+  if (boolResult(result.add_phone_required) === true || stringValue(result.login_stage) === 'add_phone') return oauthNeedPhoneState(stringValue(result.phone_label) || stringValue(result.label));
   return null;
 }
 
 function codexPhoneState(confirmed: boolean, label = '', reuseCount = 0, reuseLimit = 0): AccountCodexPhoneState {
   const suffix = label ? ` · ${label}` : '';
   const reuse = reuseLimit > 0 ? ` · ${reuseCount || 0}/${reuseLimit}` : '';
-  return { confirmed, label: confirmed ? '已加手机' : '未加手机', title: `${confirmed ? '已完成 add phone' : '未确认 add phone'}${suffix}${reuse}` };
+  return { confirmed, label: confirmed ? '已加手机' : '未加手机', title: `${confirmed ? '已完成 add phone' : '未确认 add phone'}${suffix}${reuse}`, tone: confirmed ? 'good' : 'neutral' };
+}
+
+function oauthNeedPhoneState(label = ''): AccountCodexPhoneState {
+  const suffix = label ? ` · ${label}` : '';
+  return { confirmed: false, label: 'OAuth Need Phone', title: `OAuth 需要加手机号${suffix}`, tone: 'bad' };
+}
+
+function normalizeCodexPhoneStatus(value: unknown) {
+  return String(value ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
 }
 
 function boolResult(value: unknown) {

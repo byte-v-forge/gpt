@@ -39,6 +39,7 @@ type Account struct {
 	CodexPhoneConfirmed            *bool  `gorm:"column:codex_phone_confirmed"`
 	CodexPhoneLabel                string `gorm:"column:codex_phone_label"`
 	CodexPhoneUpdatedAtUnix        int64  `gorm:"column:codex_phone_updated_at_unix"`
+	CodexPhoneStatus               string `gorm:"column:codex_phone_status"`
 	CreatedAt                      int64  `gorm:"autoCreateTime"`
 	UpdatedAt                      int64  `gorm:"autoUpdateTime"`
 }
@@ -86,6 +87,9 @@ func InitDB() *gorm.DB {
 	}
 	if err := backfillCodexPhoneConfirmed(db); err != nil {
 		log.Printf("failed to backfill codex phone state: %v", err)
+	}
+	if err := backfillCodexPhoneStatus(db); err != nil {
+		log.Printf("failed to backfill codex phone status: %v", err)
 	}
 
 	return db
@@ -220,6 +224,15 @@ func backfillCodexPhoneConfirmed(db *gorm.DB) error {
 		WHERE accounts.id = ranked.id
 			AND ranked.rn > 3
 			AND codex_phone_confirmed IS NULL
+	`).Error
+}
+
+func backfillCodexPhoneStatus(db *gorm.DB) error {
+	return db.Exec(`
+		UPDATE accounts
+		SET codex_phone_status = 'CONFIRMED'
+		WHERE codex_phone_confirmed = true
+			AND COALESCE(codex_phone_status, '') = ''
 	`).Error
 }
 

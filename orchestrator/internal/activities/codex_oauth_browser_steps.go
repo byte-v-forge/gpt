@@ -69,6 +69,11 @@ func (s *Server) codexOAuthBrowserStageStep(ctx context.Context, input CodexOAut
 			data["login_stage"] = stage
 			output.Stage = stage
 		}
+		if stage == "add_phone" {
+			if markErr := s.markCodexOAuthNeedPhone(ctx, account.GetAccountId(), label, data); markErr != nil {
+				data["account_phone_need_write_error"] = markErr.Error()
+			}
+		}
 		if issuedAfter > 0 {
 			data["email_otp_issued_after_unix"] = issuedAfter
 			output.EmailOtpIssuedAfterUnix = issuedAfter

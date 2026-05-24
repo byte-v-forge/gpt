@@ -34,6 +34,7 @@ message Account {
   optional bool codex_phone_confirmed = 27;
   string codex_phone_label = 28;
   int64 codex_phone_updated_at_unix = 29;
+  string codex_phone_status = 30;
 }
 
 message CreateAccountRequest {

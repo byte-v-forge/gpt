@@ -48,6 +48,7 @@ func temporalWorkerSpec(taskQueue string, s *activities.Server) workflowruntime.
 			{Name: browserAuthCompleteActivityName, Definition: s.BrowserAuthCompleteActivity},
 			{Name: browserAuthCancelActivityName, Definition: s.BrowserAuthCancelActivity},
 			{Name: protocolAuthStartActivityName, Definition: s.ProtocolAuthStartActivity},
+			{Name: protocolUseProxyActivityName, Definition: s.ProtocolUseProxyActivity},
 			{Name: protocolAuthWaitActivityName, Definition: s.ProtocolAuthWaitActivity},
 			{Name: protocolAuthCompleteActivityName, Definition: s.ProtocolAuthCompleteActivity},
 			{Name: protocolAuthCancelActivityName, Definition: s.ProtocolAuthCancelActivity},

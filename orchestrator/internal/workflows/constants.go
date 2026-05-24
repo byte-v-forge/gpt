@@ -51,6 +51,7 @@ const (
 	stepRegisterAccount                 = "register_account"
 	stepRegisterAccountStart            = "register_account_start"
 	stepRegisterAccountBrowser          = "register_account_browser"
+	stepProtocolUseProxy                = "protocol_use_proxy"
 	stepRegisterAccountProtocol         = "register_account_protocol"
 	stepRegisterAccountProtocolStart    = "register_account_protocol_start"
 	stepRegisterAccountProtocolOTPWait  = "register_account_protocol_otp_wait"

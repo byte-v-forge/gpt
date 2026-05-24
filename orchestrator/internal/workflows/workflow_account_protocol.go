@@ -90,11 +90,17 @@ func LoginSessionProtocolWorkflow(ctx workflow.Context, input LoginSessionWorkfl
 }
 
 func runProtocolRegister(ctx workflow.Context, progress *WorkflowProgress, retryCtx workflow.Context, protocolCtx workflow.Context, jobID string, accountID string) (RegisterActivityOutput, string, error) {
+	proxyData, failedStep, err := runProtocolUseProxy(ctx, progress, protocolCtx, jobID, accountID, browserAuthModeRegister)
+	if err != nil {
+		return RegisterActivityOutput{Data: protoData(proxyData)}, failedStep, err
+	}
 	var start BrowserAuthStartOutput
 	setWorkflowProgress(ctx, progress, stepRegisterAccountProtocolStart)
 	if err := workflow.ExecuteActivity(protocolCtx, protocolAuthStartActivityName, BrowserAuthStartInput{JobId: jobID, AccountId: accountID, Mode: browserAuthModeRegister}).Get(ctx, &start); err != nil {
-		return RegisterActivityOutput{Data: start.GetData()}, stepRegisterAccountProtocolStart, err
+		mergeCodexOAuthRunData(proxyData, protoDataMap(start.GetData()))
+		return RegisterActivityOutput{Data: protoData(proxyData)}, stepRegisterAccountProtocolStart, err
 	}
+	mergeCodexOAuthRunData(proxyData, protoDataMap(start.GetData()))
 	register := RegisterActivityOutput{}
 	if start.GetResult() != nil {
 		register = *start.GetResult()
@@ -104,8 +110,10 @@ func runProtocolRegister(ctx workflow.Context, progress *WorkflowProgress, retry
 		setWorkflowProgress(ctx, progress, stepRegisterAccountProtocol)
 		if err := workflow.ExecuteActivity(protocolCtx, protocolAuthWaitActivityName, BrowserAuthWaitInput{JobId: jobID, AccountId: accountID, FlowId: start.GetFlowId(), Mode: browserAuthModeRegister, Email: start.GetEmail()}).Get(ctx, &wait); err != nil {
 			_ = workflow.ExecuteActivity(retryCtx, protocolAuthCancelActivityName, BrowserAuthCancelInput{JobId: jobID, FlowId: start.GetFlowId(), Mode: browserAuthModeRegister}).Get(ctx, nil)
-			return RegisterActivityOutput{Data: wait.GetData()}, stepRegisterAccountProtocol, err
+			mergeCodexOAuthRunData(proxyData, protoDataMap(wait.GetData()))
+			return RegisterActivityOutput{Data: protoData(proxyData)}, stepRegisterAccountProtocol, err
 		}
+		mergeCodexOAuthRunData(proxyData, protoDataMap(wait.GetData()))
 		if wait.GetResult() != nil {
 			register = *wait.GetResult()
 		}
@@ -115,14 +123,19 @@ func runProtocolRegister(ctx workflow.Context, progress *WorkflowProgress, retry
 		otp, err := waitForOTPInStep(ctx, retryCtx, stepRegisterAccountProtocolOTPWait, otpInput)
 		if err != nil {
 			_ = workflow.ExecuteActivity(retryCtx, protocolAuthCancelActivityName, BrowserAuthCancelInput{JobId: jobID, FlowId: start.GetFlowId(), Mode: browserAuthModeRegister}).Get(ctx, nil)
-			return RegisterActivityOutput{Data: protoData(otpWaitStepResultData(otpInput, otp))}, stepRegisterAccountProtocolOTPWait, err
+			mergeCodexOAuthRunData(proxyData, otpWaitStepResultData(otpInput, otp))
+			return RegisterActivityOutput{Data: protoData(proxyData)}, stepRegisterAccountProtocolOTPWait, err
 		}
 		setWorkflowProgress(ctx, progress, stepRegisterAccountProtocolComplete)
 		if err := workflow.ExecuteActivity(protocolCtx, protocolAuthCompleteActivityName, BrowserAuthCompleteInput{JobId: jobID, AccountId: accountID, FlowId: start.GetFlowId(), Mode: browserAuthModeRegister, OtpParam: registrationOTPParam, SubmittedAtParam: registrationOTPSubmittedAtParam, OtpIssuedAfterUnix: wait.GetOtpIssuedAfterUnix(), OtpSource: otp.GetSource()}).Get(ctx, &register); err != nil {
 			_ = workflow.ExecuteActivity(retryCtx, protocolAuthCancelActivityName, BrowserAuthCancelInput{JobId: jobID, FlowId: start.GetFlowId(), Mode: browserAuthModeRegister}).Get(ctx, nil)
+			mergeCodexOAuthRunData(proxyData, protoDataMap(register.GetData()))
+			register.Data = protoData(proxyData)
 			return register, stepRegisterAccountProtocolComplete, err
 		}
+		mergeCodexOAuthRunData(proxyData, protoDataMap(register.GetData()))
 	}
+	mergeProtocolOutputData(&register, proxyData)
 	return register, "", nil
 }
 
@@ -132,11 +145,17 @@ func runProtocolLogin(ctx workflow.Context, progress *WorkflowProgress, retryCtx
 }
 
 func runProtocolLoginRegisterOutput(ctx workflow.Context, progress *WorkflowProgress, retryCtx workflow.Context, protocolCtx workflow.Context, jobID string, accountID string) (RegisterActivityOutput, string, error) {
+	proxyData, failedStep, err := runProtocolUseProxy(ctx, progress, protocolCtx, jobID, accountID, browserAuthModeLogin)
+	if err != nil {
+		return RegisterActivityOutput{Data: protoData(proxyData)}, failedStep, err
+	}
 	var start BrowserAuthStartOutput
 	setWorkflowProgress(ctx, progress, stepLoginSessionProtocolStart)
 	if err := workflow.ExecuteActivity(protocolCtx, protocolAuthStartActivityName, BrowserAuthStartInput{JobId: jobID, AccountId: accountID, Mode: browserAuthModeLogin}).Get(ctx, &start); err != nil {
-		return RegisterActivityOutput{Data: start.GetData()}, stepLoginSessionProtocolStart, err
+		mergeCodexOAuthRunData(proxyData, protoDataMap(start.GetData()))
+		return RegisterActivityOutput{Data: protoData(proxyData)}, stepLoginSessionProtocolStart, err
 	}
+	mergeCodexOAuthRunData(proxyData, protoDataMap(start.GetData()))
 	login := RegisterActivityOutput{}
 	if start.GetResult() != nil {
 		login = *start.GetResult()
@@ -146,8 +165,10 @@ func runProtocolLoginRegisterOutput(ctx workflow.Context, progress *WorkflowProg
 		setWorkflowProgress(ctx, progress, stepLoginSessionProtocol)
 		if err := workflow.ExecuteActivity(protocolCtx, protocolAuthWaitActivityName, BrowserAuthWaitInput{JobId: jobID, AccountId: accountID, FlowId: start.GetFlowId(), Mode: browserAuthModeLogin, Email: start.GetEmail()}).Get(ctx, &wait); err != nil {
 			_ = workflow.ExecuteActivity(retryCtx, protocolAuthCancelActivityName, BrowserAuthCancelInput{JobId: jobID, FlowId: start.GetFlowId(), Mode: browserAuthModeLogin}).Get(ctx, nil)
-			return RegisterActivityOutput{Data: wait.GetData()}, stepLoginSessionProtocol, err
+			mergeCodexOAuthRunData(proxyData, protoDataMap(wait.GetData()))
+			return RegisterActivityOutput{Data: protoData(proxyData)}, stepLoginSessionProtocol, err
 		}
+		mergeCodexOAuthRunData(proxyData, protoDataMap(wait.GetData()))
 		if wait.GetResult() != nil {
 			login = *wait.GetResult()
 		}
@@ -157,15 +178,44 @@ func runProtocolLoginRegisterOutput(ctx workflow.Context, progress *WorkflowProg
 		otp, err := waitForOTPInStep(ctx, retryCtx, stepLoginSessionProtocolOTPWait, otpInput)
 		if err != nil {
 			_ = workflow.ExecuteActivity(retryCtx, protocolAuthCancelActivityName, BrowserAuthCancelInput{JobId: jobID, FlowId: start.GetFlowId(), Mode: browserAuthModeLogin}).Get(ctx, nil)
-			return RegisterActivityOutput{Data: protoData(otpWaitStepResultData(otpInput, otp))}, stepLoginSessionProtocolOTPWait, err
+			mergeCodexOAuthRunData(proxyData, otpWaitStepResultData(otpInput, otp))
+			return RegisterActivityOutput{Data: protoData(proxyData)}, stepLoginSessionProtocolOTPWait, err
 		}
 		setWorkflowProgress(ctx, progress, stepLoginSessionProtocolComplete)
 		if err := workflow.ExecuteActivity(protocolCtx, protocolAuthCompleteActivityName, BrowserAuthCompleteInput{JobId: jobID, AccountId: accountID, FlowId: start.GetFlowId(), Mode: browserAuthModeLogin, OtpParam: registrationOTPParam, SubmittedAtParam: registrationOTPSubmittedAtParam, OtpIssuedAfterUnix: wait.GetOtpIssuedAfterUnix(), OtpSource: otp.GetSource()}).Get(ctx, &login); err != nil {
 			_ = workflow.ExecuteActivity(retryCtx, protocolAuthCancelActivityName, BrowserAuthCancelInput{JobId: jobID, FlowId: start.GetFlowId(), Mode: browserAuthModeLogin}).Get(ctx, nil)
+			mergeCodexOAuthRunData(proxyData, protoDataMap(login.GetData()))
+			login.Data = protoData(proxyData)
 			return login, stepLoginSessionProtocolComplete, err
 		}
+		mergeCodexOAuthRunData(proxyData, protoDataMap(login.GetData()))
 	}
+	mergeProtocolOutputData(&login, proxyData)
 	return login, "", nil
+}
+
+func runProtocolUseProxy(ctx workflow.Context, progress *WorkflowProgress, protocolCtx workflow.Context, jobID string, accountID string, mode string) (map[string]any, string, error) {
+	setWorkflowProgress(ctx, progress, stepProtocolUseProxy)
+	var proxy BrowserAuthStartOutput
+	err := workflow.ExecuteActivity(protocolCtx, protocolUseProxyActivityName, BrowserAuthStartInput{JobId: jobID, AccountId: accountID, Mode: mode}).Get(ctx, &proxy)
+	data := protoDataMap(proxy.GetData())
+	if err != nil {
+		return data, stepProtocolUseProxy, err
+	}
+	return data, "", nil
+}
+
+func mergeProtocolOutputData(output *RegisterActivityOutput, base map[string]any) {
+	if output == nil {
+		return
+	}
+	data := protoDataMap(output.GetData())
+	for key, value := range base {
+		if _, exists := data[key]; !exists {
+			data[key] = value
+		}
+	}
+	output.Data = protoData(data)
 }
 
 func protocolEmailOTPWaitInput(jobID string, stepName string, email string, timeoutSeconds int32, issuedAfterUnix int64) OTPWaitInput {

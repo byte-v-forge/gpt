@@ -25,6 +25,9 @@ func (f *codexOAuthBrowserFlow) handleAddPhoneStage() (codexOAuthBrowserResult, 
 	if !f.phoneNeeded {
 		return codexOAuthBrowserResult{}, f.releaseUnusedPhoneLease()
 	}
+	if err := f.server.markCodexOAuthNeedPhone(f.ctx, f.account.GetAccountId(), f.label, f.data); err != nil {
+		f.data["account_phone_need_write_error"] = err.Error()
+	}
 	if !f.allowAddPhone {
 		f.data["add_phone_required"] = true
 		f.failure = "codex_oauth_add_phone_required"
@@ -52,9 +55,17 @@ func (f *codexOAuthBrowserFlow) addPhoneToCodexOAuthAccount() error {
 	f.data["add_phone_confirmed"] = f.phoneAdded
 	if !f.phoneAdded {
 		f.data["add_phone_pending_stage"] = stage
+		if err := f.server.markCodexOAuthNeedPhone(f.ctx, f.account.GetAccountId(), f.label, f.data); err != nil {
+			f.data["account_phone_need_write_error"] = err.Error()
+		}
 	}
 	if err := f.server.markCodexPhoneSuccess(f.ctx, f.phone, f.account.GetAccountId(), f.jobID, f.label); err != nil {
 		return f.fail(err)
+	}
+	if f.phoneAdded {
+		if err := f.server.markCodexOAuthPhoneConfirmed(f.ctx, f.account.GetAccountId(), f.label, f.data); err != nil {
+			return f.fail(err)
+		}
 	}
 	return nil
 }

@@ -29,6 +29,8 @@ const (
 	gptEmailStatusAuthFailed        = "AUTH_FAILED"
 	gptEmailStatusUserAlreadyExists = "USER_ALREADY_EXISTS"
 	gptEmailStatusBlocked           = "BLOCKED"
+	codexPhoneStatusConfirmed       = "CONFIRMED"
+	codexPhoneStatusOAuthNeedPhone  = "OAUTH_NEED_PHONE"
 )
 
 type accountDatabaseServer struct {
@@ -448,6 +450,9 @@ func (s *accountDatabaseServer) buildAccount(input *pb.Account) (*db.Account, er
 		MailboxLatestOTP:               strings.TrimSpace(input.GetMailboxLatestOtp()),
 		MailboxLatestOTPSubject:        strings.TrimSpace(input.GetMailboxLatestOtpSubject()),
 		MailboxLatestOTPReceivedAtUnix: input.GetMailboxLatestOtpReceivedAtUnix(),
+		CodexPhoneLabel:                strings.TrimSpace(input.GetCodexPhoneLabel()),
+		CodexPhoneUpdatedAtUnix:        input.GetCodexPhoneUpdatedAtUnix(),
+		CodexPhoneStatus:               normalizeCodexPhoneStatus(input.GetCodexPhoneStatus()),
 	}
 	if input.PlusTrialEligible != nil {
 		value := input.GetPlusTrialEligible()
@@ -456,6 +461,13 @@ func (s *accountDatabaseServer) buildAccount(input *pb.Account) (*db.Account, er
 	if input.PlusActive != nil {
 		value := input.GetPlusActive()
 		account.PlusActive = &value
+	}
+	if input.CodexPhoneConfirmed != nil {
+		value := input.GetCodexPhoneConfirmed()
+		account.CodexPhoneConfirmed = &value
+		if account.CodexPhoneStatus == "" && value {
+			account.CodexPhoneStatus = codexPhoneStatusConfirmed
+		}
 	}
 
 	if account.ID == "" {
@@ -669,6 +681,7 @@ func updateMap(account *pb.Account) map[string]interface{} {
 		updates["codex_auth_json"] = value
 		updates["codex_auth_updated_at_unix"] = updatedAt
 	}
+	phoneStatus := normalizeCodexPhoneStatus(account.GetCodexPhoneStatus())
 	if account.CodexPhoneConfirmed != nil {
 		updatedAt := account.GetCodexPhoneUpdatedAtUnix()
 		if updatedAt <= 0 {
@@ -677,6 +690,26 @@ func updateMap(account *pb.Account) map[string]interface{} {
 		updates["codex_phone_confirmed"] = account.GetCodexPhoneConfirmed()
 		updates["codex_phone_label"] = strings.TrimSpace(account.GetCodexPhoneLabel())
 		updates["codex_phone_updated_at_unix"] = updatedAt
+		if phoneStatus == "" && account.GetCodexPhoneConfirmed() {
+			phoneStatus = codexPhoneStatusConfirmed
+		}
+	}
+	if phoneStatus != "" {
+		updatedAt := account.GetCodexPhoneUpdatedAtUnix()
+		if updatedAt <= 0 {
+			updatedAt = time.Now().Unix()
+		}
+		updates["codex_phone_status"] = phoneStatus
+		updates["codex_phone_updated_at_unix"] = updatedAt
+		if phoneStatus == codexPhoneStatusConfirmed && account.CodexPhoneConfirmed == nil {
+			updates["codex_phone_confirmed"] = true
+		}
+		if phoneStatus == codexPhoneStatusOAuthNeedPhone && account.CodexPhoneConfirmed == nil {
+			updates["codex_phone_confirmed"] = false
+		}
+		if label := strings.TrimSpace(account.GetCodexPhoneLabel()); label != "" && account.CodexPhoneConfirmed == nil {
+			updates["codex_phone_label"] = label
+		}
 	}
 	return updates
 }
@@ -714,6 +747,7 @@ func accountToProto(account *db.Account) *pb.Account {
 		CodexPhoneConfirmed:            account.CodexPhoneConfirmed,
 		CodexPhoneLabel:                account.CodexPhoneLabel,
 		CodexPhoneUpdatedAtUnix:        account.CodexPhoneUpdatedAtUnix,
+		CodexPhoneStatus:               account.CodexPhoneStatus,
 	}
 }
 
@@ -767,6 +801,17 @@ func normalizeEmail(email string) string {
 
 func normalizeTier(tier string) string {
 	return strings.ToLower(strings.TrimSpace(tier))
+}
+
+func normalizeCodexPhoneStatus(value string) string {
+	status := strings.ToUpper(strings.TrimSpace(value))
+	status = strings.NewReplacer(" ", "_", "-", "_").Replace(status)
+	switch status {
+	case codexPhoneStatusConfirmed, codexPhoneStatusOAuthNeedPhone:
+		return status
+	default:
+		return ""
+	}
 }
 
 func canonicalEmail(email string) string {

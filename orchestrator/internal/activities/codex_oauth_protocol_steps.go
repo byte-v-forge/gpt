@@ -16,11 +16,8 @@ func (s *Server) CodexOAuthStartProtocolActivity(ctx context.Context, input Code
 	_, err := step.run(func() (any, error) {
 		stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepCodexOAuthProtocolStart, "starting codex oauth protocol", data)
 		defer stopHeartbeat()
-		if _, err := s.codexOAuthBrowserAccount(ctx, input.GetAccountId()); err != nil {
-			data["error_message"] = err.Error()
-			return data, err
-		}
-		if err := s.startCodexOAuthProtocolProxySession(ctx, cfg, "codex_oauth", data); err != nil {
+		account, err := s.codexOAuthBrowserAccount(ctx, input.GetAccountId())
+		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err
 		}
@@ -50,6 +47,11 @@ func (s *Server) CodexOAuthStartProtocolActivity(ctx context.Context, input Code
 			stage = codexOAuthProtocolStageFromDump(&state, stage)
 			state.Stage = stage
 			data["login_stage"] = stage
+			if stage == "add_phone" {
+				if markErr := s.markCodexOAuthNeedPhone(ctx, account.GetAccountId(), label, data); markErr != nil {
+					data["account_phone_need_write_error"] = markErr.Error()
+				}
+			}
 		}
 		if saveErr := s.saveCodexOAuthProtocolState(ctx, input.GetJobId(), &state); saveErr != nil && err == nil {
 			err = saveErr
@@ -167,6 +169,11 @@ func (s *Server) codexOAuthProtocolStageStep(ctx context.Context, input CodexOAu
 			state.Stage = stage
 			data["login_stage"] = stage
 			output.Stage = stage
+		}
+		if stage == "add_phone" {
+			if markErr := s.markCodexOAuthNeedPhone(ctx, account.GetAccountId(), label, data); markErr != nil {
+				data["account_phone_need_write_error"] = markErr.Error()
+			}
 		}
 		if issuedAfter > 0 {
 			state.EmailOTPIssuedAfterUnix = issuedAfter

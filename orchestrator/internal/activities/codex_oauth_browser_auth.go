@@ -57,15 +57,9 @@ func (f *codexOAuthBrowserFlow) writeAccountAuthJSON() error {
 }
 
 func (f *codexOAuthBrowserFlow) writeAccountPhoneConfirmation() error {
-	if err := f.server.updateAccount(f.ctx, &pb.Account{
-		AccountId:               f.account.GetAccountId(),
-		CodexPhoneConfirmed:     boolPtr(true),
-		CodexPhoneLabel:         f.label,
-		CodexPhoneUpdatedAtUnix: time.Now().Unix(),
-	}); err != nil {
+	if err := f.server.markCodexOAuthPhoneConfirmed(f.ctx, f.account.GetAccountId(), f.label, f.data); err != nil {
 		return f.fail(fmt.Errorf("save codex phone state to account db: %w", err))
 	}
-	f.data["account_phone_confirmed_written"] = true
 	return nil
 }
 

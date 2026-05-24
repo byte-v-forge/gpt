@@ -158,6 +158,7 @@
 .accountMetaTag em { color: var(--muted-foreground); font-style: normal; font-weight: 650; }
 .accountMetaTag strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .accountMetaTag.good { color: var(--success); background: var(--success-soft); border-color: #bfe7cc; }
+.accountMetaTag.bad { color: var(--danger); background: var(--danger-soft); border-color: #f2c7c1; }
 .accountMetaTag.neutral { color: #475569; background: #f8fafc; border-color: #e2e8f0; }
 .accountMetaTag.iconOnly { justify-content: center; padding: 0; }
 .accountMetaTag.iconOnly .paymentChannelIcon { min-width: 0; gap: 3px; }

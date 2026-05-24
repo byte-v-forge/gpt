@@ -86,6 +86,12 @@ func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgre
 		}
 	}()
 
+	proxyData, failedStep, err := runProtocolUseProxy(ctx, progress, protocolCtx, input.JobID, input.AccountID, "codex_oauth_add_phone")
+	mergeCodexOAuthRunData(result.run.data, proxyData)
+	if err != nil {
+		return result, failedStep, err
+	}
+
 	setWorkflowProgress(ctx, progress, stepCodexOAuthProtocolStart)
 	var start CodexOAuthStartBrowserOutput
 	if err := workflow.ExecuteActivity(protocolCtx, codexOAuthStartProtocolActivityName, CodexOAuthStartBrowserInput{

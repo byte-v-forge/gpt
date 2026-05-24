@@ -36,6 +36,7 @@ const (
 	BrowserAuthCompleteActivityName              = "BrowserAuthCompleteActivity"
 	BrowserAuthCancelActivityName                = "BrowserAuthCancelActivity"
 	ProtocolAuthStartActivityName                = "ProtocolAuthStartActivity"
+	ProtocolUseProxyActivityName                 = "ProtocolUseProxyActivity"
 	ProtocolAuthWaitActivityName                 = "ProtocolAuthWaitActivity"
 	ProtocolAuthCompleteActivityName             = "ProtocolAuthCompleteActivity"
 	ProtocolAuthCancelActivityName               = "ProtocolAuthCancelActivity"

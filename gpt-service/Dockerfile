@@ -75,7 +75,7 @@ FROM docker.m.daocloud.io/library/alpine:latest
 WORKDIR /app
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
-    && apk add --no-cache bash ca-certificates
+    && apk add --no-cache bash ca-certificates nodejs
 
 COPY --from=account_builder /out/account-db /app/bin/account-db
 COPY --from=workflow_builder /out/gpt-workflows /app/bin/gpt-workflows

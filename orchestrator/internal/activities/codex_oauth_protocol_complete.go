@@ -38,6 +38,11 @@ func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input C
 		if saveErr := s.saveCodexOAuthProtocolState(ctx, input.GetJobId(), state); saveErr != nil && err == nil {
 			err = saveErr
 		}
+		if state.Stage == "add_phone" && !state.PhonePresent {
+			if markErr := s.markCodexOAuthNeedPhone(ctx, account.GetAccountId(), label, data); markErr != nil {
+				data["account_phone_need_write_error"] = markErr.Error()
+			}
+		}
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err

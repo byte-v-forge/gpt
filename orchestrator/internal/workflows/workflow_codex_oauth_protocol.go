@@ -120,6 +120,9 @@ func runCodexOAuthProtocolLoginStages(ctx workflow.Context, progress *WorkflowPr
 		stage = otp.GetStage()
 	}
 	if stage == "add_phone" {
+		if input.AllowAddPhone {
+			return stage, issuedAfter, "", nil
+		}
 		return stage, issuedAfter, stepCodexOAuthProtocolDetect, fmt.Errorf("codex_oauth_add_phone_required")
 	}
 	if !codexOAuthProtocolReadyStage(stage) {

@@ -39,14 +39,14 @@ type codexOAuthAddPhoneAttempt struct {
 	phone CodexOAuthPhoneLease
 }
 
-func runCodexOAuthAddPhoneWithRotation(ctx workflow.Context, progress *WorkflowProgress, phoneCtx workflow.Context, browserCtx workflow.Context, retryCtx workflow.Context, input codexOAuthAddPhoneWorkflowInput) (codexOAuthAddPhoneAttempt, string, error) {
+func runCodexOAuthAddPhoneWithRotation(ctx workflow.Context, progress *WorkflowProgress, phoneCtx workflow.Context, protocolCtx workflow.Context, retryCtx workflow.Context, input codexOAuthAddPhoneWorkflowInput) (codexOAuthAddPhoneAttempt, string, error) {
 	var last codexOAuthAddPhoneAttempt
 	cleanupBase, _ := workflow.NewDisconnectedContext(ctx)
 	releaseCtx := workflow.WithActivityOptions(cleanupBase, atomicActivityOptions(2*time.Minute))
 	for attempt := 1; attempt <= codexOAuthMaxPhoneAttempts; attempt++ {
 		var failedStep string
 		var err error
-		last, failedStep, err = runCodexOAuthAddPhoneAttempt(ctx, progress, phoneCtx, browserCtx, input, attempt)
+		last, failedStep, err = runCodexOAuthAddPhoneAttempt(ctx, progress, phoneCtx, protocolCtx, input, attempt)
 		last.run.data["phone_attempt"] = attempt
 		last.run.data["phone_max_attempts"] = codexOAuthMaxPhoneAttempts
 		if err == nil {
@@ -63,12 +63,13 @@ func runCodexOAuthAddPhoneWithRotation(ctx workflow.Context, progress *WorkflowP
 	return last, stepCodexOAuthAcquirePhone, fmt.Errorf("codex oauth add phone failed after %d phone attempts", codexOAuthMaxPhoneAttempts)
 }
 
-func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgress, phoneCtx workflow.Context, browserCtx workflow.Context, input codexOAuthAddPhoneWorkflowInput, attempt int) (codexOAuthAddPhoneAttempt, string, error) {
+func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgress, phoneCtx workflow.Context, protocolCtx workflow.Context, input codexOAuthAddPhoneWorkflowInput, attempt int) (codexOAuthAddPhoneAttempt, string, error) {
 	run := codexOAuthBrowserRun{
 		phoneLabel: input.Label,
 		data: map[string]any{
 			"phone_attempt":      attempt,
 			"phone_max_attempts": codexOAuthMaxPhoneAttempts,
+			"driver":             "protocol",
 		},
 	}
 	result := codexOAuthAddPhoneAttempt{run: run}
@@ -77,24 +78,24 @@ func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgre
 	cleanupCtx := workflow.WithActivityOptions(cleanupBase, atomicActivityOptions(30*time.Second))
 	defer func() {
 		if session != nil {
-			_ = workflow.ExecuteActivity(cleanupCtx, codexOAuthStopBrowserActivityName, CodexOAuthStopBrowserInput{
+			_ = workflow.ExecuteActivity(cleanupCtx, codexOAuthStopProtocolActivityName, CodexOAuthStopBrowserInput{
 				JobId:   input.JobID,
 				Session: session,
-				Reason:  "codex oauth browser cleanup",
+				Reason:  "codex oauth protocol cleanup",
 			}).Get(cleanupCtx, nil)
 		}
 	}()
 
-	setWorkflowProgress(ctx, progress, stepCodexOAuthBrowserStart)
+	setWorkflowProgress(ctx, progress, stepCodexOAuthProtocolStart)
 	var start CodexOAuthStartBrowserOutput
-	if err := workflow.ExecuteActivity(browserCtx, codexOAuthStartBrowserActivityName, CodexOAuthStartBrowserInput{
+	if err := workflow.ExecuteActivity(protocolCtx, codexOAuthStartProtocolActivityName, CodexOAuthStartBrowserInput{
 		JobId:         input.JobID,
 		AccountId:     input.AccountID,
 		Label:         input.Label,
 		AllowAddPhone: true,
 	}).Get(ctx, &start); err != nil {
 		mergeCodexOAuthRunData(result.run.data, protoDataMap(start.GetData()))
-		return result, stepCodexOAuthBrowserStart, err
+		return result, stepCodexOAuthProtocolStart, err
 	}
 	mergeCodexOAuthRunData(result.run.data, protoDataMap(start.GetData()))
 	if start.GetPhoneLabel() != "" {
@@ -102,10 +103,10 @@ func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgre
 	}
 	session = start.GetSession()
 	if session == nil {
-		return result, stepCodexOAuthBrowserStart, fmt.Errorf("codex oauth browser session missing")
+		return result, stepCodexOAuthProtocolStart, fmt.Errorf("codex oauth protocol session missing")
 	}
 
-	stage, _, failedStep, err := runCodexOAuthLoginStages(ctx, progress, browserCtx, codexOAuthBrowserWorkflowInput{
+	stage, _, failedStep, err := runCodexOAuthProtocolLoginStages(ctx, progress, protocolCtx, codexOAuthBrowserWorkflowInput{
 		JobID:                       input.JobID,
 		AccountID:                   input.AccountID,
 		Label:                       input.Label,
@@ -128,9 +129,9 @@ func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgre
 			}
 			return result, failedStep, err
 		}
-		setWorkflowProgress(ctx, progress, stepCodexOAuthBrowserAddPhone)
+		setWorkflowProgress(ctx, progress, stepCodexOAuthProtocolAddPhone)
 		var addPhone CodexOAuthAddPhoneBrowserOutput
-		if err := workflow.ExecuteActivity(browserCtx, codexOAuthAddPhoneBrowserActivityName, CodexOAuthAddPhoneBrowserInput{
+		if err := workflow.ExecuteActivity(protocolCtx, codexOAuthAddPhoneProtocolActivityName, CodexOAuthAddPhoneBrowserInput{
 			JobId:         input.JobID,
 			AccountId:     input.AccountID,
 			Label:         input.Label,
@@ -140,14 +141,14 @@ func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgre
 		}).Get(ctx, &addPhone); err != nil {
 			mergeCodexOAuthRunData(result.run.data, protoDataMap(addPhone.GetData()))
 			result.run.addPhoneRequired = addPhone.GetAddPhoneRequired() || strings.Contains(strings.ToLower(err.Error()), "add_phone_required")
-			return result, stepCodexOAuthBrowserAddPhone, err
+			return result, stepCodexOAuthProtocolAddPhone, err
 		}
 		mergeCodexOAuthRunData(result.run.data, protoDataMap(addPhone.GetData()))
 		result.run.addPhoneConfirmed = addPhone.GetAddPhoneConfirmed()
 		result.run.addPhoneRequired = addPhone.GetAddPhoneRequired()
 		result.run.phoneReuseCount = addPhone.GetPhoneReuseCount()
 		result.run.phoneReuseLimit = addPhone.GetPhoneReuseLimit()
-		stage, _, failedStep, err = runCodexOAuthLoginStages(ctx, progress, browserCtx, codexOAuthBrowserWorkflowInput{
+		stage, _, failedStep, err = runCodexOAuthProtocolLoginStages(ctx, progress, protocolCtx, codexOAuthBrowserWorkflowInput{
 			JobID:                       input.JobID,
 			AccountID:                   input.AccountID,
 			Label:                       input.Label,
@@ -158,13 +159,13 @@ func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgre
 			return result, failedStep, err
 		}
 		if stage == "add_phone" {
-			return result, stepCodexOAuthBrowserAddPhone, fmt.Errorf("phone_rejected: add phone still required after otp submit")
+			return result, stepCodexOAuthProtocolAddPhone, fmt.Errorf("phone_rejected: add phone still required after otp submit")
 		}
 	}
 
-	setWorkflowProgress(ctx, progress, stepCodexOAuthBrowserComplete)
+	setWorkflowProgress(ctx, progress, stepCodexOAuthProtocolComplete)
 	var complete CodexOAuthCompleteBrowserOutput
-	if err := workflow.ExecuteActivity(browserCtx, codexOAuthCompleteBrowserActivityName, CodexOAuthCompleteBrowserInput{
+	if err := workflow.ExecuteActivity(protocolCtx, codexOAuthCompleteProtocolActivityName, CodexOAuthCompleteBrowserInput{
 		JobId:                       input.JobID,
 		AccountId:                   input.AccountID,
 		Label:                       input.Label,
@@ -172,7 +173,7 @@ func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgre
 		Session:                     session,
 	}).Get(ctx, &complete); err != nil {
 		mergeCodexOAuthRunData(result.run.data, protoDataMap(complete.GetData()))
-		return result, stepCodexOAuthBrowserComplete, err
+		return result, stepCodexOAuthProtocolComplete, err
 	}
 	mergeCodexOAuthRunData(result.run.data, protoDataMap(complete.GetData()))
 	result.run.authSecretKey = complete.GetAuthSecretKey()

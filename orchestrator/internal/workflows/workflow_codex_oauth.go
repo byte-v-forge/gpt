@@ -48,7 +48,7 @@ func CodexOAuthAddPhoneWorkflow(ctx workflow.Context, input CodexOAuthAddPhoneWo
 
 	retryCtx := workflow.WithActivityOptions(ctx, retryableActivityOptions(30*time.Second, 5))
 	phoneCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(2*time.Minute))
-	browserCtx := workflow.WithActivityOptions(ctx, heartbeatingActivityOptions(15*time.Minute, 30*time.Second))
+	protocolCtx := workflow.WithActivityOptions(ctx, heartbeatingActivityOptions(15*time.Minute, 30*time.Second))
 	account, ok := resolveCodexOAuthAccount(ctx, retryCtx, progress, input.GetJobId(), input.GetAccountId(), actionCodexOAuthAddPhone, map[string]string{
 		"label":           input.GetLabel(),
 		"max_reuse_count": int32String(input.GetMaxReuseCount()),
@@ -58,7 +58,7 @@ func CodexOAuthAddPhoneWorkflow(ctx workflow.Context, input CodexOAuthAddPhoneWo
 		return result, nil
 	}
 
-	attempt, failedStep, err := runCodexOAuthAddPhoneWithRotation(ctx, progress, phoneCtx, browserCtx, retryCtx, codexOAuthAddPhoneWorkflowInput{
+	attempt, failedStep, err := runCodexOAuthAddPhoneWithRotation(ctx, progress, phoneCtx, protocolCtx, retryCtx, codexOAuthAddPhoneWorkflowInput{
 		JobID:         input.GetJobId(),
 		AccountID:     account.GetAccountId(),
 		Label:         input.GetLabel(),
@@ -85,7 +85,7 @@ func CodexOAuthBatchAddPhoneWorkflow(ctx workflow.Context, input CodexOAuthBatch
 
 	retryCtx := workflow.WithActivityOptions(ctx, retryableActivityOptions(30*time.Second, 5))
 	phoneCtx := workflow.WithActivityOptions(ctx, atomicActivityOptions(2*time.Minute))
-	browserCtx := workflow.WithActivityOptions(ctx, heartbeatingActivityOptions(15*time.Minute, 30*time.Second))
+	protocolCtx := workflow.WithActivityOptions(ctx, heartbeatingActivityOptions(15*time.Minute, 30*time.Second))
 	accountIDs := compactAccountIDs(input.GetAccountIds())
 	if len(accountIDs) == 0 {
 		result.ErrorMessage = "account_ids is required"
@@ -107,7 +107,7 @@ func CodexOAuthBatchAddPhoneWorkflow(ctx workflow.Context, input CodexOAuthBatch
 	}
 
 	for _, accountID := range accountIDs {
-		attempt, failedStep, err := runCodexOAuthAddPhoneWithRotation(ctx, progress, phoneCtx, browserCtx, retryCtx, codexOAuthAddPhoneWorkflowInput{
+		attempt, failedStep, err := runCodexOAuthAddPhoneWithRotation(ctx, progress, phoneCtx, protocolCtx, retryCtx, codexOAuthAddPhoneWorkflowInput{
 			JobID:         input.GetJobId(),
 			AccountID:     accountID,
 			Label:         input.GetLabel(),

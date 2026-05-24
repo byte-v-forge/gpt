@@ -43,23 +43,7 @@ func accountEligibleForActivation(account *pb.Account) error {
 	if account == nil {
 		return fmt.Errorf("account is required")
 	}
-	if err := rejectUserAlreadyExistsAccount(account); err != nil {
-		return err
-	}
-	tier := normalizeTier(account.GetTier())
-	if tier != "free" {
-		if tier == "" {
-			return fmt.Errorf("account tier is unknown; probe tier before activation")
-		}
-		return fmt.Errorf("account tier %q cannot be activated; only free tier with trial eligibility is allowed", tier)
-	}
-	if account.PlusTrialEligible == nil {
-		return fmt.Errorf("plus trial eligibility is unknown; probe trial eligibility before activation")
-	}
-	if !account.GetPlusTrialEligible() {
-		return fmt.Errorf("account is not plus trial eligible")
-	}
-	return nil
+	return rejectUserAlreadyExistsAccount(account)
 }
 
 func (s *Server) CreateJobActivity(ctx context.Context, input CreateJobInput) error {

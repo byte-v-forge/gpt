@@ -44,18 +44,22 @@ func ActivateAccountWorkflow(ctx workflow.Context, input ActivateAccountWorkflow
 	}
 
 	var probe ProbePlusTrialActivityOutput
-	setWorkflowProgress(ctx, progress, stepProbePlusTrial)
-	if err := workflow.ExecuteActivity(atomicCtx, probePlusTrialActivityName, ProbePlusTrialActivityInput{
-		JobId:     input.GetJobId(),
-		AccountId: account.GetAccountId(),
-	}).Get(ctx, &probe); err != nil {
-		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData())}), nil
-	}
-	if !probe.GetChecked() {
-		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, fmt.Errorf("plus trial eligibility is unknown"), map[string]any{"probe_plus_trial": protoDataMap(probe.GetData())}), nil
-	}
-	if !probe.GetPlusTrialEligible() && !probe.GetPlusActive() {
-		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedFinal, false, false, fmt.Errorf("account is not plus trial eligible"), map[string]any{"probe_plus_trial": protoDataMap(probe.GetData())}), nil
+	probeData := skippedPreActivationPlusTrialProbeData(account)
+	if shouldRunPreActivationPlusTrialProbe(ctx) {
+		setWorkflowProgress(ctx, progress, stepProbePlusTrial)
+		if err := workflow.ExecuteActivity(atomicCtx, probePlusTrialActivityName, ProbePlusTrialActivityInput{
+			JobId:     input.GetJobId(),
+			AccountId: account.GetAccountId(),
+		}).Get(ctx, &probe); err != nil {
+			return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData())}), nil
+		}
+		probeData = protoDataMap(probe.GetData())
+		if !probe.GetChecked() {
+			return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, fmt.Errorf("plus trial eligibility is unknown"), map[string]any{"probe_plus_trial": probeData}), nil
+		}
+		if !probe.GetPlusTrialEligible() && !probe.GetPlusActive() {
+			return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedFinal, false, false, fmt.Errorf("account is not plus trial eligible"), map[string]any{"probe_plus_trial": probeData}), nil
+		}
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
@@ -65,10 +69,10 @@ func ActivateAccountWorkflow(ctx workflow.Context, input ActivateAccountWorkflow
 		Pin:         input.GetGopayPin(),
 	})
 	if err != nil {
-		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}), nil
+		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": probeData, "gopay_login": protoDataMap(logon.GetData())}), nil
 	}
 	if !logon.GetAccountTokenReady() {
-		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after login"), map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}), nil
+		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after login"), map[string]any{"probe_plus_trial": probeData, "gopay_login": protoDataMap(logon.GetData())}), nil
 	}
 
 	var payment GoPayActivityOutput
@@ -84,7 +88,7 @@ func ActivateAccountWorkflow(ctx workflow.Context, input ActivateAccountWorkflow
 		CountryCode:       input.GetGopayCountryCode(),
 	})
 	if err != nil {
-		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayPayment, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}), nil
+		return failActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayPayment, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": probeData, "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}), nil
 	}
 
 	if err := workflow.ExecuteActivity(retryCtx, persistActivatedActivityName, PersistActivatedInput{
@@ -99,7 +103,7 @@ func ActivateAccountWorkflow(ctx workflow.Context, input ActivateAccountWorkflow
 
 	_ = workflow.ExecuteActivity(retryCtx, markJobSucceededActivityName, JobSuccessInput{
 		JobId:  input.GetJobId(),
-		Result: protoData(map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}),
+		Result: protoData(map[string]any{"probe_plus_trial": probeData, "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}),
 	}).Get(ctx, nil)
 
 	result.Success = true
@@ -140,18 +144,22 @@ func AutoPayWorkflow(ctx workflow.Context, input AutoPayWorkflowInput) (AutoPayW
 	}
 
 	var probe ProbePlusTrialActivityOutput
-	setWorkflowProgress(ctx, progress, stepProbePlusTrial)
-	if err := workflow.ExecuteActivity(atomicCtx, probePlusTrialActivityName, ProbePlusTrialActivityInput{
-		JobId:     input.GetJobId(),
-		AccountId: account.GetAccountId(),
-	}).Get(ctx, &probe); err != nil {
-		return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData())}), nil
-	}
-	if !probe.GetChecked() {
-		return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, fmt.Errorf("plus trial eligibility is unknown"), map[string]any{"probe_plus_trial": protoDataMap(probe.GetData())}), nil
-	}
-	if !probe.GetPlusTrialEligible() {
-		return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedFinal, false, false, fmt.Errorf("account is not plus trial eligible"), map[string]any{"probe_plus_trial": protoDataMap(probe.GetData())}), nil
+	probeData := skippedPreActivationPlusTrialProbeData(account)
+	if shouldRunPreActivationPlusTrialProbe(ctx) {
+		setWorkflowProgress(ctx, progress, stepProbePlusTrial)
+		if err := workflow.ExecuteActivity(atomicCtx, probePlusTrialActivityName, ProbePlusTrialActivityInput{
+			JobId:     input.GetJobId(),
+			AccountId: account.GetAccountId(),
+		}).Get(ctx, &probe); err != nil {
+			return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData())}), nil
+		}
+		probeData = protoDataMap(probe.GetData())
+		if !probe.GetChecked() {
+			return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, fmt.Errorf("plus trial eligibility is unknown"), map[string]any{"probe_plus_trial": probeData}), nil
+		}
+		if !probe.GetPlusTrialEligible() {
+			return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedFinal, false, false, fmt.Errorf("account is not plus trial eligible"), map[string]any{"probe_plus_trial": probeData}), nil
+		}
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
@@ -161,10 +169,10 @@ func AutoPayWorkflow(ctx workflow.Context, input AutoPayWorkflowInput) (AutoPayW
 		Pin:         input.GetGopayPin(),
 	})
 	if err != nil {
-		return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}), nil
+		return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, map[string]any{"probe_plus_trial": probeData, "gopay_login": protoDataMap(logon.GetData())}), nil
 	}
 	if !logon.GetAccountTokenReady() {
-		return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after login"), map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}), nil
+		return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after login"), map[string]any{"probe_plus_trial": probeData, "gopay_login": protoDataMap(logon.GetData())}), nil
 	}
 
 	var payment GoPayActivityOutput
@@ -181,12 +189,12 @@ func AutoPayWorkflow(ctx workflow.Context, input AutoPayWorkflowInput) (AutoPayW
 		CountryCode:       input.GetGopayCountryCode(),
 	})
 	if err != nil {
-		combined := map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
+		combined := map[string]any{"probe_plus_trial": probeData, "gopay_payment": protoDataMap(payment.GetData())}
 		combined["gopay_login"] = protoDataMap(logon.GetData())
 		return failAutoPayWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayPayment, statusFailedRetryable, false, true, err, combined), nil
 	}
 
-	combined := map[string]any{"probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
+	combined := map[string]any{"probe_plus_trial": probeData, "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
 
 	var tier ProbeTierActivityOutput
 	setWorkflowProgress(ctx, progress, stepProbeTier)
@@ -309,6 +317,19 @@ func ProbeAccountWorkflow(ctx workflow.Context, input ProbeAccountWorkflowInput)
 func shouldSkipPlusTrialProbe(account AccountRef) bool {
 	return account.GetPlusActive() || normalizeTier(account.GetTier()) == "plus"
 }
+
+func shouldRunPreActivationPlusTrialProbe(ctx workflow.Context) bool {
+	return workflow.GetVersion(ctx, "skip-pre-activation-plus-trial-probe", workflow.DefaultVersion, 1) == workflow.DefaultVersion
+}
+
+func skippedPreActivationPlusTrialProbeData(account AccountRef) map[string]any {
+	return map[string]any{
+		"skipped":    true,
+		"reason":     "checkout_always_attempted",
+		"account_id": account.GetAccountId(),
+	}
+}
+
 func skippedPlusTrialProbeData(account AccountRef) map[string]any {
 	reason := "plus_active"
 	if normalizeTier(account.GetTier()) == "plus" {

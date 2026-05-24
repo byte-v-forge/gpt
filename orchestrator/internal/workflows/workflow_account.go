@@ -459,21 +459,25 @@ func RegisterAndActivateWorkflow(ctx workflow.Context, input RegisterAndActivate
 	}
 
 	var probe ProbePlusTrialActivityOutput
-	setWorkflowProgress(ctx, progress, stepProbePlusTrial)
-	if err := workflow.ExecuteActivity(atomicCtx, probePlusTrialActivityName, ProbePlusTrialActivityInput{
-		JobId:     input.GetJobId(),
-		AccountId: account.GetAccountId(),
-	}).Get(ctx, &probe); err != nil {
-		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData())}
-		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, err, combined), nil
-	}
-	if !probe.GetChecked() {
-		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData())}
-		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, fmt.Errorf("plus trial eligibility is unknown"), combined), nil
-	}
-	if !probe.GetPlusTrialEligible() && !probe.GetPlusActive() {
-		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData())}
-		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedFinal, false, false, fmt.Errorf("account is not plus trial eligible"), combined), nil
+	probeData := skippedPreActivationPlusTrialProbeData(account)
+	if shouldRunPreActivationPlusTrialProbe(ctx) {
+		setWorkflowProgress(ctx, progress, stepProbePlusTrial)
+		if err := workflow.ExecuteActivity(atomicCtx, probePlusTrialActivityName, ProbePlusTrialActivityInput{
+			JobId:     input.GetJobId(),
+			AccountId: account.GetAccountId(),
+		}).Get(ctx, &probe); err != nil {
+			combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData())}
+			return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, err, combined), nil
+		}
+		probeData = protoDataMap(probe.GetData())
+		if !probe.GetChecked() {
+			combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": probeData}
+			return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, fmt.Errorf("plus trial eligibility is unknown"), combined), nil
+		}
+		if !probe.GetPlusTrialEligible() && !probe.GetPlusActive() {
+			combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": probeData}
+			return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedFinal, false, false, fmt.Errorf("account is not plus trial eligible"), combined), nil
+		}
 	}
 
 	setWorkflowProgress(ctx, progress, stepGoPayAppLogin)
@@ -483,11 +487,11 @@ func RegisterAndActivateWorkflow(ctx workflow.Context, input RegisterAndActivate
 		Pin:         input.GetGopayPin(),
 	})
 	if err != nil {
-		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}
+		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": probeData, "gopay_login": protoDataMap(logon.GetData())}
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, err, combined), nil
 	}
 	if !logon.GetAccountTokenReady() {
-		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData())}
+		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": probeData, "gopay_login": protoDataMap(logon.GetData())}
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayAppLogin, statusFailedRetryable, false, true, fmt.Errorf("gopay account token is not ready after login"), combined), nil
 	}
 
@@ -506,12 +510,12 @@ func RegisterAndActivateWorkflow(ctx workflow.Context, input RegisterAndActivate
 		CountryCode:       input.GetGopayCountryCode(),
 	})
 	if err != nil {
-		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
+		combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": probeData, "gopay_payment": protoDataMap(payment.GetData())}
 		combined["gopay_login"] = protoDataMap(logon.GetData())
 		return failRegisterAndActivateWorkflow(ctx, retryCtx, result, input.GetJobId(), stepGoPayPayment, statusFailedRetryable, false, true, err, combined), nil
 	}
 
-	combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": protoDataMap(probe.GetData()), "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
+	combined := map[string]any{"register_account": registerData(), "login_session": loginSessionData, "probe_plus_trial": probeData, "gopay_login": protoDataMap(logon.GetData()), "gopay_payment": protoDataMap(payment.GetData())}
 	if err := workflow.ExecuteActivity(retryCtx, persistActivatedActivityName, PersistActivatedInput{
 		AccountId:         account.GetAccountId(),
 		SessionToken:      register.GetSessionToken(),

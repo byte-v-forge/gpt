@@ -8,12 +8,8 @@ export function canRegister(account: Account) {
 }
 
 export function canGoPayPayment(account: Account) {
-  const tier = normalizeTier(account.tier);
   return !isUserAlreadyExistsAccount(account) &&
-    account.status !== 'ACTIVATED' &&
-    !account.plus_active &&
-    account.plus_trial_eligible !== false &&
-    (tier === '' || tier === 'free') &&
+    !accountIsActivated(account) &&
     (!!account.session_token || !!account.access_token);
 }
 

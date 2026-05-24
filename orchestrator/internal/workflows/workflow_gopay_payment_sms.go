@@ -67,20 +67,23 @@ func goPaySMSPaymentWorkflow(ctx workflow.Context, input GoPayPaymentWorkflowInp
 	}
 
 	var probe ProbePlusTrialActivityOutput
-	setWorkflowProgress(ctx, progress, stepProbePlusTrial)
-	if err := workflow.ExecuteActivity(atomicCtx, probePlusTrialActivityName, ProbePlusTrialActivityInput{
-		JobId:     input.GetJobId(),
-		AccountId: account.GetAccountId(),
-	}).Get(ctx, &probe); err != nil {
+	combined["probe_plus_trial"] = skippedPreActivationPlusTrialProbeData(account)
+	if shouldRunPreActivationPlusTrialProbe(ctx) {
+		setWorkflowProgress(ctx, progress, stepProbePlusTrial)
+		if err := workflow.ExecuteActivity(atomicCtx, probePlusTrialActivityName, ProbePlusTrialActivityInput{
+			JobId:     input.GetJobId(),
+			AccountId: account.GetAccountId(),
+		}).Get(ctx, &probe); err != nil {
+			combined["probe_plus_trial"] = protoDataMap(probe.GetData())
+			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, err, combined), nil
+		}
 		combined["probe_plus_trial"] = protoDataMap(probe.GetData())
-		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, err, combined), nil
-	}
-	combined["probe_plus_trial"] = protoDataMap(probe.GetData())
-	if !probe.GetChecked() {
-		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, fmt.Errorf("plus trial eligibility is unknown"), combined), nil
-	}
-	if !probe.GetPlusTrialEligible() {
-		return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedFinal, false, false, fmt.Errorf("account is not plus trial eligible"), combined), nil
+		if !probe.GetChecked() {
+			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedRetryable, false, true, fmt.Errorf("plus trial eligibility is unknown"), combined), nil
+		}
+		if !probe.GetPlusTrialEligible() {
+			return failGoPayPaymentWorkflow(ctx, retryCtx, result, input.GetJobId(), stepProbePlusTrial, statusFailedFinal, false, false, fmt.Errorf("account is not plus trial eligible"), combined), nil
+		}
 	}
 
 	var otpOpts goPayAppOTPOptions

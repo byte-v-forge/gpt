@@ -19,17 +19,19 @@ import (
 const codexOAuthProtocolUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
 
 type codexOAuthProtocolHTTPClient struct {
-	cfg    CodexOAuthConfig
-	state  *codexOAuthProtocolState
-	client tlsclient.HttpClient
-	jar    tlsclient.CookieJar
+	cfg                     CodexOAuthConfig
+	state                   *codexOAuthProtocolState
+	client                  tlsclient.HttpClient
+	jar                     tlsclient.CookieJar
+	lastRequestSentAtUnixMs int64
 }
 
 type codexOAuthProtocolHTTPResponse struct {
-	StatusCode int
-	Header     fhttp.Header
-	Body       []byte
-	JSON       map[string]any
+	StatusCode   int
+	Header       fhttp.Header
+	Body         []byte
+	JSON         map[string]any
+	SentAtUnixMs int64
 }
 
 func newCodexOAuthProtocolHTTPClient(cfg CodexOAuthConfig, state *codexOAuthProtocolState) (*codexOAuthProtocolHTTPClient, error) {
@@ -101,6 +103,7 @@ func (c *codexOAuthProtocolHTTPClient) postForm(ctx context.Context, rawURL, ref
 }
 
 func (c *codexOAuthProtocolHTTPClient) request(ctx context.Context, method, rawURL, referer string, acceptHTML bool, body []byte, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
+	c.lastRequestSentAtUnixMs = 0
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -117,12 +120,14 @@ func (c *codexOAuthProtocolHTTPClient) request(ctx context.Context, method, rawU
 			}
 		}
 	}
+	sentAtUnixMs := time.Now().UnixMilli()
+	c.lastRequestSentAtUnixMs = sentAtUnixMs
 	resp, err := c.client.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	out := &codexOAuthProtocolHTTPResponse{StatusCode: resp.StatusCode, Header: resp.Header}
+	out := &codexOAuthProtocolHTTPResponse{StatusCode: resp.StatusCode, Header: resp.Header, SentAtUnixMs: sentAtUnixMs}
 	out.Body, err = io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return nil, err

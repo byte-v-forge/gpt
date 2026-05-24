@@ -9,12 +9,6 @@ import (
 	"orchestrator/pb"
 )
 
-const codexOAuthEmailOTPClockSkew = 5 * time.Second
-
-func codexOAuthEmailOTPIssuedAfterUnix() int64 {
-	return time.Now().Add(-codexOAuthEmailOTPClockSkew).Unix()
-}
-
 func (f *browserAuthFlow) openCodexOAuthEntry(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, authorizeURL string) error {
 	results, err := f.execute(client, cfg, "codex-oauth-open", []*browserautomationv1.BrowserCommand{
 		navigateCommand("open-codex-oauth", authorizeURL, cfg.CommandTimeout),
@@ -71,7 +65,7 @@ func (f *browserAuthFlow) ensureCodexOAuthLoggedIn(ctx context.Context, s *Serve
 }
 
 func (f *browserAuthFlow) submitCodexOAuthEmail(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, email string) (int64, error) {
-	issuedAfter := codexOAuthEmailOTPIssuedAfterUnix()
+	networkFilterStartedAfter := time.Now().Add(-time.Second).UnixMilli()
 	results, err := f.execute(client, cfg, "codex-oauth-email", []*browserautomationv1.BrowserCommand{
 		waitForLoadStateCommand("wait-email-dom-ready", browserautomationv1.BrowserLoadState_BROWSER_LOAD_STATE_DOM_CONTENT_LOADED, 10*time.Second, true),
 		waitForLoadStateCommand("wait-email-network-idle", browserautomationv1.BrowserLoadState_BROWSER_LOAD_STATE_NETWORK_IDLE, 5*time.Second, true),
@@ -80,12 +74,18 @@ func (f *browserAuthFlow) submitCodexOAuthEmail(client browserautomationv1.Brows
 		typeTextCommand("type-email", browserAuthEmailSelector(), email, 20*time.Millisecond, 10*time.Second, true, false),
 		waitTimeoutCommand("settle-email-value", 500*time.Millisecond),
 		clickCommand("click-email-continue", browserAuthEmailSubmitSelector(), 10*time.Second, false),
+		waitForNetworkCommandWithContinue("wait-codex-oauth-email-request", "https://auth.openai.com/api/accounts/authorize/continue", "POST", 200, 399, networkFilterStartedAfter, 30*time.Second, false),
 		waitForSelectorGroupCommand("wait-password-or-otp", selectorGroup(45*time.Second, browserAuthLoginPasswordSelector(), browserAuthLoginOTPSelector()), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 45*time.Second, true),
 		getPageStateCommand("email-state", true, true, false, 5*time.Second),
 	})
 	if err != nil {
-		return issuedAfter, err
+		return 0, err
 	}
+	startedAt := browserAuthNetworkRequestStartedAtUnixMs(results, "wait-codex-oauth-email-request")
+	if startedAt <= 0 {
+		return 0, browserAuthStepError(f.mode, "email", "email_request_started_at_missing", browserAuthPageStateData(results, "email-state"))
+	}
+	issuedAfter := unixSecondsFromMillis(startedAt)
 	if browserAuthAnyCommandSucceeded(results, "wait-password-or-otp") {
 		return issuedAfter, nil
 	}
@@ -93,18 +93,25 @@ func (f *browserAuthFlow) submitCodexOAuthEmail(client browserautomationv1.Brows
 }
 
 func (f *browserAuthFlow) submitCodexOAuthPassword(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, password string) (int64, error) {
-	issuedAfter := codexOAuthEmailOTPIssuedAfterUnix()
-	if _, err := f.execute(client, cfg, "codex-oauth-password", []*browserautomationv1.BrowserCommand{
+	networkFilterStartedAfter := time.Now().Add(-time.Second).UnixMilli()
+	results, err := f.execute(client, cfg, "codex-oauth-password", []*browserautomationv1.BrowserCommand{
 		waitForLoadStateCommand("wait-password-dom-ready", browserautomationv1.BrowserLoadState_BROWSER_LOAD_STATE_DOM_CONTENT_LOADED, 10*time.Second, true),
 		waitTimeoutCommand("settle-password-page", 500*time.Millisecond),
 		waitForSelectorCommand("wait-password-input", browserAuthLoginPasswordSelector(), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 20*time.Second, false),
 		typeTextCommand("type-password", browserAuthLoginPasswordSelector(), password, 20*time.Millisecond, 10*time.Second, true, false),
 		waitTimeoutCommand("settle-password-value", 500*time.Millisecond),
 		clickCommand("click-password-continue", browserAuthEmailSubmitSelector(), 10*time.Second, false),
+		waitForNetworkCommandWithContinue("wait-codex-oauth-password-request", "https://auth.openai.com/api/accounts/password/verify", "POST", 200, 399, networkFilterStartedAfter, 45*time.Second, false),
 		waitTimeoutCommand("wait-after-password", time.Second),
-	}); err != nil {
-		return issuedAfter, err
+	})
+	if err != nil {
+		return 0, err
 	}
+	startedAt := browserAuthNetworkRequestStartedAtUnixMs(results, "wait-codex-oauth-password-request")
+	if startedAt <= 0 {
+		return 0, fmt.Errorf("browser %s password step failed: password_request_started_at_missing", f.mode)
+	}
+	issuedAfter := unixSecondsFromMillis(startedAt)
 	return issuedAfter, f.waitCodexOAuthPostLoginTransition(client, cfg, "codex-oauth-password", "password", "wait-post-password", codexOAuthPostPasswordSelectorGroup(60*time.Second))
 }
 

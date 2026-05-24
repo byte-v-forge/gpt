@@ -89,12 +89,12 @@ func (s *Server) CodexOAuthDetectProtocolStageActivity(ctx context.Context, inpu
 
 func (s *Server) CodexOAuthSubmitProtocolEmailActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthProtocolStageStep(ctx, input, stepCodexOAuthProtocolEmail, "submitting codex oauth protocol email", func(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
-		issuedAfter := codexOAuthEmailOTPIssuedAfterUnix()
 		sentinel := codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue")
 		resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/authorize/continue", "https://auth.openai.com/log-in", map[string]any{
 			"username":    map[string]any{"value": account.GetEmail(), "kind": "email"},
 			"screen_hint": "login",
 		}, sentinel)
+		issuedAfter := codexOAuthProtocolResponseSentAtUnix(client, resp)
 		if err != nil {
 			return "", issuedAfter, err
 		}
@@ -106,9 +106,9 @@ func (s *Server) CodexOAuthSubmitProtocolEmailActivity(ctx context.Context, inpu
 
 func (s *Server) CodexOAuthSubmitProtocolPasswordActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthProtocolStageStep(ctx, input, stepCodexOAuthProtocolPassword, "submitting codex oauth protocol password", func(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
-		issuedAfter := codexOAuthEmailOTPIssuedAfterUnix()
 		sentinel := codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue")
 		resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/password/verify", "https://auth.openai.com/log-in/password", map[string]any{"password": account.GetPassword()}, sentinel)
+		issuedAfter := codexOAuthProtocolResponseSentAtUnix(client, resp)
 		if err != nil {
 			return "", issuedAfter, err
 		}
@@ -116,6 +116,16 @@ func (s *Server) CodexOAuthSubmitProtocolPasswordActivity(ctx context.Context, i
 		_ = fetchCodexOAuthClientAuthSessionDump(ctx, client, state, data, stage)
 		return codexOAuthProtocolStageFromDump(state, stage), issuedAfter, err
 	})
+}
+
+func codexOAuthProtocolResponseSentAtUnix(client *codexOAuthProtocolHTTPClient, resp *codexOAuthProtocolHTTPResponse) int64 {
+	if resp != nil && resp.SentAtUnixMs > 0 {
+		return unixSecondsFromMillis(resp.SentAtUnixMs)
+	}
+	if client != nil && client.lastRequestSentAtUnixMs > 0 {
+		return unixSecondsFromMillis(client.lastRequestSentAtUnixMs)
+	}
+	return 0
 }
 
 func (s *Server) CodexOAuthSubmitProtocolEmailOTPActivity(ctx context.Context, input CodexOAuthSubmitEmailOTPInput) (CodexOAuthBrowserStageOutput, error) {

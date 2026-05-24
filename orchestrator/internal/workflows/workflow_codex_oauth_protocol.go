@@ -113,8 +113,9 @@ func runCodexOAuthProtocolLoginStages(ctx workflow.Context, progress *WorkflowPr
 		}
 	}
 	if stage == "email_otp" {
-		if issuedAfter <= 0 {
-			issuedAfter = workflow.Now(ctx).Add(-time.Second).Unix()
+		issuedAfter, err = codexOAuthEmailOTPIssuedAfter(ctx, issuedAfter)
+		if err != nil {
+			return stage, issuedAfter, stepCodexOAuthProtocolEmailOTP, err
 		}
 		setWorkflowProgress(ctx, progress, stepCodexOAuthProtocolEmailOTP)
 		var otp CodexOAuthBrowserStageOutput

@@ -378,8 +378,9 @@ func runCodexOAuthLoginStages(ctx workflow.Context, progress *WorkflowProgress, 
 		}
 	}
 	if stage == "email_otp" {
-		if issuedAfter <= 0 {
-			issuedAfter = workflow.Now(ctx).Add(-time.Second).Unix()
+		issuedAfter, err = codexOAuthEmailOTPIssuedAfter(ctx, issuedAfter)
+		if err != nil {
+			return stage, issuedAfter, stepCodexOAuthBrowserEmailOTP, err
 		}
 		setWorkflowProgress(ctx, progress, stepCodexOAuthBrowserEmailOTP)
 		var otp CodexOAuthBrowserStageOutput
@@ -439,4 +440,15 @@ func mergeCodexOAuthRunData(dst map[string]any, src map[string]any) {
 	for key, value := range src {
 		dst[key] = value
 	}
+}
+
+func codexOAuthEmailOTPIssuedAfter(ctx workflow.Context, issuedAfter int64) (int64, error) {
+	if issuedAfter > 0 {
+		return issuedAfter, nil
+	}
+	version := workflow.GetVersion(ctx, "codex-oauth-email-otp-issued-after-required", workflow.DefaultVersion, 1)
+	if version == workflow.DefaultVersion {
+		return workflow.Now(ctx).Add(-time.Second).Unix(), nil
+	}
+	return 0, fmt.Errorf("codex oauth email otp issued_after missing")
 }

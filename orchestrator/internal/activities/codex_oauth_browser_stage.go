@@ -42,14 +42,19 @@ func (f *codexOAuthBrowserFlow) addPhoneToCodexOAuthAccount() error {
 	if err != nil {
 		return f.fail(err)
 	}
-	f.data["add_phone_confirmed"] = true
 	f.data["add_phone_required"] = true
-	f.phoneAdded = true
-	if err := f.server.markCodexPhoneSuccess(f.ctx, f.phone, f.account.GetAccountId(), f.jobID, f.label); err != nil {
+	stage, err := f.browserFlow.detectCodexOAuthStage(f.server.browserAutomationClient, f.server.browserAuthConfig)
+	if err != nil {
 		return f.fail(err)
 	}
-	if err := f.writeAccountPhoneConfirmation(); err != nil {
-		return err
+	f.data["post_add_phone_stage"] = stage
+	f.phoneAdded = stage == "consent" || stage == "callback"
+	f.data["add_phone_confirmed"] = f.phoneAdded
+	if !f.phoneAdded {
+		f.data["add_phone_pending_stage"] = stage
+	}
+	if err := f.server.markCodexPhoneSuccess(f.ctx, f.phone, f.account.GetAccountId(), f.jobID, f.label); err != nil {
+		return f.fail(err)
 	}
 	return nil
 }

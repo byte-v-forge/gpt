@@ -8,6 +8,7 @@ import (
 	"time"
 
 	fhttp "github.com/bogdanfinn/fhttp"
+	"github.com/google/uuid"
 	"orchestrator/pb"
 )
 
@@ -50,12 +51,16 @@ func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input BrowserAut
 		output.Data = protoData(data)
 		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
 	}
-	authURL, err := protocolAuthChatGPTAuthURL(ctx, client, state, data)
-	if err == nil {
-		_, err = runCodexOAuthProtocolURL(ctx, client, state, authURL, protocolAuthChatGPTLoginURL, data)
-	}
+	authURL, err := protocolAuthChatGPTAuthURL(ctx, client, state, account, input.GetMode(), data)
 	var issuedAfter int64
-	if err == nil && state.Stage != "callback" {
+	if err == nil {
+		authorizeIssuedAfter := time.Now().Add(-2 * time.Second).Unix()
+		_, err = runCodexOAuthProtocolURL(ctx, client, state, authURL, protocolAuthChatGPTLoginURL, data)
+		if err == nil && state.Stage == "email_otp" {
+			issuedAfter = authorizeIssuedAfter
+		}
+	}
+	if err == nil && state.Stage != "callback" && state.Stage != "email_otp" {
 		_, issuedAfter, err = protocolAuthSubmitEmail(ctx, client, state, account, input.GetMode(), data)
 	}
 	if issuedAfter > 0 {
@@ -232,7 +237,7 @@ func newProtocolAuthState() (*codexOAuthProtocolState, error) {
 	return &codexOAuthProtocolState{FlowID: flowID, RedirectURI: protocolAuthChatGPTCallback}, nil
 }
 
-func protocolAuthChatGPTAuthURL(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, data map[string]any) (string, error) {
+func protocolAuthChatGPTAuthURL(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, mode string, data map[string]any) (string, error) {
 	csrfResp, err := client.get(ctx, "https://chatgpt.com/api/auth/csrf", protocolAuthChatGPTLoginURL, false)
 	if err != nil {
 		return "", err
@@ -244,11 +249,27 @@ func protocolAuthChatGPTAuthURL(ctx context.Context, client *codexOAuthProtocolH
 	if csrf == "" {
 		return "", fmt.Errorf("chatgpt csrf token missing")
 	}
+	if strings.TrimSpace(state.DeviceID) == "" {
+		state.DeviceID = uuid.NewString()
+	}
+	signinURL := "https://chatgpt.com/api/auth/signin/openai"
+	if account != nil && strings.TrimSpace(account.GetEmail()) != "" {
+		query := url.Values{}
+		query.Set("prompt", "login")
+		query.Set("ext-oai-did", state.DeviceID)
+		query.Set("auth_session_logging_id", uuid.NewString())
+		query.Set("ext-passkey-client-capabilities", "1111")
+		query.Set("screen_hint", protocolAuthChatGPTScreenHint(mode))
+		query.Set("login_hint", strings.TrimSpace(account.GetEmail()))
+		signinURL += "?" + query.Encode()
+		data["chatgpt_signin_login_hint"] = true
+		data["chatgpt_signin_screen_hint"] = protocolAuthChatGPTScreenHint(mode)
+	}
 	form := url.Values{}
 	form.Set("csrfToken", csrf)
-	form.Set("callbackUrl", "https://chatgpt.com/")
+	form.Set("callbackUrl", "https://chatgpt.com/login")
 	form.Set("json", "true")
-	authResp, err := client.postForm(ctx, "https://chatgpt.com/api/auth/signin/openai", protocolAuthChatGPTLoginURL, form)
+	authResp, err := client.postForm(ctx, signinURL, protocolAuthChatGPTLoginURL, form)
 	if err != nil {
 		return "", err
 	}
@@ -264,6 +285,13 @@ func protocolAuthChatGPTAuthURL(ctx context.Context, client *codexOAuthProtocolH
 	state.OAuthState = codexOAuthProtocolQueryFirst(authURL, "state")
 	data["chatgpt_auth_url_ready"] = true
 	return authURL, nil
+}
+
+func protocolAuthChatGPTScreenHint(mode string) string {
+	if mode == browserAuthModeRegister {
+		return "login_or_signup"
+	}
+	return "login"
 }
 
 func protocolAuthSubmitEmail(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, mode string, data map[string]any) (string, int64, error) {
@@ -282,10 +310,18 @@ func protocolAuthSubmitEmail(ctx context.Context, client *codexOAuthProtocolHTTP
 		return "", 0, err
 	}
 	stage, err := protocolAuthAdvanceJSON(ctx, client, state, resp, referer, "email", data)
-	if stage == "email_otp" {
-		return stage, issuedAfter, err
+	if err != nil {
+		return stage, 0, err
 	}
-	return stage, 0, err
+	if stage == "email_otp" {
+		if mode == browserAuthModeRegister {
+			sendIssuedAfter := time.Now().Add(-2 * time.Second).Unix()
+			stage, err = protocolAuthKickoffRegisterOTP(ctx, client, state, data)
+			return stage, sendIssuedAfter, err
+		}
+		return stage, issuedAfter, nil
+	}
+	return stage, 0, nil
 }
 
 func (s *Server) protocolAuthRegisterPassword(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {

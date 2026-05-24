@@ -37,6 +37,7 @@ type orchestratorConfig struct {
 	CodexOAuthTokenURL                      string
 	CodexOAuthTokenProxyURL                 string
 	CodexOAuthProtocolProxyURL              string
+	CodexOAuthProtocolProxyRuntimeHTTPAddr  string
 	CodexOAuthProtocolTLSProfile            string
 	CodexOAuthProtocolSessionDumpEnabled    bool
 	CodexOAuthScope                         string
@@ -121,6 +122,7 @@ func loadOrchestratorConfig() orchestratorConfig {
 		CodexOAuthTokenURL:                      envDefault("CODEX_OAUTH_TOKEN_URL", "https://auth.openai.com/oauth/token"),
 		CodexOAuthTokenProxyURL:                 envDefault("CODEX_OAUTH_TOKEN_PROXY_URL", ""),
 		CodexOAuthProtocolProxyURL:              envDefault("CODEX_OAUTH_PROTOCOL_PROXY_URL", ""),
+		CodexOAuthProtocolProxyRuntimeHTTPAddr:  envDefault("CODEX_OAUTH_PROTOCOL_PROXY_RUNTIME_HTTP_ADDR", ""),
 		CodexOAuthProtocolTLSProfile:            envDefault("CODEX_OAUTH_PROTOCOL_TLS_PROFILE", "chrome_146"),
 		CodexOAuthProtocolSessionDumpEnabled:    envBool("CODEX_OAUTH_PROTOCOL_SESSION_DUMP_ENABLED", true),
 		CodexOAuthScope:                         envDefault("CODEX_OAUTH_SCOPE", "openid profile email offline_access api.connectors.read api.connectors.invoke"),

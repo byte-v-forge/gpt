@@ -28,6 +28,7 @@ type CodexOAuthConfig struct {
 	TokenURL                      string
 	TokenProxyURL                 string
 	ProtocolProxyURL              string
+	ProtocolProxyRuntimeHTTPAddr  string
 	ProtocolTLSProfile            string
 	ProtocolSessionDumpEnabled    bool
 	Scope                         string
@@ -57,6 +58,7 @@ func (c CodexOAuthConfig) withDefaults() CodexOAuthConfig {
 	}
 	c.TokenProxyURL = strings.TrimSpace(c.TokenProxyURL)
 	c.ProtocolProxyURL = strings.TrimSpace(c.ProtocolProxyURL)
+	c.ProtocolProxyRuntimeHTTPAddr = strings.TrimSpace(c.ProtocolProxyRuntimeHTTPAddr)
 	if c.ProtocolProxyURL == "" {
 		c.ProtocolProxyURL = c.TokenProxyURL
 	}

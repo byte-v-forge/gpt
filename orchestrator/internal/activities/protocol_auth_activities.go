@@ -18,6 +18,7 @@ const (
 )
 
 func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input BrowserAuthStartInput) (BrowserAuthStartOutput, error) {
+	cfg := s.codexOAuthConfig.withDefaults()
 	output := BrowserAuthStartOutput{AccountId: input.GetAccountId(), OtpTimeoutSeconds: s.registrationOtpTimeout()}
 	account, err := s.protocolAuthAccount(ctx, input.GetAccountId(), input.GetMode())
 	if err != nil {
@@ -35,12 +36,16 @@ func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input BrowserAut
 	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "starting protocol auth", data)
 	defer stopHeartbeat()
 
+	if err := s.startCodexOAuthProtocolProxySession(ctx, cfg, "account_"+input.GetMode(), data); err != nil {
+		output.Data = protoData(data)
+		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
+	}
 	state, err := newProtocolAuthState()
 	if err != nil {
 		output.Data = protoData(data)
 		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
 	}
-	client, err := newCodexOAuthProtocolHTTPClient(s.codexOAuthConfig.withDefaults(), state)
+	client, err := newCodexOAuthProtocolHTTPClient(cfg, state)
 	if err != nil {
 		output.Data = protoData(data)
 		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)

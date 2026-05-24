@@ -38,6 +38,7 @@ func activityConfig(cfg orchestratorConfig, deps *orchestratorDependencies) acti
 			TokenURL:                      cfg.CodexOAuthTokenURL,
 			TokenProxyURL:                 cfg.CodexOAuthTokenProxyURL,
 			ProtocolProxyURL:              cfg.CodexOAuthProtocolProxyURL,
+			ProtocolProxyRuntimeHTTPAddr:  cfg.CodexOAuthProtocolProxyRuntimeHTTPAddr,
 			ProtocolTLSProfile:            cfg.CodexOAuthProtocolTLSProfile,
 			ProtocolSessionDumpEnabled:    cfg.CodexOAuthProtocolSessionDumpEnabled,
 			Scope:                         cfg.CodexOAuthScope,

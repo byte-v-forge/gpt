@@ -20,6 +20,10 @@ func (s *Server) CodexOAuthStartProtocolActivity(ctx context.Context, input Code
 			data["error_message"] = err.Error()
 			return data, err
 		}
+		if err := s.startCodexOAuthProtocolProxySession(ctx, cfg, "codex_oauth", data); err != nil {
+			data["error_message"] = err.Error()
+			return data, err
+		}
 		pkce, err := newCodexOAuthPKCE()
 		if err != nil {
 			data["error_message"] = err.Error()

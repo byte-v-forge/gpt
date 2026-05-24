@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -10,6 +11,12 @@ import (
 )
 
 var codexOAuthProtocolDeviceIDRE = regexp.MustCompile(`"deviceId"\s*:\s*"([^"]+)"`)
+var codexOAuthProtocolWorkspaceIDPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?is)workspaces".{0,900}?"id","([0-9a-fA-F-]{36})"`),
+	regexp.MustCompile(`(?is)"workspace_id"\s*:\s*"([0-9a-fA-F-]{36})"`),
+	regexp.MustCompile(`(?is)"workspaceId"\s*:\s*"([0-9a-fA-F-]{36})"`),
+}
+var codexOAuthProtocolUnifiedSessionRE = regexp.MustCompile(`us_[A-Za-z0-9]{16,}`)
 
 func runCodexOAuthProtocolURL(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, startURL, referer string, data map[string]any) (string, error) {
 	currentURL := codexOAuthProtocolAbsoluteURL(startURL)
@@ -17,6 +24,8 @@ func runCodexOAuthProtocolURL(ctx context.Context, client *codexOAuthProtocolHTT
 		return state.Stage, nil
 	}
 	lastReferer := referer
+	workspaceSelected := false
+	accountSelected := false
 	for hop := 0; hop < 16; hop++ {
 		if codexOAuthProtocolIsCallbackURL(currentURL, state.RedirectURI) {
 			state.LastURL = currentURL
@@ -45,6 +54,24 @@ func runCodexOAuthProtocolURL(ctx context.Context, client *codexOAuthProtocolHTT
 		if stage != "" {
 			state.Stage = stage
 			data["login_stage"] = stage
+		}
+		if stage == "choose_account" && !accountSelected {
+			accountSelected = true
+			nextURL, ok := codexOAuthProtocolChooseAccountContinue(ctx, client, state, currentURL, body, data)
+			if ok {
+				lastReferer = currentURL
+				currentURL = nextURL
+				continue
+			}
+		}
+		if stage == "consent" && !workspaceSelected {
+			workspaceSelected = true
+			nextURL, ok := codexOAuthProtocolWorkspaceContinue(ctx, client, state, currentURL, body, data)
+			if ok {
+				lastReferer = currentURL
+				currentURL = nextURL
+				continue
+			}
 		}
 		return state.Stage, nil
 	}
@@ -154,6 +181,8 @@ func codexOAuthProtocolStageFromURL(rawURL, body string) string {
 		return "email"
 	case strings.Contains(lowerURL, "/choose-an-account"):
 		return "choose_account"
+	case strings.Contains(lowerURL, "/workspace"):
+		return "consent"
 	case strings.Contains(lowerURL, "/sign-in-with-chatgpt/") || strings.Contains(lowerURL, "/consent"):
 		return "consent"
 	case strings.Contains(lowerBody, "add your phone") || strings.Contains(lowerBody, "phone number"):
@@ -177,6 +206,139 @@ func codexOAuthProtocolDeviceID(body string) string {
 		return ""
 	}
 	return strings.TrimSpace(match[1])
+}
+
+func codexOAuthProtocolWorkspaceContinue(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, currentURL, body string, data map[string]any) (string, bool) {
+	workspaceID := codexOAuthProtocolWorkspaceIDFromState(state)
+	if workspaceID == "" {
+		workspaceID = codexOAuthProtocolQueryFirst(currentURL, "workspace_id", "id")
+	}
+	if workspaceID == "" {
+		workspaceID = codexOAuthProtocolWorkspaceIDFromHTML(body)
+	}
+	if workspaceID == "" {
+		return "", false
+	}
+	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/workspace/select", "https://auth.openai.com/sign-in-with-chatgpt/codex/consent", map[string]any{"workspace_id": workspaceID})
+	if err != nil {
+		data["workspace_select_error"] = codexOAuthProtocolSafeText(err.Error(), 180)
+		return "", false
+	}
+	data["workspace_select_status"] = resp.StatusCode
+	if resp.StatusCode < 200 || resp.StatusCode > 399 {
+		return "", false
+	}
+	nextURL := codexOAuthProtocolAbsoluteURL(codexOAuthProtocolContinueURL(codexOAuthProtocolResponseJSON(resp)))
+	if nextURL == "" {
+		nextURL = codexOAuthProtocolRedirectLocation(resp, currentURL)
+	}
+	if nextURL == "" {
+		return "", false
+	}
+	data["workspace_selected"] = true
+	state.LastContinueURL = nextURL
+	return nextURL, true
+}
+
+func codexOAuthProtocolChooseAccountContinue(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, currentURL, body string, data map[string]any) (string, bool) {
+	match := codexOAuthProtocolUnifiedSessionRE.FindString(body)
+	if match == "" {
+		return "", false
+	}
+	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/session/select", "https://auth.openai.com/choose-an-account", map[string]any{"session_id": match})
+	if err != nil {
+		data["choose_account_error"] = codexOAuthProtocolSafeText(err.Error(), 180)
+		return "", false
+	}
+	data["choose_account_status"] = resp.StatusCode
+	if resp.StatusCode < 200 || resp.StatusCode > 399 {
+		return "", false
+	}
+	nextURL := codexOAuthProtocolAbsoluteURL(codexOAuthProtocolContinueURL(codexOAuthProtocolResponseJSON(resp)))
+	if nextURL == "" {
+		nextURL = codexOAuthProtocolRedirectLocation(resp, currentURL)
+	}
+	if nextURL == "" {
+		nextURL = currentURL
+	}
+	data["choose_account_selected"] = true
+	state.LastContinueURL = nextURL
+	return nextURL, true
+}
+
+func codexOAuthProtocolWorkspaceIDFromState(state *codexOAuthProtocolState) string {
+	if state == nil {
+		return ""
+	}
+	for _, cookie := range state.Cookies {
+		if !strings.EqualFold(cookie.Name, "oai-client-auth-session") || strings.TrimSpace(cookie.Value) == "" {
+			continue
+		}
+		parts := strings.Split(cookie.Value, ".")
+		if len(parts) > 2 {
+			parts = parts[:2]
+		}
+		for _, part := range parts {
+			if workspaceID := codexOAuthProtocolWorkspaceIDFromBase64JSON(part); workspaceID != "" {
+				return workspaceID
+			}
+		}
+	}
+	return ""
+}
+
+func codexOAuthProtocolWorkspaceIDFromBase64JSON(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		payload, err = base64.URLEncoding.DecodeString(value + strings.Repeat("=", (4-len(value)%4)%4))
+		if err != nil {
+			return ""
+		}
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return ""
+	}
+	if workspaceID := strings.TrimSpace(stringAny(decoded["workspace_id"])); workspaceID != "" {
+		return workspaceID
+	}
+	workspaces, _ := decoded["workspaces"].([]any)
+	for _, item := range workspaces {
+		workspace, _ := item.(map[string]any)
+		if workspaceID := strings.TrimSpace(stringAny(workspace["id"])); workspaceID != "" {
+			return workspaceID
+		}
+	}
+	return ""
+}
+
+func codexOAuthProtocolWorkspaceIDFromHTML(body string) string {
+	body = strings.ReplaceAll(body, `\"`, `"`)
+	for _, pattern := range codexOAuthProtocolWorkspaceIDPatterns {
+		match := pattern.FindStringSubmatch(body)
+		if len(match) > 1 && strings.TrimSpace(match[1]) != "" {
+			return strings.TrimSpace(match[1])
+		}
+	}
+	return ""
+}
+
+func codexOAuthProtocolQueryFirst(rawURL string, keys ...string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return ""
+	}
+	values := parsed.Query()
+	for _, key := range keys {
+		if value := strings.TrimSpace(values.Get(key)); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func codexOAuthProtocolIsCallbackURL(rawURL, redirectURI string) bool {

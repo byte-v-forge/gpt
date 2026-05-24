@@ -96,6 +96,9 @@ func (s *Server) codexOAuthProtocolCallbackURL(ctx context.Context, client *code
 		return state.LastURL, nil
 	}
 	candidates := []string{state.LastContinueURL, state.AuthorizeURL}
+	if codexOAuthProtocolCanCompleteStage(state.Stage) && strings.TrimSpace(state.LastContinueURL) != "" {
+		candidates = []string{state.LastContinueURL}
+	}
 	for _, candidate := range candidates {
 		if strings.TrimSpace(candidate) == "" {
 			continue
@@ -115,6 +118,15 @@ func (s *Server) codexOAuthProtocolCallbackURL(ctx context.Context, client *code
 		return "", codexOAuthAddPhoneRequiredError()
 	}
 	return "", fmt.Errorf("codex oauth callback stage not ready: %s", state.Stage)
+}
+
+func codexOAuthProtocolCanCompleteStage(stage string) bool {
+	switch stage {
+	case "consent", "callback":
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) CodexOAuthStopProtocolActivity(ctx context.Context, input CodexOAuthStopBrowserInput) error {

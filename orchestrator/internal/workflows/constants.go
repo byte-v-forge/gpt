@@ -113,4 +113,5 @@ const (
 
 	goPayAppSignupMaxPhoneAttempts = 3
 	codexOAuthMaxPhoneAttempts     = 3
+	codexOAuthMaxAcquireAttempts   = 3
 )

@@ -167,21 +167,29 @@ func runCodexOAuthAddPhoneAttempt(ctx workflow.Context, progress *WorkflowProgre
 }
 
 func acquireCodexOAuthPhoneAfterLogin(ctx workflow.Context, progress *WorkflowProgress, phoneCtx workflow.Context, input codexOAuthAddPhoneWorkflowInput) (CodexOAuthPhoneLease, string, error) {
-	setWorkflowProgress(ctx, progress, stepCodexOAuthAcquirePhone)
 	var phone CodexOAuthPhoneLease
-	err := workflow.ExecuteActivity(phoneCtx, codexOAuthAcquirePhoneActivityName, CodexOAuthAcquirePhoneInput{
-		JobId:         input.JobID,
-		AccountId:     input.AccountID,
-		Label:         input.Label,
-		MaxReuseCount: input.MaxReuseCount,
-	}).Get(ctx, &phone)
-	if err == nil {
-		return phone, "", nil
+	var lastErr error
+	for attempt := 1; attempt <= codexOAuthMaxAcquireAttempts; attempt++ {
+		setWorkflowProgress(ctx, progress, stepCodexOAuthAcquirePhone)
+		err := workflow.ExecuteActivity(phoneCtx, codexOAuthAcquirePhoneActivityName, CodexOAuthAcquirePhoneInput{
+			JobId:         input.JobID,
+			AccountId:     input.AccountID,
+			Label:         input.Label,
+			MaxReuseCount: input.MaxReuseCount,
+		}).Get(ctx, &phone)
+		if err == nil {
+			return phone, "", nil
+		}
+		lastErr = err
+		if reason := codexOAuthPhoneSupplyStopReason(err.Error()); reason == "" || attempt >= codexOAuthMaxAcquireAttempts {
+			break
+		}
+		workflow.Sleep(ctx, time.Duration(5*attempt)*time.Second)
 	}
-	if reason := codexOAuthPhoneSupplyStopReason(err.Error()); reason != "" {
-		return phone, stepCodexOAuthAcquirePhone, fmt.Errorf("%s: %s", reason, codexOAuthCleanAcquirePhoneError(err.Error()))
+	if reason := codexOAuthPhoneSupplyStopReason(lastErr.Error()); reason != "" {
+		return phone, stepCodexOAuthAcquirePhone, fmt.Errorf("%s: %s", reason, codexOAuthCleanAcquirePhoneError(lastErr.Error()))
 	}
-	return phone, stepCodexOAuthAcquirePhone, err
+	return phone, stepCodexOAuthAcquirePhone, lastErr
 }
 
 func releaseCodexOAuthAttemptPhone(ctx workflow.Context, releaseCtx workflow.Context, fallbackCtx workflow.Context, input codexOAuthAddPhoneWorkflowInput, phone CodexOAuthPhoneLease, err error) {

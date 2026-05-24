@@ -8,6 +8,8 @@ import (
 func codexOAuthPhonePageFailureState(data map[string]any) string {
 	text := strings.ToLower(fmt.Sprint(data))
 	switch {
+	case containsAny(text, "phone_rate_limited", "too many phone verification requests", "too many verification requests", "try again later"):
+		return "phone_rate_limited"
 	case containsAny(text, "already linked to the maximum number of accounts", "used too many", "too many times", "maximum number", "max number", "limit exceeded", "too many attempts"):
 		return "phone_reuse_exceeded"
 	case containsAny(text, "try a different phone", "try another phone", "can't use this phone", "cannot use this phone", "unsupported phone", "invalid phone", "not valid", "rejected"):
@@ -22,6 +24,8 @@ func codexOAuthPhonePageFailureState(data map[string]any) string {
 func codexOAuthPhoneFailureDisposition(message string) (string, string) {
 	text := strings.ToLower(message)
 	switch {
+	case containsAny(text, "phone_rate_limited", "too many phone verification requests", "too many verification requests", "try again later"):
+		return "phone_rate_limited", codexOAuthLeaseFailed
 	case containsAny(text, "phone_reuse_exceeded", "already linked to the maximum number of accounts", "used too many", "too many times", "maximum number", "max number", "limit exceeded"):
 		return "phone_reuse_exceeded", codexOAuthLeaseExhausted
 	case containsAny(text, "phone_rejected", "try a different phone", "try another phone", "can't use this phone", "cannot use this phone", "unsupported phone", "invalid phone", "rejected"):

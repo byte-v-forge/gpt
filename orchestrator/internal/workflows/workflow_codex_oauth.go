@@ -270,6 +270,11 @@ func codexOAuthCleanAcquirePhoneError(message string) string {
 func codexOAuthPhoneRetryReason(message string) string {
 	text := strings.ToLower(message)
 	switch {
+	case strings.Contains(text, "phone_rate_limited") ||
+		strings.Contains(text, "too many phone verification requests") ||
+		strings.Contains(text, "too many verification requests") ||
+		strings.Contains(text, "try again later"):
+		return ""
 	case strings.Contains(text, "phone_reuse_exhausted") ||
 		strings.Contains(text, "phone_reuse_exceeded") ||
 		strings.Contains(text, "already linked to the maximum number") ||

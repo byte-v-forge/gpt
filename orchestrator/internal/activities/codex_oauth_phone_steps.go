@@ -59,7 +59,7 @@ func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Ser
 	if err != nil {
 		data["sms_first_wait_error"] = err.Error()
 		if resendErr := f.resendCodexOAuthPhoneCode(s.browserAutomationClient, s.browserAuthConfig); resendErr != nil {
-			return false, resendErr
+			data["phone_resend_click_error"] = resendErr.Error()
 		}
 		if addErr := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-resend-"+jobID); addErr != nil {
 			data["sms_resend_request_error"] = addErr.Error()

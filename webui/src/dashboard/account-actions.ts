@@ -3,6 +3,7 @@ import { api, formatUnix, mask, useEventQueryCache, useQuery, useQueryClient, us
 import { latestOtpForEmail, maskEmail, normalizeUiEmail } from '@/dashboard/modules/mailbox/sdk';
 import { goPayPaymentActionLabel, goPayPaymentRequestChannel, isPureGoPayWAPaymentChannel } from './gopay-utils';
 import { mailboxContextForEmail } from './account-mail-utils';
+import { isInvalidGptAccount } from './account-utils';
 import { useGptAccountCleanupActions } from './account-cleanup-hook';
 import { accountInboxQueryKey, loadStoredInbox, mailboxEventURL, mergeInboxResponse } from './account-inbox-query';
 import type { MailboxEmailEvent } from './account-inbox-query';
@@ -44,6 +45,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
   useEffect(() => { if (data.loadError) toast.showError(data.loadError); }, [data.loadError, toast.showError]);
 
   async function runWorkflow(label: string, path: string, account: Account, payload: Record<string, any> = {}) {
+    if (!canMutateAccount(account)) return;
     setWorking(true);
     try {
       const resp = await api<{ job_id?: string; error_message?: string }>(path, { method: 'POST', body: JSON.stringify({ account_id: account.account_id, ...payload }) });
@@ -75,6 +77,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
   }
 
   async function runGoPayPayment(account: Account, otpChannel: ConcreteGoPayPaymentChannel) {
+    if (!canMutateAccount(account)) return;
     setWorking(true);
     try {
       const input = goPayAppInput();
@@ -91,7 +94,6 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
       setWorking(false);
     }
   }
-
 
   async function runCodexOAuthBatchAddPhone(accounts: Account[]) {
     if (!accounts.length) {
@@ -114,6 +116,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     }
   }
   async function updateAccount(account: Account, payload: Record<string, string>, successText: string) {
+    if (!canMutateAccount(account)) return;
     setWorking(true);
     try {
       const updated = await api<Account>(`/api/accounts/${account.account_id}`, { method: 'PATCH', body: JSON.stringify(payload) });
@@ -130,6 +133,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
   }
 
   async function refreshAccessToken(account: Account) {
+    if (!canMutateAccount(account)) return;
     setRefreshing((prev) => new Set(prev).add(account.account_id));
     try {
       const updated = await api<Account>(`/api/accounts/${account.account_id}/access-token`, { method: 'POST', body: '{}' });
@@ -146,6 +150,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
   }
 
   async function fetchInbox(account: Account) {
+    if (!canMutateAccount(account)) return;
     setInboxLoading(true);
     try {
       const resp = await api<FetchAccountMailboxResponse>(`/api/accounts/${account.account_id}/mailbox/inbox`, { method: 'POST', body: JSON.stringify({ limit_per_mailbox: 10 }) });
@@ -182,9 +187,9 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     }
   }
 
-  function goPayAppInput() {
-    return { phone: goPayProfile.data?.wa_phone || '', country_code: '+62', pin: goPayProfile.data?.pin || '' };
-  }
+  function goPayAppInput() { return { phone: goPayProfile.data?.wa_phone || '', country_code: '+62', pin: goPayProfile.data?.pin || '' }; }
+
+  function canMutateAccount(account: Account) { if (!isInvalidGptAccount(account)) return true; toast.showError('失效账号只能删除'); return false; }
 
   return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, syncingMailboxes, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, submitJobOTP, resendJobOTP, updateAccount, refreshAccessToken, fetchInbox, syncMailboxes, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
 }

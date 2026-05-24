@@ -14,7 +14,7 @@ import type {
   MailboxDomain
 } from './types';
 import { AccountTable, CreateAccountForm } from './accounts';
-import { accountCodexPhoneState, canLoginSession } from './account-utils';
+import { accountCodexPhoneState, canLoginSession, isInvalidGptAccount } from './account-utils';
 import { invalidAccountsForCleanup } from './account-cleanup-actions';
 import { canFetchAccountInbox, mailboxContextForEmail } from './account-mail-utils';
 import { OpenAIIcon } from './brand-icons';
@@ -43,10 +43,9 @@ export type GptAccountsViewProps = {
   onOpenWorkflow: (job: Job) => void | Promise<void>;
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegisterProtocol: (account: Account) => void | Promise<void>;
-  onLoginProtocol: (account: Account) => void | Promise<void>;
-  onCodexOAuthProtocol: (account: Account) => void | Promise<void>;
   onCodexOAuthBatchAddPhone: (accounts: Account[]) => void | Promise<void>;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
+  onDeleteAccount: (account: Account) => void | Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
   onConfirmManualPayment: (jobId: string) => Promise<void>;
@@ -57,7 +56,7 @@ export type GptAccountsViewProps = {
 export function GptAccountsView(props: GptAccountsViewProps) {
   const addPhoneAccounts = props.accounts.filter((account) => canLoginSession(account) && !accountCodexPhoneState(account, props.jobs).confirmed);
   const invalidAccounts = invalidAccountsForCleanup(props.accounts);
-  const canSyncMailboxes = props.accounts.some((account) => canFetchAccountInbox(account, mailboxContextForEmail(props.mailboxes, props.allocations, account)));
+  const canSyncMailboxes = props.accounts.some((account) => !isInvalidGptAccount(account) && canFetchAccountInbox(account, mailboxContextForEmail(props.mailboxes, props.allocations, account)));
   return (
     <section className="workspace singlePaneWorkspace">
       <div className="panel">
@@ -82,9 +81,8 @@ export function GptAccountsView(props: GptAccountsViewProps) {
           onOpenWorkflow={props.onOpenWorkflow}
           onCancelWorkflow={props.onCancelWorkflow}
           onRegisterProtocol={props.onRegisterProtocol}
-          onLoginProtocol={props.onLoginProtocol}
-          onCodexOAuthProtocol={props.onCodexOAuthProtocol}
           onGoPayPayment={props.onGoPayPayment}
+          onDelete={props.onDeleteAccount}
           onSubmitOTP={props.onSubmitOTP}
           onResendOTP={props.onResendOTP}
           onConfirmManualPayment={props.onConfirmManualPayment}

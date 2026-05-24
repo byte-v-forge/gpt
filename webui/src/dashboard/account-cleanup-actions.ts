@@ -1,7 +1,7 @@
 import { api } from '@/dashboard/module-kit';
+import { isInvalidGptAccount } from './account-utils';
 import type { Account } from './types';
 
-const INVALID_ACCOUNT_STATUS = 'DEACTIVATED';
 const CLEANUP_BATCH_LIMIT = 500;
 const CLEANUP_MAX_BATCHES = 20;
 
@@ -10,7 +10,7 @@ export function invalidAccountsForCleanup(accounts: Account[]) {
 }
 
 export function isInvalidAccountForCleanup(account: Account) {
-  return account.status === INVALID_ACCOUNT_STATUS;
+  return isInvalidGptAccount(account);
 }
 
 export async function deleteGptAccount(accountID: string) {
@@ -32,5 +32,5 @@ export async function cleanInvalidGptAccounts() {
 }
 
 function loadInvalidAccountsBatch() {
-  return api<Account[]>(`/api/accounts?status=${INVALID_ACCOUNT_STATUS}&limit=${CLEANUP_BATCH_LIMIT}`);
+  return api<Account[]>(`/api/accounts?status=DEACTIVATED&limit=${CLEANUP_BATCH_LIMIT}`);
 }

@@ -19,7 +19,7 @@ export function AccountPrimaryActions({ account, busy, refreshingAccessToken, on
   onRefreshAccessToken: (account: Account) => Promise<void>;
 }) {
   return (
-    <div className="accountHeaderActionGroups">
+    <div className="detailActionRows accountPrimaryActionRows">
       <HeaderActionRow label="浏览器" actions={browserActions(account, busy, onRegister, onLogin, onCodexOAuthAddPhone)} />
       <HeaderActionRow label="协议" actions={protocolActions(account, busy, onRegisterProtocol, onLoginProtocol, onCodexOAuthProtocol)} />
       <HeaderActionRow label="工具" actions={utilityActions(account, busy, refreshingAccessToken, onRefreshAccessToken, onProbeAccount)} />
@@ -30,9 +30,9 @@ export function AccountPrimaryActions({ account, busy, refreshingAccessToken, on
 function HeaderActionRow({ label, actions }: { label: string; actions: ActionButtonDescriptor[] }) {
   if (!actions.some((action) => action.visible !== false)) return null;
   return (
-    <div className="detailActionRow accountHeaderActionRow">
+    <div className="detailActionRow accountPrimaryActionRow">
       <span className="detailActionLabel">{label}</span>
-      <ActionButtonGroup className="sectionActions accountHeaderActions" actions={actions} />
+      <ActionButtonGroup className="sectionActions accountPrimaryActions" actions={actions} />
     </div>
   );
 }
@@ -104,10 +104,11 @@ function utilityActions(account: Account, busy: boolean, refreshing: boolean, on
     onClick: () => void onRefresh(account),
   }, {
     id: 'probe-account',
+    visible: canProbeAccount(account),
     label: '探测账号',
     hint: probeAccountHint(account),
     icon: <Search size={14} />,
-    disabled: busy || !canProbeAccount(account),
+    disabled: busy,
     onClick: () => onProbe(account),
   }];
 }

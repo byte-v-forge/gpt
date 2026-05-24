@@ -3,12 +3,17 @@ import { goPayPaymentChannelLabel, paymentChannelValue } from './gopay-utils';
 import { statusText } from './labels';
 import type { Account, Job } from './types';
 
+const INVALID_GPT_ACCOUNT_STATUS = 'DEACTIVATED';
+
+export function isInvalidGptAccount(account: Account) { return account.status === INVALID_GPT_ACCOUNT_STATUS; }
+
 export function canRegister(account: Account) {
-  return !isUserAlreadyExistsAccount(account) && !hasRegisteredSession(account);
+  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && !hasRegisteredSession(account);
 }
 
 export function canGoPayPayment(account: Account) {
-  return !isUserAlreadyExistsAccount(account) &&
+  return !isInvalidGptAccount(account) &&
+    !isUserAlreadyExistsAccount(account) &&
     !accountIsActivated(account) &&
     (!!account.session_token || !!account.access_token);
 }
@@ -24,7 +29,6 @@ export function accountActivationChannel(account: Account, jobs: Job[]) {
   if (latestPaymentJob.action === 'GOPAY_WA_PAYMENT') return '纯Gopay-WA';
   return goPayPaymentChannelLabel(paymentChannelValue(stringValue(objectValue(latestPaymentJob.result).otp_channel)));
 }
-
 
 export type AccountCodexPhoneState = {
   confirmed: boolean;
@@ -56,7 +60,6 @@ export function accountCodexPhoneState(account: Account, jobs: Job[]): AccountCo
   }
   return { confirmed: false, label: '未加手机', title: '未确认 add phone', tone: 'neutral' };
 }
-
 
 function latestProtocolPhoneState(account: Account, jobs: Job[]): AccountCodexPhoneState | null {
   const latest = jobs
@@ -94,7 +97,7 @@ function boolResult(value: unknown) {
 }
 
 export function canProbeAccount(account: Account) {
-  return !isUserAlreadyExistsAccount(account) && !!account.session_token;
+  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && !!account.session_token;
 }
 
 export function probeAccountHint(account: Account) {
@@ -104,11 +107,11 @@ export function probeAccountHint(account: Account) {
 }
 
 export function canRefreshAccessToken(account: Account) {
-  return !isUserAlreadyExistsAccount(account) && !!account.session_token && !account.access_token;
+  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && !!account.session_token && !account.access_token;
 }
 
 export function canLoginSession(account: Account) {
-  return !isUserAlreadyExistsAccount(account) && !!account.email && !!account.password;
+  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && !!account.email && !!account.password;
 }
 
 export function loginActionLabel(account: Account) {
@@ -124,7 +127,7 @@ export function loginActionHint(account: Account) {
 }
 
 export function accountSignalText(account: Account) {
-  if (account.status === 'DEACTIVATED') return '失效';
+  if (isInvalidGptAccount(account)) return '失效';
   if (account.status.includes('FAILED') || account.status.includes('EXISTS')) return statusText(account.status);
   if (accountIsActivated(account)) {
     const plan = accountPlanText(account);
@@ -143,13 +146,13 @@ export function accountSignalTone(account: Account) {
 }
 
 export function accountIsActivated(account: Account) {
-  if (account.status === 'DEACTIVATED') return false;
+  if (isInvalidGptAccount(account)) return false;
   const tier = normalizeTier(account.tier);
   return account.status === 'ACTIVATED' || account.plus_active === true || (!!tier && tier !== 'free' && tier !== 'unknown');
 }
 
 export function accountActivationText(account: Account) {
-  if (account.status === 'DEACTIVATED') return statusText(account.status);
+  if (isInvalidGptAccount(account)) return statusText(account.status);
   if (accountIsActivated(account)) return '已激活';
   return statusText(account.status);
 }

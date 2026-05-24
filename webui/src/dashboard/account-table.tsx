@@ -1,4 +1,4 @@
-import { Zap } from 'lucide-react';
+import { Trash2, Zap } from 'lucide-react';
 import {
   RecordActionButtons,
   RecordActions,
@@ -14,6 +14,7 @@ import {
   accountActivationChannel,
   accountCodexPhoneState,
   canGoPayPayment,
+  isInvalidGptAccount,
   isUserAlreadyExistsAccount
 } from './account-utils';
 import { AccountChannelTag, AccountCodexPhoneTag, AccountSignalBadge, PaymentChannelIcon } from './account-badges';
@@ -23,7 +24,7 @@ import { OpenAIIcon } from './brand-icons';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegisterProtocol, onLoginProtocol, onCodexOAuthProtocol, onGoPayPayment, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegisterProtocol, onGoPayPayment, onDelete, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
@@ -35,9 +36,8 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
   onOpenWorkflow: (job: Job) => void;
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegisterProtocol: (a: Account) => void;
-  onLoginProtocol: (a: Account) => void;
-  onCodexOAuthProtocol: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
+  onDelete: (a: Account) => void | Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
   onConfirmManualPayment: (jobId: string) => Promise<void>;
@@ -71,9 +71,8 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
               onOpenWorkflow={onOpenWorkflow}
               onCancelWorkflow={onCancelWorkflow}
               onRegisterProtocol={onRegisterProtocol}
-              onLoginProtocol={onLoginProtocol}
-              onCodexOAuthProtocol={onCodexOAuthProtocol}
               onGoPayPayment={onGoPayPayment}
+              onDelete={onDelete}
               onSubmitOTP={onSubmitOTP}
               onResendOTP={onResendOTP}
               onConfirmManualPayment={onConfirmManualPayment}
@@ -101,7 +100,7 @@ function AccountCardIdentity({ account, showSecrets }: {
   );
 }
 
-function AccountRowActions({ account, accountBusy, currentWorkflow, busy, onOpenWorkflow, onCancelWorkflow, onRegisterProtocol, onLoginProtocol, onCodexOAuthProtocol, onGoPayPayment, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+function AccountRowActions({ account, accountBusy, currentWorkflow, busy, onOpenWorkflow, onCancelWorkflow, onRegisterProtocol, onGoPayPayment, onDelete, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   account: Account;
   accountBusy: boolean;
   currentWorkflow?: Job;
@@ -109,15 +108,29 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, onOpen
   onOpenWorkflow: (job: Job) => void;
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegisterProtocol: (a: Account) => void;
-  onLoginProtocol: (a: Account) => void;
-  onCodexOAuthProtocol: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
+  onDelete: (a: Account) => void | Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
   onResendOTP: (jobId: string) => Promise<void>;
   onConfirmManualPayment: (jobId: string) => Promise<void>;
   onSelectAddBalance: (jobId: string, method: ConcreteGoPayAddBalanceMethod) => Promise<void>;
   onConfirmAddBalance: (jobId: string) => Promise<void>;
 }) {
+  if (isInvalidGptAccount(account)) {
+    const actions: RowActionDescriptor[] = [{
+      label: '删除账号',
+      icon: <Trash2 size={14} />,
+      onClick: () => void onDelete(account),
+      disabled: busy,
+      kind: 'danger'
+    }];
+    return (
+      <RecordActions className="rowActions">
+        <div className="rowActionsMain"><RecordActionButtons actions={actions} /></div>
+      </RecordActions>
+    );
+  }
+
   if (accountBusy && currentWorkflow && !isUserAlreadyExistsAccount(account)) {
     return (
       <RecordActions className="rowActions">
@@ -140,7 +153,7 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, onOpen
       <div className="rowActionsMain splitRowActions">
         <div className="rowActionsLeft"><RecordActionButtons actions={leftActions} /></div>
         <div className="rowActionsRight">
-          <AccountRowAuthGroups account={account} busy={busy} onRegisterProtocol={onRegisterProtocol} onLoginProtocol={onLoginProtocol} onCodexOAuthProtocol={onCodexOAuthProtocol} />
+          <AccountRowAuthGroups account={account} busy={busy} onRegisterProtocol={onRegisterProtocol} />
         </div>
       </div>
     </RecordActions>

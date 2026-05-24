@@ -278,6 +278,7 @@ func codexOAuthPhoneRetryReason(message string) string {
 		strings.Contains(text, "too many"):
 		return "phone_reuse_exhausted"
 	case strings.Contains(text, "phone_rejected") ||
+		strings.Contains(text, "phone_otp_input_missing") ||
 		strings.Contains(text, "try a different phone") ||
 		strings.Contains(text, "try another phone") ||
 		strings.Contains(text, "cannot use this phone") ||

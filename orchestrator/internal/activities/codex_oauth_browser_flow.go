@@ -43,7 +43,7 @@ func (s *Server) newCodexOAuthBrowserStartFlow(ctx context.Context, account *pb.
 	if s.browserAutomationClient == nil {
 		return nil, fmt.Errorf("browser automation client is not configured")
 	}
-	if allowAddPhone {
+	if allowAddPhone && phone != nil {
 		if err := ensureCodexOAuthPhoneUsableForSMS(phone, cfg); err != nil {
 			return nil, err
 		}

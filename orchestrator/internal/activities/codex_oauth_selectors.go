@@ -35,6 +35,20 @@ func codexOAuthPhoneOTPSelector() *browserautomationv1.BrowserSelector {
 	return cssSelector(`input[name="code"][autocomplete="one-time-code"][placeholder="Code"],input[autocomplete="one-time-code"],input[inputmode="numeric"]`)
 }
 
+func codexOAuthPhoneValidationSelectorGroup(timeout time.Duration) *browserautomationv1.BrowserSelectorGroup {
+	return selectorGroup(timeout,
+		codexOAuthPhoneOTPSelector(),
+		textSelector("try a different phone", false),
+		textSelector("try another phone", false),
+		textSelector("can't use this phone", false),
+		textSelector("cannot use this phone", false),
+		textSelector("invalid phone", false),
+		textSelector("not valid", false),
+		textSelector("maximum number", false),
+		textSelector("too many", false),
+	)
+}
+
 func codexOAuthConsentSignalSelector() *browserautomationv1.BrowserSelector {
 	return textSelector("Codex CLI", false)
 }

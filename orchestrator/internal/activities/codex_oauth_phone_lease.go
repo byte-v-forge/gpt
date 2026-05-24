@@ -61,6 +61,9 @@ func (s *Server) releaseCodexPhone(ctx context.Context, phone *CodexOAuthPhoneLe
 	if row.Status != codexOAuthLeaseInUse {
 		return s.db.WithContext(ctx).Save(&row).Error
 	}
+	if !phoneUsed && s.codexOAuthActivationHasCode(ctx, row.ActivationID) {
+		phoneUsed = true
+	}
 	if terminalStatus != "" {
 		row.Status = terminalStatus
 		if !phoneUsed {
@@ -95,6 +98,26 @@ func (s *Server) releaseCodexPhone(ctx context.Context, phone *CodexOAuthPhoneLe
 		}
 	}
 	return s.db.WithContext(ctx).Save(&row).Error
+}
+
+func (s *Server) codexOAuthActivationHasCode(ctx context.Context, activationID string) bool {
+	if s.smsClient == nil || strings.TrimSpace(activationID) == "" {
+		return false
+	}
+	resp, err := s.smsClient.GetActivation(ctx, &smsv1.GetActivationRequest{ActivationId: strings.TrimSpace(activationID)})
+	if err != nil || resp == nil || resp.GetError() != nil {
+		return false
+	}
+	if strings.TrimSpace(resp.GetCode().GetValue()) != "" {
+		return true
+	}
+	switch resp.GetActivation().GetStatus() {
+	case smsv1.SmsActivationStatus_SMS_ACTIVATION_STATUS_CODE_RECEIVED,
+		smsv1.SmsActivationStatus_SMS_ACTIVATION_STATUS_COMPLETED:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Server) cancelCodexOAuthSMSActivation(ctx context.Context, activationID, jobID, reason string) error {

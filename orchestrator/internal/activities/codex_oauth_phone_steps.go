@@ -28,20 +28,25 @@ func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Ser
 		waitForSelectorCommand("wait-phone-input", codexOAuthPhoneInputSelector(), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 20*time.Second, false),
 		fillCommand("fill-phone", codexOAuthPhoneInputSelector(), national, 10*time.Second, false),
 		clickCommand("click-phone-continue", browserAuthEmailSubmitSelector(), 10*time.Second, false),
-		waitForSelectorCommand("wait-phone-otp", codexOAuthPhoneOTPSelector(), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 45*time.Second, true),
+		waitForSelectorGroupCommand("wait-phone-validity", codexOAuthPhoneValidationSelectorGroup(60*time.Second), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 60*time.Second, true),
 		getPageStateCommand("phone-submit-state", true, true, false, 5*time.Second),
 	})
 	if err != nil {
 		return false, err
 	}
 	submitState := browserAuthPageStateData(results, "phone-submit-state")
-	if !browserAuthCommandSucceeded(results, "wait-phone-otp") {
-		state := "phone_otp_input_missing"
-		if failure := codexOAuthPhonePageFailureState(submitState); failure != "" {
-			state = failure
-		}
-		return false, browserAuthStepError(f.mode, "add_phone", state, submitState)
+	if failure := codexOAuthPhonePageFailureState(submitState); failure != "" {
+		data["phone_validity_confirmed"] = false
+		data["phone_validity_failure"] = failure
+		return false, browserAuthStepError(f.mode, "add_phone", failure, submitState)
 	}
+	if !browserAuthCommandSucceeded(results, "wait-phone-validity") {
+		state := "phone_otp_input_missing"
+		data["phone_validity_confirmed"] = false
+		data["phone_validity_failure"] = state
+		return false, browserAuthStepError(f.mode, "add_phone", "phone_rejected: "+state, submitState)
+	}
+	data["phone_validity_confirmed"] = true
 	if phone.GetReused() {
 		if err := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-additional-"+jobID); err != nil {
 			data["sms_request_additional_error"] = err.Error()

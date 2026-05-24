@@ -30,19 +30,15 @@ func codexOAuthPhoneFailureDisposition(message string) (string, string) {
 		return "phone_sms_timeout", codexOAuthLeaseFailed
 	case containsAny(text, "phone_expired"):
 		return "phone_expired", codexOAuthLeaseExpired
+	case containsAny(text, "manual workflow cancel", "workflow cancel", "context canceled"):
+		return "phone_canceled", codexOAuthLeaseFailed
 	default:
 		return "", ""
 	}
 }
 
 func codexOAuthFailureLikelyUsedPhone(message string) bool {
-	failureKind, _ := codexOAuthPhoneFailureDisposition(message)
-	switch failureKind {
-	case "phone_reuse_exceeded", "phone_rejected", "phone_sms_timeout":
-		return true
-	default:
-		return false
-	}
+	return false
 }
 
 func containsAny(text string, needles ...string) bool {

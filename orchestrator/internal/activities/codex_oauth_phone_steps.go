@@ -65,7 +65,7 @@ func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Ser
 	} else if err := s.markSMSMessageSent(ctx, phone.GetActivationId(), "codex-oauth-sent-"+jobID); err != nil {
 		data["sms_mark_sent_error"] = err.Error()
 	}
-	code, err := s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneFirstWaitSeconds, smsIssuedAfter)
+	code, err := s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneWaitSeconds, smsIssuedAfter)
 	if err != nil {
 		data["sms_first_wait_error"] = err.Error()
 		resendIssuedAfter, resendErr := f.resendCodexOAuthPhoneCode(s.browserAutomationClient, s.browserAuthConfig)
@@ -78,7 +78,7 @@ func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Ser
 		if addErr := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-resend-"+jobID); addErr != nil {
 			data["sms_resend_request_error"] = addErr.Error()
 		}
-		code, err = s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneResendWaitSeconds, smsIssuedAfter)
+		code, err = s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneWaitSeconds, smsIssuedAfter)
 		if err != nil {
 			return false, fmt.Errorf("phone_sms_timeout: %w", err)
 		}

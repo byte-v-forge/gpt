@@ -109,7 +109,7 @@ func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *codexOA
 	} else if err := s.markSMSMessageSent(ctx, phone.GetActivationId(), "codex-oauth-sent-"+input.GetJobId()); err != nil {
 		data["sms_mark_sent_error"] = err.Error()
 	}
-	code, err := s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneFirstWaitSeconds, smsIssuedAfter)
+	code, err := s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneWaitSeconds, smsIssuedAfter)
 	if err != nil {
 		data["sms_first_wait_error"] = err.Error()
 		resend, _ := client.postJSON(ctx, "https://auth.openai.com/api/accounts/phone-otp/resend", "https://auth.openai.com/phone-verification", map[string]any{})
@@ -121,7 +121,7 @@ func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *codexOA
 		if addErr := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-resend-"+input.GetJobId()); addErr != nil {
 			data["sms_resend_request_error"] = addErr.Error()
 		}
-		code, err = s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneResendWaitSeconds, smsIssuedAfter)
+		code, err = s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneWaitSeconds, smsIssuedAfter)
 		if err != nil {
 			return false, fmt.Errorf("phone_sms_timeout: %w", err)
 		}

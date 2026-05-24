@@ -180,7 +180,7 @@ func codexOAuthPhoneMinRemainingSeconds(cfg CodexOAuthConfig) int32 {
 	if cfg.PhoneMinReuseRemainingSeconds > 0 {
 		return cfg.PhoneMinReuseRemainingSeconds
 	}
-	value := cfg.PhoneFirstWaitSeconds + cfg.PhoneResendWaitSeconds + 60
+	value := cfg.PhoneWaitSeconds*2 + 60
 	if value < defaultCodexOAuthPhoneMinReuseRemaining {
 		return defaultCodexOAuthPhoneMinReuseRemaining
 	}

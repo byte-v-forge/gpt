@@ -38,8 +38,7 @@ type CodexOAuthConfig struct {
 	PhoneCountryISO2              string
 	PhoneCountryCallingCode       string
 	PhoneMaxPriceUSD              string
-	PhoneFirstWaitSeconds         int32
-	PhoneResendWaitSeconds        int32
+	PhoneWaitSeconds              int32
 	PhoneMinReuseRemainingSeconds int32
 }
 
@@ -89,11 +88,8 @@ func (c CodexOAuthConfig) withDefaults() CodexOAuthConfig {
 	if strings.TrimSpace(c.PhoneMaxPriceUSD) == "" {
 		c.PhoneMaxPriceUSD = defaultCodexOAuthPhoneMaxPriceUSD
 	}
-	if c.PhoneFirstWaitSeconds <= 0 {
-		c.PhoneFirstWaitSeconds = defaultCodexOAuthPhoneWaitSeconds
-	}
-	if c.PhoneResendWaitSeconds <= 0 {
-		c.PhoneResendWaitSeconds = defaultCodexOAuthPhoneWaitSeconds
+	if c.PhoneWaitSeconds <= 0 {
+		c.PhoneWaitSeconds = defaultCodexOAuthPhoneWaitSeconds
 	}
 	if c.PhoneMinReuseRemainingSeconds <= 0 {
 		c.PhoneMinReuseRemainingSeconds = defaultCodexOAuthPhoneMinReuseRemaining

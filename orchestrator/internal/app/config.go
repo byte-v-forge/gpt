@@ -47,8 +47,7 @@ type orchestratorConfig struct {
 	CodexOAuthPhoneCountryISO2              string
 	CodexOAuthPhoneCountryCallingCode       string
 	CodexOAuthPhoneMaxPriceUSD              string
-	CodexOAuthPhoneFirstWaitSeconds         int32
-	CodexOAuthPhoneResendWaitSeconds        int32
+	CodexOAuthPhoneWaitSeconds              int32
 	CodexOAuthPhoneMinReuseRemainingSeconds int32
 
 	GoPayOTPWebhookListenAddr              string
@@ -132,8 +131,7 @@ func loadOrchestratorConfig() orchestratorConfig {
 		CodexOAuthPhoneCountryISO2:              envDefault("CODEX_OAUTH_PHONE_COUNTRY_ISO2", "TH"),
 		CodexOAuthPhoneCountryCallingCode:       envDefault("CODEX_OAUTH_PHONE_COUNTRY_CALLING_CODE", "66"),
 		CodexOAuthPhoneMaxPriceUSD:              envDefault("CODEX_OAUTH_PHONE_MAX_PRICE_USD", "0.067"),
-		CodexOAuthPhoneFirstWaitSeconds:         envInt32("CODEX_OAUTH_PHONE_FIRST_WAIT_SECONDS", 120),
-		CodexOAuthPhoneResendWaitSeconds:        envInt32("CODEX_OAUTH_PHONE_RESEND_WAIT_SECONDS", 120),
+		CodexOAuthPhoneWaitSeconds:              envInt32("CODEX_OAUTH_PHONE_WAIT_SECONDS", 120),
 		CodexOAuthPhoneMinReuseRemainingSeconds: envInt32("CODEX_OAUTH_PHONE_MIN_REUSE_REMAINING_SECONDS", 300),
 
 		GoPayOTPWebhookListenAddr:              envDefault("GOPAY_OTP_WEBHOOK_LISTEN_ADDR", ":8081"),

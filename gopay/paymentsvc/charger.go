@@ -29,7 +29,7 @@ type charger struct {
 const stripeCheckoutVersion = "2025-03-31.basil; checkout_server_update_beta=v1; checkout_manual_approval_preview=v1"
 
 func (s *Server) newCharger(ctx context.Context, cred credential, phone, countryCode, pin, tokenization string) (*charger, error) {
-	fingerprint := randomPaymentBrowserFingerprint(s.cfg.BrowserLocale)
+	fingerprint := stablePaymentBrowserFingerprint(s.cfg.BrowserLocale, s.cfg.BrowserFingerprint, s.cfg.BrowserDeviceID)
 	if _, err := s.ensurePaymentProxyAvailable(ctx, fingerprint); err != nil {
 		return nil, err
 	}
@@ -307,14 +307,13 @@ func (c *charger) stripeConfirm(ctx context.Context, csID, pmID string) (map[str
 }
 
 func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
-	_, _ = c.cs.request(ctx, http.MethodPost, "https://chatgpt.com/backend-api/sentinel/ping", requestOptions{jsonBody: map[string]any{}})
-
 	approve, err := c.newChatGPTApproveSession()
 	if err != nil {
 		return err
 	}
 	defer approve.close()
 	headers := c.chatGPTApproveHeaders(csID)
+	c.chatGPTSentinelPing(ctx, approve)
 
 	var lastStatus int
 	var lastBody string
@@ -338,7 +337,7 @@ func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
 				return ctx.Err()
 			case <-time.After(time.Duration(2+attempt) * time.Second):
 			}
-			_, _ = c.cs.request(ctx, http.MethodPost, "https://chatgpt.com/backend-api/sentinel/ping", requestOptions{jsonBody: map[string]any{}})
+			c.chatGPTSentinelPing(ctx, approve)
 			continue
 		}
 		if resp.status == http.StatusForbidden && strings.Contains(strings.ToLower(lastBody), "<html") {
@@ -356,26 +355,30 @@ func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
 }
 
 func (c *charger) newChatGPTApproveSession() (*httpSession, error) {
-	approve, err := newHTTPSession(c.cfg.CheckoutProxyURL, c.cs.fingerprint)
+	approve, err := newHTTPSession(c.cfg.PaymentProxyURL, c.cs.fingerprint)
 	if err != nil {
 		return nil, fmt.Errorf("chatgpt approve session init: %w", err)
 	}
 	return approve, nil
 }
 
-func (c *charger) chatGPTApproveHeaders(csID string) http.Header {
-	headers := http.Header{
-		"Accept":                []string{"*/*"},
-		"Content-Type":          []string{"application/json"},
-		"Origin":                []string{"https://chatgpt.com"},
-		"Referer":               []string{c.checkoutApprovalURL(csID)},
-		"x-openai-target-path":  []string{"/backend-api/payments/checkout/approve"},
-		"x-openai-target-route": []string{"/backend-api/payments/checkout/approve"},
+func (c *charger) chatGPTSentinelPing(ctx context.Context, session *httpSession) {
+	if session == nil {
+		return
 	}
-	// DanOps-style approve: use a fresh, clean HTTP session and only carry the
-	// browser-identifying headers plus auth/cookie material needed for this checkout.
-	// Reusing the long-lived checkout session can keep stale default headers/referer
-	// context and make ChatGPT return {"result":"blocked"}.
+	_, _ = session.request(ctx, http.MethodPost, "https://chatgpt.com/backend-api/sentinel/ping", requestOptions{
+		jsonBody: map[string]any{},
+		headers:  c.chatGPTAuthHeaders("https://chatgpt.com/"),
+	})
+}
+
+func (c *charger) chatGPTAuthHeaders(referer string) http.Header {
+	headers := http.Header{
+		"Accept":       []string{"*/*"},
+		"Content-Type": []string{"application/json"},
+		"Origin":       []string{"https://chatgpt.com"},
+		"Referer":      []string{firstNonEmpty(referer, "https://chatgpt.com/")},
+	}
 	c.cs.fingerprint.applyBrowserHeaders(headers)
 	for _, key := range []string{"Authorization", "oai-device-id"} {
 		if value := c.cs.headers.Get(key); value != "" {
@@ -385,6 +388,17 @@ func (c *charger) chatGPTApproveHeaders(csID string) http.Header {
 	if cookie := mergeCookieHeaders(c.cs.headers.Get("Cookie"), c.cs.cookieHeader("https://chatgpt.com/")); cookie != "" {
 		headers.Set("Cookie", cookie)
 	}
+	return headers
+}
+
+func (c *charger) chatGPTApproveHeaders(csID string) http.Header {
+	// DanOps-style approve: use a fresh, clean HTTP session and only carry the
+	// browser-identifying headers plus auth/cookie material needed for this checkout.
+	// Reusing the long-lived checkout session can keep stale default headers/referer
+	// context and make ChatGPT return {"result":"blocked"}.
+	headers := c.chatGPTAuthHeaders(c.checkoutApprovalURL(csID))
+	headers.Set("x-openai-target-path", "/backend-api/payments/checkout/approve")
+	headers.Set("x-openai-target-route", "/backend-api/payments/checkout/approve")
 	return headers
 }
 

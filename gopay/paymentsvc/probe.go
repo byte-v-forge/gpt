@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 type tierProbe struct {
@@ -68,12 +66,13 @@ func (s *Server) probeTierAccessToken(ctx context.Context, accessToken string) t
 	if strings.TrimSpace(accessToken) == "" {
 		return tierProbe{Source: "wham_usage", ErrorMessage: "access_token is required"}
 	}
-	session, err := newHTTPSession(s.cfg.CheckoutProxyURL)
+	fingerprint := stablePaymentBrowserFingerprint(s.cfg.BrowserLocale, s.cfg.BrowserFingerprint, s.cfg.BrowserDeviceID)
+	session, err := newHTTPSession(s.cfg.CheckoutProxyURL, fingerprint)
 	if err != nil {
 		return tierProbe{Source: "wham_usage", ErrorMessage: err.Error()}
 	}
 	defer session.close()
-	setChatGPTBrowserHeaders(session, uuid.NewString())
+	setChatGPTBrowserHeaders(session, fingerprint.DeviceID, fingerprint)
 	session.headers.Set("Authorization", "Bearer "+accessToken)
 	session.headers.Set("Accept", "application/json")
 	if accountID := accessTokenAccountID(accessToken); accountID != "" {
@@ -96,13 +95,15 @@ func (s *Server) probePlusActiveSessionToken(ctx context.Context, sessionToken s
 	if strings.TrimSpace(sessionToken) == "" {
 		return tierProbe{Source: "auth_session", ErrorMessage: "session_token is required"}
 	}
-	session, err := newHTTPSession(s.cfg.CheckoutProxyURL)
+	fingerprint := stablePaymentBrowserFingerprint(s.cfg.BrowserLocale, s.cfg.BrowserFingerprint, s.cfg.BrowserDeviceID)
+	deviceID := firstNonEmpty(cookiePartValue(sessionCookieParts(sessionToken), "oai-did"), fingerprint.DeviceID)
+	fingerprint.DeviceID = deviceID
+	session, err := newHTTPSession(s.cfg.CheckoutProxyURL, fingerprint)
 	if err != nil {
 		return tierProbe{Source: "auth_session", ErrorMessage: err.Error()}
 	}
 	defer session.close()
-	deviceID := uuid.NewString()
-	setChatGPTBrowserHeaders(session, deviceID)
+	setChatGPTBrowserHeaders(session, deviceID, fingerprint)
 	session.headers.Set("Accept", "application/json")
 	session.headers.Set("Cookie", chatGPTCookieHeader(sessionToken, deviceID))
 	resp, err := session.request(ctx, http.MethodGet, "https://chatgpt.com/api/auth/session", requestOptions{})

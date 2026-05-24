@@ -51,7 +51,7 @@ func (c *charger) paymentFingerprint() browserFingerprint {
 	if c != nil && c.ext != nil {
 		return c.ext.fingerprint.withFallback(c.cfg.BrowserLocale)
 	}
-	return randomPaymentBrowserFingerprint(defaultBrowserLocale)
+	return stablePaymentBrowserFingerprint(defaultBrowserLocale, "", "")
 }
 
 func (c *charger) startLinkingUntilOTP(ctx context.Context, snapToken, csID, stripePK, otpChannel string) (map[string]any, error) {

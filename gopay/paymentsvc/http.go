@@ -42,7 +42,7 @@ type httpResult struct {
 }
 
 func newHTTPSession(proxyURL string, fingerprints ...browserFingerprint) (*httpSession, error) {
-	fingerprint := randomPaymentBrowserFingerprint(defaultBrowserLocale)
+	fingerprint := stablePaymentBrowserFingerprint(defaultBrowserLocale, "", "")
 	if len(fingerprints) > 0 {
 		fingerprint = fingerprints[0].withFallback(defaultBrowserLocale)
 	}
@@ -63,7 +63,6 @@ func (s *httpSession) rebuildClient(fingerprint browserFingerprint) error {
 	options := []tlsclient.HttpClientOption{
 		tlsclient.WithTimeoutSeconds(int(defaultTimeout.Seconds())),
 		tlsclient.WithClientProfile(fingerprint.TLSProfile),
-		tlsclient.WithRandomTLSExtensionOrder(),
 		tlsclient.WithDisableHttp3(),
 		tlsclient.WithCookieJar(s.cookieJar),
 	}

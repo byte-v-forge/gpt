@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-
-	"github.com/google/uuid"
 )
 
 const (
@@ -22,15 +20,17 @@ func (s *Server) newChatGPTSession(ctx context.Context, cred credential, fingerp
 	if cred.empty() {
 		return nil, fmt.Errorf("auth missing: need session_token or access_token")
 	}
-	fingerprint := randomPaymentBrowserFingerprint(s.cfg.BrowserLocale)
+	fingerprint := stablePaymentBrowserFingerprint(s.cfg.BrowserLocale, s.cfg.BrowserFingerprint, s.cfg.BrowserDeviceID)
 	if len(fingerprints) > 0 {
 		fingerprint = fingerprints[0].withFallback(s.cfg.BrowserLocale)
 	}
+	cookieParts := sessionCookieParts(cred.sessionToken)
+	deviceID := firstNonEmpty(cookiePartValue(cookieParts, "oai-did"), fingerprint.DeviceID)
+	fingerprint.DeviceID = deviceID
 	session, err := newHTTPSession(s.cfg.CheckoutProxyURL, fingerprint)
 	if err != nil {
 		return nil, err
 	}
-	deviceID := uuid.NewString()
 	setChatGPTBrowserHeaders(session, deviceID, fingerprint)
 	session.headers.Set("Content-Type", "application/json")
 	if cred.accessToken != "" {

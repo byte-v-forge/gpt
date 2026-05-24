@@ -22,6 +22,8 @@ type Config struct {
 	BrowserLocale        string
 	PINLocale            string
 	BrowserPlatform      string
+	BrowserFingerprint   string
+	BrowserDeviceID      string
 	MidtransClientID     string
 	Runtime              map[string]string
 	CheckoutPlan         map[string]string
@@ -37,6 +39,8 @@ func ConfigFromEnv() Config {
 		BrowserLocale:        firstNonEmpty(os.Getenv("GOPAY_BROWSER_LOCALE"), defaultBrowserLocale),
 		PINLocale:            firstNonEmpty(os.Getenv("GOPAY_PIN_LOCALE"), defaultPINLocale),
 		BrowserPlatform:      firstNonEmpty(os.Getenv("GOPAY_BROWSER_PLATFORM"), defaultBrowserPlatform),
+		BrowserFingerprint:   firstNonEmpty(os.Getenv("GOPAY_BROWSER_FINGERPRINT"), os.Getenv("GOPAY_PAYMENT_BROWSER_FINGERPRINT")),
+		BrowserDeviceID:      firstNonEmpty(os.Getenv("GOPAY_BROWSER_DEVICE_ID"), os.Getenv("GOPAY_PAYMENT_DEVICE_ID")),
 		MidtransClientID:     firstNonEmpty(os.Getenv("GOPAY_MIDTRANS_CLIENT_ID"), defaultMidtransClientID),
 		Runtime: map[string]string{
 			"version":                         firstNonEmpty(os.Getenv("GOPAY_STRIPE_RUNTIME_VERSION"), "fed52f3bc6"),

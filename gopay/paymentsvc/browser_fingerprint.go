@@ -42,12 +42,28 @@ var defaultPaymentBrowserFingerprints = []browserFingerprintCandidate{
 	{profileName: "chrome_131", major: "131", osToken: "Macintosh; Intel Mac OS X 13_6_7", platform: "macOS"},
 }
 
+func stablePaymentBrowserFingerprint(locale, selector, deviceID string) browserFingerprint {
+	candidates := paymentBrowserFingerprintCandidates()
+	if len(candidates) == 0 {
+		candidates = defaultPaymentBrowserFingerprints
+	}
+	candidate := selectPaymentBrowserFingerprintCandidate(candidates, selector)
+	if candidate.profileName == "" {
+		candidate = defaultPaymentBrowserFingerprints[0]
+	}
+	return buildPaymentBrowserFingerprint(candidate, locale, firstNonEmpty(deviceID, stablePaymentDeviceID(candidate)))
+}
+
 func randomPaymentBrowserFingerprint(locale string) browserFingerprint {
 	candidates := paymentBrowserFingerprintCandidates()
 	if len(candidates) == 0 {
 		candidates = defaultPaymentBrowserFingerprints
 	}
 	candidate := candidates[randomInt(len(candidates))]
+	return buildPaymentBrowserFingerprint(candidate, locale, uuid.NewString())
+}
+
+func buildPaymentBrowserFingerprint(candidate browserFingerprintCandidate, locale, deviceID string) browserFingerprint {
 	profile, ok := profiles.MappedTLSClients[candidate.profileName]
 	if !ok {
 		candidate = defaultPaymentBrowserFingerprints[0]
@@ -55,7 +71,7 @@ func randomPaymentBrowserFingerprint(locale string) browserFingerprint {
 	}
 	acceptLanguage, oaiLanguage := browserLanguages(locale)
 	return browserFingerprint{
-		DeviceID:       uuid.NewString(),
+		DeviceID:       strings.TrimSpace(deviceID),
 		TLSProfileName: candidate.profileName,
 		TLSProfile:     profile,
 		UserAgent:      fmt.Sprintf("Mozilla/5.0 (%s) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s.0.0.0 Safari/537.36", candidate.osToken, candidate.major),
@@ -64,6 +80,83 @@ func randomPaymentBrowserFingerprint(locale string) browserFingerprint {
 		AcceptLanguage: acceptLanguage,
 		OAILanguage:    oaiLanguage,
 	}
+}
+
+func selectPaymentBrowserFingerprintCandidate(candidates []browserFingerprintCandidate, selector string) browserFingerprintCandidate {
+	if len(candidates) == 0 {
+		return browserFingerprintCandidate{}
+	}
+	selector = normalizeFingerprintSelector(selector)
+	if selector == "" || selector == "stable" || selector == "default" {
+		return candidates[0]
+	}
+	for _, candidate := range candidates {
+		if paymentBrowserFingerprintCandidateMatches(candidate, selector) {
+			return candidate
+		}
+	}
+	if profileName := canonicalPaymentTLSProfile(selector); profileName != "" {
+		for _, candidate := range candidates {
+			if strings.EqualFold(candidate.profileName, profileName) {
+				return candidate
+			}
+		}
+	}
+	return candidates[0]
+}
+
+func paymentBrowserFingerprintCandidateMatches(candidate browserFingerprintCandidate, selector string) bool {
+	platform := normalizeFingerprintSelector(candidate.platform)
+	profile := normalizeFingerprintSelector(candidate.profileName)
+	major := normalizeFingerprintSelector(candidate.major)
+	osAlias := browserOSAlias(candidate)
+	for _, label := range []string{
+		profile,
+		platform,
+		osAlias,
+		major,
+		profile + "_" + platform,
+		profile + "_" + osAlias,
+		"chrome_" + major + "_" + platform,
+		"chrome_" + major + "_" + osAlias,
+	} {
+		if label != "" && selector == label {
+			return true
+		}
+	}
+	return false
+}
+
+func browserOSAlias(candidate browserFingerprintCandidate) string {
+	platform := strings.ToLower(candidate.platform)
+	token := strings.ToLower(candidate.osToken)
+	switch {
+	case strings.Contains(platform, "win") || strings.Contains(token, "windows"):
+		return "windows"
+	case strings.Contains(platform, "mac") || strings.Contains(token, "macintosh"):
+		return "mac"
+	default:
+		return normalizeFingerprintSelector(candidate.platform)
+	}
+}
+
+func normalizeFingerprintSelector(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return ""
+	}
+	replacer := strings.NewReplacer(" ", "_", "-", "_", ":", "_", "/", "_", ".", "_", "\"", "", "'", "")
+	value = replacer.Replace(value)
+	value = strings.Trim(value, "_")
+	for strings.Contains(value, "__") {
+		value = strings.ReplaceAll(value, "__", "_")
+	}
+	return value
+}
+
+func stablePaymentDeviceID(candidate browserFingerprintCandidate) string {
+	seed := fmt.Sprintf("byte-v-forge:gopay-payment:%s:%s:%s", candidate.profileName, candidate.major, browserOSAlias(candidate))
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
 }
 
 func browserLanguages(locale string) (string, string) {
@@ -153,7 +246,7 @@ func (fp browserFingerprint) withFallback(locale string) browserFingerprint {
 	if fp.UserAgent != "" && fp.TLSProfileName != "" {
 		return fp
 	}
-	return randomPaymentBrowserFingerprint(locale)
+	return stablePaymentBrowserFingerprint(locale, "", "")
 }
 
 func (fp browserFingerprint) applyBrowserHeaders(headers http.Header) {

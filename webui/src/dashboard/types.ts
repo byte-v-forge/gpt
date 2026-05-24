@@ -15,7 +15,7 @@ export type GoPayDashboardStateResponse = GoPayUserStatusResponse & {
 export type AccountMailboxContext = {
   account_email: string;
   primary_email: string;
-  provider: string | number;
+  provider: string;
   is_split: boolean;
   known: boolean;
 };

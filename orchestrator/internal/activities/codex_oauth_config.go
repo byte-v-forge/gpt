@@ -18,6 +18,7 @@ const (
 	defaultCodexOAuthPhoneMaxReuseCount      = 3
 	defaultCodexOAuthPhoneWaitSeconds        = 60
 	defaultCodexOAuthPhoneMinReuseRemaining  = 180
+	defaultCodexOAuthProtocolTLSProfile      = "chrome_146"
 )
 
 type CodexOAuthConfig struct {
@@ -26,6 +27,9 @@ type CodexOAuthConfig struct {
 	AuthURL                       string
 	TokenURL                      string
 	TokenProxyURL                 string
+	ProtocolProxyURL              string
+	ProtocolTLSProfile            string
+	ProtocolSessionDumpEnabled    bool
 	Scope                         string
 	PhoneLabel                    string
 	PhoneProfileKey               string
@@ -52,6 +56,14 @@ func (c CodexOAuthConfig) withDefaults() CodexOAuthConfig {
 		c.TokenURL = defaultCodexOAuthTokenURL
 	}
 	c.TokenProxyURL = strings.TrimSpace(c.TokenProxyURL)
+	c.ProtocolProxyURL = strings.TrimSpace(c.ProtocolProxyURL)
+	if c.ProtocolProxyURL == "" {
+		c.ProtocolProxyURL = c.TokenProxyURL
+	}
+	if strings.TrimSpace(c.ProtocolTLSProfile) == "" {
+		c.ProtocolTLSProfile = defaultCodexOAuthProtocolTLSProfile
+	}
+	c.ProtocolTLSProfile = strings.TrimSpace(c.ProtocolTLSProfile)
 	if strings.TrimSpace(c.Scope) == "" {
 		c.Scope = defaultCodexOAuthScope
 	}

@@ -8,19 +8,20 @@ import { canGoPayPayment, canLoginSession, canProbeAccount, canRefreshAccessToke
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
 
-export function AccountPrimaryActions({ account, busy, refreshingAccessToken, onProbeAccount, onLogin, onCodexOAuthAddPhone, onRefreshAccessToken }: {
+export function AccountPrimaryActions({ account, busy, refreshingAccessToken, onProbeAccount, onLogin, onCodexOAuthAddPhone, onCodexOAuthProtocol, onRefreshAccessToken }: {
   account: Account;
   busy: boolean;
   refreshingAccessToken: boolean;
   onProbeAccount: (account: Account) => void;
   onLogin: (account: Account) => void;
   onCodexOAuthAddPhone: (account: Account) => void;
+  onCodexOAuthProtocol: (account: Account) => void;
   onRefreshAccessToken: (account: Account) => Promise<void>;
 }) {
   return (
     <ActionButtonGroup
       className="sectionActions accountHeaderActions"
-      actions={accountActions(account, busy, refreshingAccessToken, onLogin, onRefreshAccessToken, onCodexOAuthAddPhone, onProbeAccount)}
+      actions={accountActions(account, busy, refreshingAccessToken, onLogin, onRefreshAccessToken, onCodexOAuthAddPhone, onCodexOAuthProtocol, onProbeAccount)}
     />
   );
 }
@@ -97,7 +98,7 @@ function hasVisibleAction(actions: ActionButtonDescriptor[]) {
   return actions.some((action) => action.visible !== false);
 }
 
-function accountActions(account: Account, busy: boolean, refreshing: boolean, onLogin: (account: Account) => void, onRefresh: (account: Account) => Promise<void>, onAuth: (account: Account) => void, onProbe: (account: Account) => void): ActionButtonDescriptor[] {
+function accountActions(account: Account, busy: boolean, refreshing: boolean, onLogin: (account: Account) => void, onRefresh: (account: Account) => Promise<void>, onAuth: (account: Account) => void, onProtocol: (account: Account) => void, onProbe: (account: Account) => void): ActionButtonDescriptor[] {
   return [{
     id: 'login-session',
     visible: canLoginSession(account),
@@ -122,6 +123,14 @@ function accountActions(account: Account, busy: boolean, refreshing: boolean, on
     icon: <CodexIcon size={14} />,
     disabled: busy,
     onClick: () => onAuth(account),
+  }, {
+    id: 'codex-oauth-protocol',
+    visible: canLoginSession(account),
+    label: '协议 auth.json',
+    hint: '不依赖浏览器，使用协议 OAuth 产出 auth.json',
+    icon: <CodexIcon size={14} />,
+    disabled: busy,
+    onClick: () => onProtocol(account),
   }, {
     id: 'probe-account',
     label: '探测账号',

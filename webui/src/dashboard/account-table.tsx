@@ -25,7 +25,7 @@ import { OpenAIIcon } from './brand-icons';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegister, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegister, onCodexOAuthAddPhone, onCodexOAuthProtocol, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
@@ -39,6 +39,7 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (a: Account) => void;
   onCodexOAuthAddPhone: (a: Account) => void;
+  onCodexOAuthProtocol: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onRefreshAccessToken: (a: Account) => Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
@@ -77,6 +78,7 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
               onCancelWorkflow={onCancelWorkflow}
               onRegister={onRegister}
               onCodexOAuthAddPhone={onCodexOAuthAddPhone}
+              onCodexOAuthProtocol={onCodexOAuthProtocol}
               onGoPayPayment={onGoPayPayment}
               onRefreshAccessToken={onRefreshAccessToken}
               onSubmitOTP={onSubmitOTP}
@@ -106,7 +108,7 @@ function AccountCardIdentity({ account, showSecrets }: {
   );
 }
 
-function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onCancelWorkflow, onRegister, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onCancelWorkflow, onRegister, onCodexOAuthAddPhone, onCodexOAuthProtocol, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   account: Account;
   accountBusy: boolean;
   currentWorkflow?: Job;
@@ -116,6 +118,7 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (a: Account) => void;
   onCodexOAuthAddPhone: (a: Account) => void;
+  onCodexOAuthProtocol: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onRefreshAccessToken: (a: Account) => Promise<void>;
   onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
@@ -135,7 +138,10 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
   const actions: RowActionDescriptor[] = [];
   if (canRegister(account)) actions.push({ label: '注册账号', icon: <Play size={14} />, onClick: () => onRegister(account), disabled: busy, kind: 'primary' });
   if (canRefreshAccessToken(account)) actions.push({ label: refreshingAccessToken ? '获取中' : '获取 Access', icon: <KeyRound size={14} />, onClick: () => void onRefreshAccessToken(account), disabled: busy || refreshingAccessToken, kind: actions.length ? 'secondary' : 'primary' });
-  if (canLoginSession(account)) actions.push({ label: '生成 auth.json', icon: <FileKey size={14} />, onClick: () => onCodexOAuthAddPhone(account), disabled: busy, kind: 'secondary' });
+  if (canLoginSession(account)) {
+    actions.push({ label: '生成 auth.json', icon: <FileKey size={14} />, onClick: () => onCodexOAuthAddPhone(account), disabled: busy, kind: 'secondary' });
+    actions.push({ label: '协议 auth.json', icon: <FileKey size={14} />, onClick: () => onCodexOAuthProtocol(account), disabled: busy, kind: 'secondary' });
+  }
 
   const paymentActions: RowActionDescriptor[] = canGoPayPayment(account) ? GO_PAY_PAYMENT_CHANNELS.filter((channel) => channel !== 'wa').map((channel) => ({
     label: goPayPaymentActionLabel(channel),

@@ -40,6 +40,8 @@ export function accountCodexPhoneState(account: Account, jobs: Job[]): AccountCo
   const accountState = account as Account & { codex_phone_confirmed?: boolean; codex_phone_label?: string };
   if (accountState.codex_phone_confirmed === true) return codexPhoneState(true, stringValue(accountState.codex_phone_label));
   if (accountState.codex_phone_confirmed === false) return codexPhoneState(false, stringValue(accountState.codex_phone_label));
+  const protocol = latestProtocolPhoneState(account, jobs);
+  if (protocol) return protocol;
   const latest = jobs
     .filter((job) => job.account_id === account.account_id && job.action === 'CODEX_OAUTH_ADD_PHONE')
     .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
@@ -54,6 +56,18 @@ export function accountCodexPhoneState(account: Account, jobs: Job[]): AccountCo
     }
   }
   return { confirmed: false, label: '未加手机', title: '未确认 add phone' };
+}
+
+
+function latestProtocolPhoneState(account: Account, jobs: Job[]): AccountCodexPhoneState | null {
+  const latest = jobs
+    .filter((job) => job.account_id === account.account_id && ['CODEX_OAUTH_PROTOCOL', 'CODEX_OAUTH'].includes(job.action))
+    .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))[0];
+  const result = objectValue(latest?.result);
+  if (boolResult(result.client_auth_phone_present) === true) {
+    return codexPhoneState(true, stringValue(result.client_auth_phone_verification_channel) || 'dump');
+  }
+  return null;
 }
 
 function codexPhoneState(confirmed: boolean, label = '', reuseCount = 0, reuseLimit = 0): AccountCodexPhoneState {

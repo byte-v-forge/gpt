@@ -12,7 +12,7 @@ import { canFetchAccountInbox } from './account-mail-utils';
 import type { AccountCodexPhoneState } from './account-utils';
 import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
 
-export function AccountDetails({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, activationChannel, codexPhoneState, onCopy, onFetchInbox, onSessionSave, onAccessSave, onProbeAccount, onLogin, onCodexOAuthAddPhone, onGoPayPayment, onRefreshAccessToken, onDelete }: {
+export function AccountDetails({ account, showSecrets, busy, inboxLoading, refreshingAccessToken, mailboxContext, latestOtp, activationChannel, codexPhoneState, onCopy, onFetchInbox, onSessionSave, onAccessSave, onProbeAccount, onLogin, onCodexOAuthAddPhone, onCodexOAuthProtocol, onGoPayPayment, onRefreshAccessToken, onDelete }: {
   account: Account;
   showSecrets: boolean;
   busy: boolean;
@@ -29,6 +29,7 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
   onProbeAccount: (account: Account) => void;
   onLogin: (account: Account) => void;
   onCodexOAuthAddPhone: (account: Account) => void;
+  onCodexOAuthProtocol: (account: Account) => void;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onRefreshAccessToken: (account: Account) => Promise<void>;
   onDelete: (account: Account) => Promise<void>;
@@ -80,7 +81,7 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
       <section>
         <div className="sectionTitle accountSectionTitle">
           <h3>账号 <AccountSignalBadge account={account} compact /><AccountCodexPhoneTag state={codexPhoneState} /><AccountChannelTag channel={activationChannel} /></h3>
-          <AccountPrimaryActions account={account} busy={busy} refreshingAccessToken={refreshingAccessToken} onProbeAccount={onProbeAccount} onLogin={onLogin} onCodexOAuthAddPhone={onCodexOAuthAddPhone} onRefreshAccessToken={onRefreshAccessToken} />
+          <AccountPrimaryActions account={account} busy={busy} refreshingAccessToken={refreshingAccessToken} onProbeAccount={onProbeAccount} onLogin={onLogin} onCodexOAuthAddPhone={onCodexOAuthAddPhone} onCodexOAuthProtocol={onCodexOAuthProtocol} onRefreshAccessToken={onRefreshAccessToken} />
         </div>
         <AccountDetailActions account={account} showSecrets={showSecrets} busy={busy} inboxLoading={inboxLoading} mailboxContext={mailboxContext} latestOtp={latestOtp} canFetchOTP={canFetchOTP} onCopy={onCopy} onFetchInbox={onFetchInbox} onGoPayPayment={onGoPayPayment} />
         <KVList items={credentialFields} onCopy={onCopy} />

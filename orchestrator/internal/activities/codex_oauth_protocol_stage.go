@@ -1,0 +1,212 @@
+package activities
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"regexp"
+	"strings"
+)
+
+var codexOAuthProtocolDeviceIDRE = regexp.MustCompile(`"deviceId"\s*:\s*"([^"]+)"`)
+
+func runCodexOAuthProtocolURL(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, startURL, referer string, data map[string]any) (string, error) {
+	currentURL := codexOAuthProtocolAbsoluteURL(startURL)
+	if currentURL == "" {
+		return state.Stage, nil
+	}
+	lastReferer := referer
+	for hop := 0; hop < 16; hop++ {
+		if codexOAuthProtocolIsCallbackURL(currentURL, state.RedirectURI) {
+			state.LastURL = currentURL
+			state.Stage = "callback"
+			data["login_stage"] = state.Stage
+			return state.Stage, nil
+		}
+		resp, err := client.get(ctx, currentURL, lastReferer, true)
+		if err != nil {
+			return "", err
+		}
+		state.LastURL = currentURL
+		if location := codexOAuthProtocolRedirectLocation(resp, currentURL); location != "" {
+			lastReferer = currentURL
+			currentURL = location
+			continue
+		}
+		if resp.StatusCode < 200 || resp.StatusCode > 299 {
+			return "", fmt.Errorf("codex oauth protocol navigation failed: status %d %s", resp.StatusCode, codexOAuthProtocolSafeText(string(resp.Body), 360))
+		}
+		body := string(resp.Body)
+		if deviceID := codexOAuthProtocolDeviceID(body); deviceID != "" && strings.TrimSpace(state.DeviceID) == "" {
+			state.DeviceID = deviceID
+		}
+		stage := codexOAuthProtocolStageFromURL(currentURL, body)
+		if stage != "" {
+			state.Stage = stage
+			data["login_stage"] = stage
+		}
+		return state.Stage, nil
+	}
+	return "", fmt.Errorf("codex oauth protocol redirect limit exceeded")
+}
+
+func advanceCodexOAuthProtocolJSON(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, resp *codexOAuthProtocolHTTPResponse, sourceStage string, data map[string]any) (string, error) {
+	if err := codexOAuthProtocolRequireOK(resp, sourceStage); err != nil {
+		return "", err
+	}
+	payload := codexOAuthProtocolResponseJSON(resp)
+	stage, continueURL := codexOAuthProtocolStageFromJSON(payload)
+	if stage != "" {
+		state.Stage = stage
+		state.LastPageType = codexOAuthProtocolPageType(payload)
+		data["login_stage"] = stage
+	}
+	if continueURL != "" {
+		state.LastContinueURL = continueURL
+		stage, err := runCodexOAuthProtocolURL(ctx, client, state, continueURL, codexOAuthProtocolRefererForStage(sourceStage), data)
+		if err != nil {
+			return stage, err
+		}
+		return stage, nil
+	}
+	return state.Stage, nil
+}
+
+func codexOAuthProtocolRedirectLocation(resp *codexOAuthProtocolHTTPResponse, currentURL string) string {
+	if resp == nil || resp.StatusCode < 300 || resp.StatusCode > 399 {
+		return ""
+	}
+	location := strings.TrimSpace(resp.Header.Get("Location"))
+	if location == "" {
+		return ""
+	}
+	parsed, err := url.Parse(location)
+	if err == nil && parsed.IsAbs() {
+		return location
+	}
+	base, err := url.Parse(currentURL)
+	if err != nil {
+		return codexOAuthProtocolAbsoluteURL(location)
+	}
+	return base.ResolveReference(parsed).String()
+}
+
+func codexOAuthProtocolStageFromJSON(payload map[string]any) (string, string) {
+	continueURL := codexOAuthProtocolAbsoluteURL(codexOAuthProtocolContinueURL(payload))
+	if stage := codexOAuthProtocolStageFromURL(continueURL, ""); stage != "" {
+		return stage, continueURL
+	}
+	pageType := strings.ToLower(codexOAuthProtocolPageType(payload))
+	switch pageType {
+	case "login_password":
+		return "password", continueURL
+	case "email_otp_verification":
+		return "email_otp", continueURL
+	case "add_phone":
+		return "add_phone", continueURL
+	case "phone_otp_verification":
+		return "phone_otp", continueURL
+	case "consent", "oauth_consent":
+		return "consent", continueURL
+	case "external_url":
+		return codexOAuthProtocolStageFromURL(continueURL, ""), continueURL
+	default:
+		return "", continueURL
+	}
+}
+
+func codexOAuthProtocolPageType(payload map[string]any) string {
+	if payload == nil {
+		return ""
+	}
+	page, _ := payload["page"].(map[string]any)
+	return strings.TrimSpace(stringAny(page["type"]))
+}
+
+func codexOAuthProtocolContinueURL(payload map[string]any) string {
+	if payload == nil {
+		return ""
+	}
+	if value := strings.TrimSpace(stringAny(payload["continue_url"])); value != "" {
+		return value
+	}
+	page, _ := payload["page"].(map[string]any)
+	pagePayload, _ := page["payload"].(map[string]any)
+	return strings.TrimSpace(firstNonEmptyAny(pagePayload["url"], pagePayload["continue_url"]))
+}
+
+func codexOAuthProtocolStageFromURL(rawURL, body string) string {
+	lowerURL := strings.ToLower(rawURL)
+	lowerBody := strings.ToLower(body)
+	switch {
+	case strings.Contains(lowerURL, "/auth/callback"):
+		return "callback"
+	case strings.Contains(lowerURL, "/phone-verification") || strings.Contains(lowerURL, "/api/accounts/phone-otp/send"):
+		return "phone_otp"
+	case strings.Contains(lowerURL, "/add-phone"):
+		return "add_phone"
+	case strings.Contains(lowerURL, "/email-verification"):
+		return "email_otp"
+	case strings.Contains(lowerURL, "/log-in/password"):
+		return "password"
+	case strings.Contains(lowerURL, "/log-in"):
+		return "email"
+	case strings.Contains(lowerURL, "/choose-an-account"):
+		return "choose_account"
+	case strings.Contains(lowerURL, "/sign-in-with-chatgpt/") || strings.Contains(lowerURL, "/consent"):
+		return "consent"
+	case strings.Contains(lowerBody, "add your phone") || strings.Contains(lowerBody, "phone number"):
+		return "add_phone"
+	case strings.Contains(lowerBody, "enter code") && strings.Contains(lowerBody, "phone"):
+		return "phone_otp"
+	case strings.Contains(lowerBody, "enter your password"):
+		return "password"
+	case strings.Contains(lowerBody, "email verification") || strings.Contains(lowerBody, "verification code"):
+		return "email_otp"
+	case strings.Contains(lowerBody, "codex cli") || strings.Contains(lowerBody, "sign in with chatgpt"):
+		return "consent"
+	default:
+		return ""
+	}
+}
+
+func codexOAuthProtocolDeviceID(body string) string {
+	match := codexOAuthProtocolDeviceIDRE.FindStringSubmatch(body)
+	if len(match) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(match[1])
+}
+
+func codexOAuthProtocolIsCallbackURL(rawURL, redirectURI string) bool {
+	if !strings.Contains(rawURL, "/auth/callback") {
+		return false
+	}
+	if strings.TrimSpace(redirectURI) == "" {
+		return true
+	}
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	redirect, err := url.Parse(redirectURI)
+	if err != nil {
+		return true
+	}
+	return parsed.Host == redirect.Host && parsed.Path == redirect.Path
+}
+
+func codexOAuthProtocolJSONSnippet(resp *codexOAuthProtocolHTTPResponse) string {
+	if resp == nil || len(resp.Body) == 0 {
+		return ""
+	}
+	var out map[string]any
+	if err := json.Unmarshal(resp.Body, &out); err != nil {
+		return codexOAuthProtocolSafeText(string(resp.Body), 220)
+	}
+	delete(out, "phone_number")
+	delete(out, "email")
+	payload, _ := json.Marshal(out)
+	return codexOAuthProtocolSafeText(string(payload), 220)
+}

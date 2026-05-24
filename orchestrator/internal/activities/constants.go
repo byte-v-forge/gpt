@@ -17,6 +17,7 @@ const (
 	actionProbeAccount             = contracts.ActionProbeAccount
 	actionLoginSession             = contracts.ActionLoginSession
 	actionCodexOAuth               = contracts.ActionCodexOAuth
+	actionCodexOAuthProtocol       = contracts.ActionCodexOAuthProtocol
 	actionCodexOAuthAddPhone       = contracts.ActionCodexOAuthAddPhone
 	actionCodexOAuthBatchAddPhone  = contracts.ActionCodexOAuthBatchAddPhone
 	actionRegisterAndActivate      = contracts.ActionRegisterAndActivate
@@ -93,6 +94,13 @@ const (
 	stepLoginSessionOTPWait          = "login_session_otp_wait"
 	stepLoginSessionComplete         = "login_session_complete"
 	stepCodexOAuthAcquirePhone       = "codex_oauth_acquire_phone"
+	stepCodexOAuthProtocolStart      = "codex_oauth_protocol_start"
+	stepCodexOAuthProtocolDetect     = "codex_oauth_protocol_detect"
+	stepCodexOAuthProtocolEmail      = "codex_oauth_protocol_email"
+	stepCodexOAuthProtocolPassword   = "codex_oauth_protocol_password"
+	stepCodexOAuthProtocolEmailOTP   = "codex_oauth_protocol_email_otp"
+	stepCodexOAuthProtocolAddPhone   = "codex_oauth_protocol_add_phone"
+	stepCodexOAuthProtocolComplete   = "codex_oauth_protocol_complete"
 	stepCodexOAuthBrowserStart       = "codex_oauth_browser_start"
 	stepCodexOAuthBrowserDetect      = "codex_oauth_browser_detect"
 	stepCodexOAuthBrowserEmail       = "codex_oauth_browser_email"

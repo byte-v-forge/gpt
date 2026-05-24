@@ -150,6 +150,23 @@ func (s *Server) CodexOAuth(ctx context.Context, req *pb.CodexOAuthRequest) (*pb
 	return &pb.CodexOAuthResponse{JobId: jobID, Started: true}, nil
 }
 
+func (s *Server) CodexOAuthProtocol(ctx context.Context, req *pb.CodexOAuthRequest) (*pb.CodexOAuthResponse, error) {
+	accountID := strings.TrimSpace(req.GetAccountId())
+	if accountID == "" {
+		return &pb.CodexOAuthResponse{ErrorMessage: "account_id is required"}, nil
+	}
+	jobID := uuid.NewString()
+	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionCodexOAuthProtocol, jobID)), workflows.CodexOAuthProtocolWorkflow, workflows.CodexOAuthWorkflowInput{
+		JobId:     jobID,
+		AccountId: accountID,
+		Label:     strings.TrimSpace(req.GetLabel()),
+	})
+	if err != nil {
+		return &pb.CodexOAuthResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	return &pb.CodexOAuthResponse{JobId: jobID, Started: true}, nil
+}
+
 func (s *Server) CodexOAuthAddPhone(ctx context.Context, req *pb.CodexOAuthAddPhoneRequest) (*pb.CodexOAuthAddPhoneResponse, error) {
 	accountID := strings.TrimSpace(req.GetAccountId())
 	if accountID == "" {

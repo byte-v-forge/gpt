@@ -14,6 +14,7 @@ const (
 	ActionProbeAccount             = "PROBE_ACCOUNT"
 	ActionLoginSession             = "LOGIN_SESSION"
 	ActionCodexOAuth               = "CODEX_OAUTH"
+	ActionCodexOAuthProtocol       = "CODEX_OAUTH_PROTOCOL"
 	ActionCodexOAuthAddPhone       = "CODEX_OAUTH_ADD_PHONE"
 	ActionCodexOAuthBatchAddPhone  = "CODEX_OAUTH_BATCH_ADD_PHONE"
 	ActionRegisterAndActivate      = "REGISTER_AND_ACTIVATE"
@@ -33,6 +34,14 @@ const (
 	BrowserAuthCompleteActivityName              = "BrowserAuthCompleteActivity"
 	BrowserAuthCancelActivityName                = "BrowserAuthCancelActivity"
 	CodexOAuthAcquirePhoneActivityName           = "CodexOAuthAcquirePhoneActivity"
+	CodexOAuthStartProtocolActivityName          = "CodexOAuthStartProtocolActivity"
+	CodexOAuthDetectProtocolStageActivityName    = "CodexOAuthDetectProtocolStageActivity"
+	CodexOAuthSubmitProtocolEmailActivityName    = "CodexOAuthSubmitProtocolEmailActivity"
+	CodexOAuthSubmitProtocolPasswordActivityName = "CodexOAuthSubmitProtocolPasswordActivity"
+	CodexOAuthSubmitProtocolEmailOTPActivityName = "CodexOAuthSubmitProtocolEmailOTPActivity"
+	CodexOAuthAddPhoneProtocolActivityName       = "CodexOAuthAddPhoneProtocolActivity"
+	CodexOAuthCompleteProtocolActivityName       = "CodexOAuthCompleteProtocolActivity"
+	CodexOAuthStopProtocolActivityName           = "CodexOAuthStopProtocolActivity"
 	CodexOAuthStartBrowserActivityName           = "CodexOAuthStartBrowserActivity"
 	CodexOAuthDetectBrowserStageActivityName     = "CodexOAuthDetectBrowserStageActivity"
 	CodexOAuthSubmitEmailActivityName            = "CodexOAuthSubmitEmailActivity"
@@ -124,6 +133,8 @@ func WorkflowID(action string, jobID string) (string, bool) {
 		return "login-session-" + jobID, true
 	case ActionCodexOAuth:
 		return "codex-oauth-" + jobID, true
+	case ActionCodexOAuthProtocol:
+		return "codex-oauth-protocol-" + jobID, true
 	case ActionCodexOAuthAddPhone:
 		return "codex-oauth-add-phone-" + jobID, true
 	case ActionCodexOAuthBatchAddPhone:

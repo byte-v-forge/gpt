@@ -13,6 +13,7 @@ service AccountWorkflowService {
   rpc RegisterAccount(RegisterAccountRequest) returns (RegisterAccountResponse);
   rpc LoginAccount(LoginAccountRequest) returns (LoginAccountResponse);
   rpc CodexOAuth(CodexOAuthRequest) returns (CodexOAuthResponse);
+  rpc CodexOAuthProtocol(CodexOAuthRequest) returns (CodexOAuthResponse);
   rpc CodexOAuthAddPhone(CodexOAuthAddPhoneRequest) returns (CodexOAuthAddPhoneResponse);
   rpc CodexOAuthBatchAddPhone(CodexOAuthBatchAddPhoneRequest) returns (CodexOAuthBatchAddPhoneResponse);
   rpc RegisterAndActivateAccount(RegisterAndActivateAccountRequest) returns (RegisterAndActivateAccountResponse);

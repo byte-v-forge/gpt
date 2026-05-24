@@ -66,6 +66,7 @@ const (
 	actionProbeAccount             = contracts.ActionProbeAccount
 	actionLoginSession             = contracts.ActionLoginSession
 	actionCodexOAuth               = contracts.ActionCodexOAuth
+	actionCodexOAuthProtocol       = contracts.ActionCodexOAuthProtocol
 	actionCodexOAuthAddPhone       = contracts.ActionCodexOAuthAddPhone
 	actionCodexOAuthBatchAddPhone  = contracts.ActionCodexOAuthBatchAddPhone
 	actionRegisterAndActivate      = contracts.ActionRegisterAndActivate

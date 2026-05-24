@@ -45,6 +45,7 @@ export type GptAccountsViewProps = {
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (account: Account) => void | Promise<void>;
   onCodexOAuthAddPhone: (account: Account) => void | Promise<void>;
+  onCodexOAuthProtocol: (account: Account) => void | Promise<void>;
   onCodexOAuthBatchAddPhone: (accounts: Account[]) => void | Promise<void>;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onRefreshAccessToken: (account: Account) => Promise<void>;
@@ -85,6 +86,7 @@ export function GptAccountsView(props: GptAccountsViewProps) {
           onCancelWorkflow={props.onCancelWorkflow}
           onRegister={props.onRegister}
           onCodexOAuthAddPhone={props.onCodexOAuthAddPhone}
+          onCodexOAuthProtocol={props.onCodexOAuthProtocol}
           onGoPayPayment={props.onGoPayPayment}
           onRefreshAccessToken={props.onRefreshAccessToken}
           onSubmitOTP={props.onSubmitOTP}

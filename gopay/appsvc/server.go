@@ -117,7 +117,7 @@ func (s *Server) newClient(ctx context.Context, token string, proxyURL string, d
 func (s *Server) clientForState(ctx context.Context, state stateMap) (*gopayapp.Client, error) {
 	refresh := s.ensureAccessToken(ctx, state, s.cfg.TokenRefreshMinTTL, false)
 	if !anyBool(refresh["success"]) && !tokenUsable(state, "token", 0) {
-		return nil, fmt.Errorf(firstNonEmpty(anyString(refresh["error"]), "token refresh failed"))
+		return nil, fmt.Errorf("%s", firstNonEmpty(anyString(refresh["error"]), "token refresh failed"))
 	}
 	device, err := s.ensureDevice(state)
 	if err != nil {

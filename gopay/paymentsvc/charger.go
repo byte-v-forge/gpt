@@ -305,11 +305,6 @@ func (c *charger) stripeConfirm(ctx context.Context, csID, pmID string) (map[str
 
 func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
 	_, _ = c.cs.request(ctx, http.MethodPost, "https://chatgpt.com/backend-api/sentinel/ping", requestOptions{jsonBody: map[string]any{}})
-	approveSession, err := newHTTPSession(c.cs.proxyURL, c.cs.fingerprint)
-	if err != nil {
-		return err
-	}
-	defer approveSession.close()
 
 	headers := http.Header{
 		"Accept":                []string{"*/*"},
@@ -319,9 +314,9 @@ func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
 		"x-openai-target-path":  []string{"/backend-api/payments/checkout/approve"},
 		"x-openai-target-route": []string{"/backend-api/payments/checkout/approve"},
 	}
-	// curl_cffi in DanOps provides Chrome UA/TLS defaults even when approve_headers are
-	// minimal. tls-client does not synthesize those headers for us, so keep the
-	// approve session clean but still browser-shaped enough to avoid HTML 403.
+	// Keep approve on the same ChatGPT HTTP/TLS session used to create checkout.
+	// A fresh tls-client would keep the same profile but may randomize the low-level
+	// TLS extension order again, which makes checkout -> approve look inconsistent.
 	c.cs.fingerprint.applyBrowserHeaders(headers)
 	for _, key := range []string{"Authorization", "oai-device-id"} {
 		if value := c.cs.headers.Get(key); value != "" {
@@ -335,7 +330,7 @@ func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
 	var lastStatus int
 	var lastBody string
 	for attempt := 1; attempt <= 3; attempt++ {
-		resp, err := approveSession.request(ctx, http.MethodPost, "https://chatgpt.com/backend-api/payments/checkout/approve", requestOptions{
+		resp, err := c.cs.request(ctx, http.MethodPost, "https://chatgpt.com/backend-api/payments/checkout/approve", requestOptions{
 			jsonBody: map[string]any{"checkout_session_id": csID, "processor_entity": c.processorEntityOrDefault()},
 			headers:  headers,
 		})

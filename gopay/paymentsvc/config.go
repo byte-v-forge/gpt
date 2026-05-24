@@ -1,6 +1,8 @@
 package paymentsvc
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"strings"
 )
@@ -11,36 +13,42 @@ const (
 	defaultTokenization         = "true"
 	defaultBrowserLocale        = "zh-CN"
 	defaultPINLocale            = "id"
-	defaultBrowserPlatform      = "Mac OS 10.15.7"
+	defaultBrowserPlatform      = "Windows"
+	defaultTLSProfile           = "chrome_146"
 )
 
 type Config struct {
 	ListenAddr           string
-	CheckoutProxyURL     string
-	PaymentProxyURL      string
+	CheckoutProfile      requestProfile
+	PaymentProfile       requestProfile
 	StripePublishableKey string
-	BrowserLocale        string
-	PINLocale            string
-	BrowserPlatform      string
-	BrowserFingerprint   string
-	BrowserDeviceID      string
 	MidtransClientID     string
 	Runtime              map[string]string
 	CheckoutPlan         map[string]string
 	Billing              map[string]string
 }
 
+type requestProfile struct {
+	Name           string `json:"name"`
+	ProxyURL       string `json:"proxy_url"`
+	TLSProfile     string `json:"tls_profile"`
+	UserAgent      string `json:"user_agent"`
+	SecCHUA        string `json:"sec_ch_ua"`
+	SecCHPlatform  string `json:"sec_ch_ua_platform"`
+	AcceptLanguage string `json:"accept_language"`
+	OAILanguage    string `json:"oai_language"`
+	Locale         string `json:"locale"`
+	DeviceID       string `json:"device_id"`
+	Platform       string `json:"platform"`
+	PINLocale      string `json:"pin_locale"`
+}
+
 func ConfigFromEnv() Config {
 	return Config{
 		ListenAddr:           firstNonEmpty(os.Getenv("GOPAY_PAYMENT_LISTEN_ADDR"), os.Getenv("GPT_GOPAY_PAYMENT_LISTEN_ADDR"), ":50054"),
-		CheckoutProxyURL:     strings.TrimSpace(os.Getenv("GOPAY_CHECKOUT_PROXY_URL")),
-		PaymentProxyURL:      strings.TrimSpace(os.Getenv("GOPAY_PAYMENT_PROXY_URL")),
+		CheckoutProfile:      requestProfileFromEnv("GOPAY_CHECKOUT_PROFILE_JSON", defaultRequestProfile("checkout")),
+		PaymentProfile:       requestProfileFromEnv("GOPAY_PAYMENT_PROFILE_JSON", defaultRequestProfile("payment")),
 		StripePublishableKey: firstNonEmpty(os.Getenv("GOPAY_STRIPE_PUBLISHABLE_KEY"), defaultStripePublishableKey),
-		BrowserLocale:        firstNonEmpty(os.Getenv("GOPAY_BROWSER_LOCALE"), defaultBrowserLocale),
-		PINLocale:            firstNonEmpty(os.Getenv("GOPAY_PIN_LOCALE"), defaultPINLocale),
-		BrowserPlatform:      firstNonEmpty(os.Getenv("GOPAY_BROWSER_PLATFORM"), defaultBrowserPlatform),
-		BrowserFingerprint:   firstNonEmpty(os.Getenv("GOPAY_BROWSER_FINGERPRINT"), os.Getenv("GOPAY_PAYMENT_BROWSER_FINGERPRINT")),
-		BrowserDeviceID:      firstNonEmpty(os.Getenv("GOPAY_BROWSER_DEVICE_ID"), os.Getenv("GOPAY_PAYMENT_DEVICE_ID")),
 		MidtransClientID:     firstNonEmpty(os.Getenv("GOPAY_MIDTRANS_CLIENT_ID"), defaultMidtransClientID),
 		Runtime: map[string]string{
 			"version":                         firstNonEmpty(os.Getenv("GOPAY_STRIPE_RUNTIME_VERSION"), "fed52f3bc6"),
@@ -69,6 +77,46 @@ func ConfigFromEnv() Config {
 			"state":       os.Getenv("GOPAY_BILLING_STATE"),
 		},
 	}
+}
+
+func defaultRequestProfile(name string) requestProfile {
+	return requestProfile{
+		Name:       name,
+		TLSProfile: defaultTLSProfile,
+		Locale:     defaultBrowserLocale,
+		Platform:   defaultBrowserPlatform,
+		PINLocale:  defaultPINLocale,
+	}
+}
+
+func requestProfileFromEnv(envName string, fallback requestProfile) requestProfile {
+	profile := fallback
+	if raw := strings.TrimSpace(os.Getenv(envName)); raw != "" {
+		if err := json.Unmarshal([]byte(raw), &profile); err != nil {
+			panic(fmt.Sprintf("invalid %s: %v", envName, err))
+		}
+	}
+	return profile.withDefaults(fallback)
+}
+
+func (p requestProfile) withDefaults(fallback requestProfile) requestProfile {
+	p.Name = firstNonEmpty(p.Name, fallback.Name)
+	p.ProxyURL = strings.TrimSpace(p.ProxyURL)
+	p.TLSProfile = firstNonEmpty(p.TLSProfile, fallback.TLSProfile, defaultTLSProfile)
+	p.Locale = firstNonEmpty(p.Locale, fallback.Locale, defaultBrowserLocale)
+	p.Platform = firstNonEmpty(p.Platform, fallback.Platform, defaultBrowserPlatform)
+	p.PINLocale = firstNonEmpty(p.PINLocale, fallback.PINLocale, defaultPINLocale)
+	p.UserAgent = strings.TrimSpace(p.UserAgent)
+	p.SecCHUA = strings.TrimSpace(p.SecCHUA)
+	p.SecCHPlatform = strings.TrimSpace(p.SecCHPlatform)
+	p.AcceptLanguage = strings.TrimSpace(p.AcceptLanguage)
+	p.OAILanguage = strings.TrimSpace(p.OAILanguage)
+	p.DeviceID = strings.TrimSpace(p.DeviceID)
+	return p
+}
+
+func (p requestProfile) fingerprint() browserFingerprint {
+	return browserFingerprintFromProfile(p)
 }
 
 func firstNonEmpty(values ...string) string {

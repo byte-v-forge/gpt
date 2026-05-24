@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -43,11 +42,7 @@ var defaultPaymentBrowserFingerprints = []browserFingerprintCandidate{
 }
 
 func stablePaymentBrowserFingerprint(locale, selector, deviceID string) browserFingerprint {
-	candidates := paymentBrowserFingerprintCandidates()
-	if len(candidates) == 0 {
-		candidates = defaultPaymentBrowserFingerprints
-	}
-	candidate := selectPaymentBrowserFingerprintCandidate(candidates, selector)
+	candidate := selectPaymentBrowserFingerprintCandidate(defaultPaymentBrowserFingerprints, selector)
 	if candidate.profileName == "" {
 		candidate = defaultPaymentBrowserFingerprints[0]
 	}
@@ -55,12 +50,33 @@ func stablePaymentBrowserFingerprint(locale, selector, deviceID string) browserF
 }
 
 func randomPaymentBrowserFingerprint(locale string) browserFingerprint {
-	candidates := paymentBrowserFingerprintCandidates()
-	if len(candidates) == 0 {
-		candidates = defaultPaymentBrowserFingerprints
-	}
-	candidate := candidates[randomInt(len(candidates))]
+	candidate := defaultPaymentBrowserFingerprints[randomInt(len(defaultPaymentBrowserFingerprints))]
 	return buildPaymentBrowserFingerprint(candidate, locale, uuid.NewString())
+}
+
+func browserFingerprintFromProfile(profile requestProfile) browserFingerprint {
+	profile = profile.withDefaults(defaultRequestProfile(profile.Name))
+	candidate := selectPaymentBrowserFingerprintCandidate(defaultPaymentBrowserFingerprints, profile.TLSProfile)
+	if candidate.profileName == "" {
+		candidate = defaultPaymentBrowserFingerprints[0]
+	}
+	fp := buildPaymentBrowserFingerprint(candidate, profile.Locale, firstNonEmpty(profile.DeviceID, stableRequestProfileDeviceID(profile, candidate)))
+	if profile.UserAgent != "" {
+		fp.UserAgent = profile.UserAgent
+	}
+	if profile.SecCHUA != "" {
+		fp.SecCHUA = profile.SecCHUA
+	}
+	if profile.SecCHPlatform != "" {
+		fp.SecCHPlatform = profile.SecCHPlatform
+	}
+	if profile.AcceptLanguage != "" {
+		fp.AcceptLanguage = profile.AcceptLanguage
+	}
+	if profile.OAILanguage != "" {
+		fp.OAILanguage = profile.OAILanguage
+	}
+	return fp
 }
 
 func buildPaymentBrowserFingerprint(candidate browserFingerprintCandidate, locale, deviceID string) browserFingerprint {
@@ -159,6 +175,19 @@ func stablePaymentDeviceID(candidate browserFingerprintCandidate) string {
 	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
 }
 
+func stableRequestProfileDeviceID(profile requestProfile, candidate browserFingerprintCandidate) string {
+	seed := fmt.Sprintf(
+		"byte-v-forge:gopay:%s:%s:%s:%s:%s:%s",
+		profile.Name,
+		profile.ProxyURL,
+		candidate.profileName,
+		candidate.major,
+		browserOSAlias(candidate),
+		profile.UserAgent,
+	)
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
+}
+
 func browserLanguages(locale string) (string, string) {
 	switch strings.ToLower(strings.TrimSpace(locale)) {
 	case "zh", "zh-cn", "zh_cn":
@@ -175,50 +204,6 @@ func browserLanguages(locale string) (string, string) {
 	}
 }
 
-func paymentBrowserFingerprintCandidates() []browserFingerprintCandidate {
-	profileNames := configuredPaymentTLSProfiles()
-	if len(profileNames) == 0 {
-		return append([]browserFingerprintCandidate(nil), defaultPaymentBrowserFingerprints...)
-	}
-	var out []browserFingerprintCandidate
-	for _, profileName := range profileNames {
-		profileName = canonicalPaymentTLSProfile(profileName)
-		if profileName == "" {
-			continue
-		}
-		matched := false
-		for _, candidate := range defaultPaymentBrowserFingerprints {
-			if strings.EqualFold(candidate.profileName, profileName) {
-				out = append(out, candidate)
-				matched = true
-			}
-		}
-		if !matched {
-			major := chromeMajorFromProfile(profileName)
-			out = append(out, browserFingerprintCandidate{profileName: profileName, major: major, osToken: "Windows NT 10.0; Win64; x64", platform: "Windows"})
-		}
-	}
-	return out
-}
-
-func configuredPaymentTLSProfiles() []string {
-	if pinned := strings.TrimSpace(os.Getenv("GOPAY_PAYMENT_TLS_PROFILE")); pinned != "" && !strings.EqualFold(pinned, "random") {
-		return []string{pinned}
-	}
-	raw := strings.TrimSpace(os.Getenv("GOPAY_PAYMENT_TLS_PROFILES"))
-	if raw == "" {
-		return nil
-	}
-	parts := strings.Split(raw, ",")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part = strings.TrimSpace(part); part != "" {
-			out = append(out, part)
-		}
-	}
-	return out
-}
-
 func canonicalPaymentTLSProfile(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -230,16 +215,6 @@ func canonicalPaymentTLSProfile(name string) string {
 		}
 	}
 	return ""
-}
-
-func chromeMajorFromProfile(profileName string) string {
-	parts := strings.Split(profileName, "_")
-	for _, part := range parts {
-		if len(part) == 3 && strings.Trim(part, "0123456789") == "" {
-			return part
-		}
-	}
-	return "146"
 }
 
 func (fp browserFingerprint) withFallback(locale string) browserFingerprint {

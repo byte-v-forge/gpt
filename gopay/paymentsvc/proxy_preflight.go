@@ -53,8 +53,8 @@ func paymentProxyLabels(cfg Config) map[string][]string {
 		}
 		out[proxyURL] = append(out[proxyURL], label)
 	}
-	add("checkout", cfg.CheckoutProxyURL)
-	add("payment", cfg.PaymentProxyURL)
+	add("checkout", cfg.CheckoutProfile.ProxyURL)
+	add("payment", cfg.PaymentProfile.ProxyURL)
 	return out
 }
 

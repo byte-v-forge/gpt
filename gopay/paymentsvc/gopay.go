@@ -29,10 +29,10 @@ func (c *charger) gopayPINHeaders(linking bool) http.Header {
 	if linking {
 		headers.Set("Origin", "https://pin-web-client.gopayapi.com")
 		headers.Set("Referer", "https://pin-web-client.gopayapi.com/")
-		headers.Set("x-user-locale", c.cfg.PINLocale)
+		headers.Set("x-user-locale", c.paymentProfile.PINLocale)
 		headers.Set("x-appversion", "1.0.0")
 		headers.Set("x-is-mobile", "false")
-		headers.Set("x-platform", c.cfg.BrowserPlatform)
+		headers.Set("x-platform", c.paymentProfile.Platform)
 	}
 	headers.Set("x-request-id", uuid.NewString())
 	return headers
@@ -49,9 +49,9 @@ func (c *charger) paymentAttemptHeaders(base http.Header) (http.Header, error) {
 
 func (c *charger) paymentFingerprint() browserFingerprint {
 	if c != nil && c.ext != nil {
-		return c.ext.fingerprint.withFallback(c.cfg.BrowserLocale)
+		return c.ext.fingerprint.withFallback(c.paymentProfile.Locale)
 	}
-	return stablePaymentBrowserFingerprint(defaultBrowserLocale, "", "")
+	return defaultRequestProfile("payment").fingerprint()
 }
 
 func (c *charger) startLinkingUntilOTP(ctx context.Context, snapToken, csID, stripePK, otpChannel string) (map[string]any, error) {
@@ -135,7 +135,7 @@ func (c *charger) gopayValidateReference(ctx context.Context, referenceID string
 }
 
 func (c *charger) gopayUserConsent(ctx context.Context, referenceID string) (map[string]any, error) {
-	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.cfg.BrowserLocale))
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.paymentProfile.Locale))
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (c *charger) gopayUserConsent(ctx context.Context, referenceID string) (map
 }
 
 func (c *charger) gopayResendOTP(ctx context.Context, referenceID string) (map[string]any, error) {
-	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.cfg.BrowserLocale))
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.paymentProfile.Locale))
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +174,7 @@ func (c *charger) gopayResendOTP(ctx context.Context, referenceID string) (map[s
 }
 
 func (c *charger) gopayValidateOTP(ctx context.Context, referenceID, otp string) (string, string, error) {
-	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.cfg.BrowserLocale))
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.paymentProfile.Locale))
 	if err != nil {
 		return "", "", err
 	}
@@ -228,7 +228,7 @@ func (c *charger) tokenizePIN(ctx context.Context, challengeID, clientID string,
 }
 
 func (c *charger) gopayValidatePIN(ctx context.Context, referenceID, pinToken string) error {
-	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.cfg.BrowserLocale))
+	headers, err := c.paymentAttemptHeaders(c.gopayHeaders(c.paymentProfile.Locale))
 	if err != nil {
 		return err
 	}

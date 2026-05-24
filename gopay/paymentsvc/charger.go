@@ -15,6 +15,7 @@ import (
 
 type charger struct {
 	cfg              Config
+	paymentProfile   requestProfile
 	cs               *httpSession
 	ext              *httpSession
 	countryCode      string
@@ -29,25 +30,28 @@ type charger struct {
 const stripeCheckoutVersion = "2025-03-31.basil; checkout_server_update_beta=v1; checkout_manual_approval_preview=v1"
 
 func (s *Server) newCharger(ctx context.Context, cred credential, phone, countryCode, pin, tokenization string) (*charger, error) {
-	fingerprint := stablePaymentBrowserFingerprint(s.cfg.BrowserLocale, s.cfg.BrowserFingerprint, s.cfg.BrowserDeviceID)
-	cs, err := s.newChatGPTSession(ctx, cred, fingerprint)
+	checkoutProfile := s.cfg.CheckoutProfile
+	paymentProfile := s.cfg.PaymentProfile
+	paymentFingerprint := paymentProfile.fingerprint()
+	cs, err := s.newChatGPTSession(ctx, cred, checkoutProfile)
 	if err != nil {
 		return nil, err
 	}
-	ext, err := newHTTPSession(s.cfg.PaymentProxyURL, fingerprint)
+	ext, err := newHTTPSession(paymentProfile.ProxyURL, paymentFingerprint)
 	if err != nil {
 		cs.close()
 		return nil, err
 	}
-	fingerprint.applyBrowserHeaders(ext.headers)
+	paymentFingerprint.applyBrowserHeaders(ext.headers)
 	return &charger{
-		cfg:          s.cfg,
-		cs:           cs,
-		ext:          ext,
-		countryCode:  normalizeCountryCode(countryCode),
-		phone:        normalizeDigits(phone),
-		pin:          strings.TrimSpace(pin),
-		tokenization: normalizeTokenization(tokenization),
+		cfg:            s.cfg,
+		paymentProfile: paymentProfile,
+		cs:             cs,
+		ext:            ext,
+		countryCode:    normalizeCountryCode(countryCode),
+		phone:          normalizeDigits(phone),
+		pin:            strings.TrimSpace(pin),
+		tokenization:   normalizeTokenization(tokenization),
 	}, nil
 }
 
@@ -352,7 +356,7 @@ func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
 }
 
 func (c *charger) newChatGPTApproveSession() (*httpSession, error) {
-	approve, err := newHTTPSession(c.cfg.PaymentProxyURL, c.cs.fingerprint)
+	approve, err := newHTTPSession(c.paymentProfile.ProxyURL, c.paymentFingerprint())
 	if err != nil {
 		return nil, fmt.Errorf("chatgpt approve session init: %w", err)
 	}
@@ -370,19 +374,21 @@ func (c *charger) chatGPTSentinelPing(ctx context.Context, session *httpSession)
 }
 
 func (c *charger) chatGPTAuthHeaders(referer string) http.Header {
+	fingerprint := c.paymentFingerprint()
 	headers := http.Header{
 		"Accept":       []string{"*/*"},
 		"Content-Type": []string{"application/json"},
 		"Origin":       []string{"https://chatgpt.com"},
 		"Referer":      []string{firstNonEmpty(referer, "https://chatgpt.com/")},
 	}
-	c.cs.fingerprint.applyBrowserHeaders(headers)
-	for _, key := range []string{"Authorization", "oai-device-id"} {
-		if value := c.cs.headers.Get(key); value != "" {
-			headers.Set(key, value)
-		}
+	fingerprint.applyBrowserHeaders(headers)
+	if value := c.cs.headers.Get("Authorization"); value != "" {
+		headers.Set("Authorization", value)
 	}
+	headers.Set("oai-device-id", fingerprint.DeviceID)
+	headers.Set("oai-language", fingerprint.OAILanguage)
 	if cookie := mergeCookieHeaders(c.cs.headers.Get("Cookie"), c.cs.cookieHeader("https://chatgpt.com/")); cookie != "" {
+		cookie = cookieHeaderWithDeviceID(splitCookieHeader(cookie), fingerprint.DeviceID)
 		headers.Set("Cookie", cookie)
 	}
 	return headers

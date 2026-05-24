@@ -16,18 +16,13 @@ const (
 	sessionCookieChunkSize    = 4096 - 163
 )
 
-func (s *Server) newChatGPTSession(ctx context.Context, cred credential, fingerprints ...browserFingerprint) (*httpSession, error) {
+func (s *Server) newChatGPTSession(ctx context.Context, cred credential, profile requestProfile) (*httpSession, error) {
 	if cred.empty() {
 		return nil, fmt.Errorf("auth missing: need session_token or access_token")
 	}
-	fingerprint := stablePaymentBrowserFingerprint(s.cfg.BrowserLocale, s.cfg.BrowserFingerprint, s.cfg.BrowserDeviceID)
-	if len(fingerprints) > 0 {
-		fingerprint = fingerprints[0].withFallback(s.cfg.BrowserLocale)
-	}
-	cookieParts := sessionCookieParts(cred.sessionToken)
-	deviceID := firstNonEmpty(cookiePartValue(cookieParts, "oai-did"), fingerprint.DeviceID)
-	fingerprint.DeviceID = deviceID
-	session, err := newHTTPSession(s.cfg.CheckoutProxyURL, fingerprint)
+	fingerprint := profile.fingerprint()
+	deviceID := fingerprint.DeviceID
+	session, err := newHTTPSession(profile.ProxyURL, fingerprint)
 	if err != nil {
 		return nil, err
 	}
@@ -75,16 +70,55 @@ func setChatGPTBrowserHeaders(session *httpSession, deviceID string, fingerprint
 }
 
 func chatGPTCookieHeader(sessionToken, deviceID string) string {
-	parts := sessionCookieParts(sessionToken)
-	deviceID = firstNonEmpty(cookiePartValue(parts, "oai-did"), strings.TrimSpace(deviceID))
-	if deviceID != "" && !hasCookiePart(parts, "oai-did") {
-		parts = append(parts, "oai-did="+deviceID)
-	}
-	return strings.Join(parts, "; ")
+	return cookieHeaderWithDeviceID(sessionCookieParts(sessionToken), deviceID)
 }
 
-func hasCookiePart(parts []string, name string) bool {
-	return cookiePartValue(parts, name) != ""
+func splitCookieHeader(value string) []string {
+	var parts []string
+	seen := map[string]bool{}
+	for _, raw := range strings.Split(value, ";") {
+		part := strings.TrimSpace(raw)
+		if part == "" || !strings.Contains(part, "=") {
+			continue
+		}
+		name := strings.TrimSpace(strings.SplitN(part, "=", 2)[0])
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		parts = append(parts, part)
+	}
+	return parts
+}
+
+func cookieHeaderWithDeviceID(parts []string, deviceID string) string {
+	deviceID = strings.TrimSpace(deviceID)
+	if deviceID == "" {
+		return strings.Join(parts, "; ")
+	}
+	out := make([]string, 0, len(parts)+1)
+	found := false
+	seen := map[string]bool{}
+	for _, part := range parts {
+		if !strings.Contains(part, "=") {
+			continue
+		}
+		name := strings.TrimSpace(strings.SplitN(part, "=", 2)[0])
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		if name == "oai-did" {
+			out = append(out, "oai-did="+deviceID)
+			found = true
+			continue
+		}
+		out = append(out, part)
+	}
+	if !found {
+		out = append(out, "oai-did="+deviceID)
+	}
+	return strings.Join(out, "; ")
 }
 
 func cookiePartValue(parts []string, name string) string {

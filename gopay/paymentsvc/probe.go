@@ -66,8 +66,8 @@ func (s *Server) probeTierAccessToken(ctx context.Context, accessToken string) t
 	if strings.TrimSpace(accessToken) == "" {
 		return tierProbe{Source: "wham_usage", ErrorMessage: "access_token is required"}
 	}
-	fingerprint := stablePaymentBrowserFingerprint(s.cfg.BrowserLocale, s.cfg.BrowserFingerprint, s.cfg.BrowserDeviceID)
-	session, err := newHTTPSession(s.cfg.CheckoutProxyURL, fingerprint)
+	fingerprint := s.cfg.CheckoutProfile.fingerprint()
+	session, err := newHTTPSession(s.cfg.CheckoutProfile.ProxyURL, fingerprint)
 	if err != nil {
 		return tierProbe{Source: "wham_usage", ErrorMessage: err.Error()}
 	}
@@ -95,10 +95,10 @@ func (s *Server) probePlusActiveSessionToken(ctx context.Context, sessionToken s
 	if strings.TrimSpace(sessionToken) == "" {
 		return tierProbe{Source: "auth_session", ErrorMessage: "session_token is required"}
 	}
-	fingerprint := stablePaymentBrowserFingerprint(s.cfg.BrowserLocale, s.cfg.BrowserFingerprint, s.cfg.BrowserDeviceID)
-	deviceID := firstNonEmpty(cookiePartValue(sessionCookieParts(sessionToken), "oai-did"), fingerprint.DeviceID)
+	fingerprint := s.cfg.CheckoutProfile.fingerprint()
+	deviceID := fingerprint.DeviceID
 	fingerprint.DeviceID = deviceID
-	session, err := newHTTPSession(s.cfg.CheckoutProxyURL, fingerprint)
+	session, err := newHTTPSession(s.cfg.CheckoutProfile.ProxyURL, fingerprint)
 	if err != nil {
 		return tierProbe{Source: "auth_session", ErrorMessage: err.Error()}
 	}

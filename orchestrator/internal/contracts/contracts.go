@@ -13,6 +13,8 @@ const (
 	ActionGoPayPaymentRebind       = "GOPAY_PAYMENT_REBIND"
 	ActionProbeAccount             = "PROBE_ACCOUNT"
 	ActionLoginSession             = "LOGIN_SESSION"
+	ActionRegisterProtocol         = "REGISTER_PROTOCOL"
+	ActionLoginSessionProtocol     = "LOGIN_SESSION_PROTOCOL"
 	ActionCodexOAuth               = "CODEX_OAUTH"
 	ActionCodexOAuthProtocol       = "CODEX_OAUTH_PROTOCOL"
 	ActionCodexOAuthAddPhone       = "CODEX_OAUTH_ADD_PHONE"
@@ -33,6 +35,10 @@ const (
 	BrowserAuthResendOTPActivityName             = "BrowserAuthResendOTPActivity"
 	BrowserAuthCompleteActivityName              = "BrowserAuthCompleteActivity"
 	BrowserAuthCancelActivityName                = "BrowserAuthCancelActivity"
+	ProtocolAuthStartActivityName                = "ProtocolAuthStartActivity"
+	ProtocolAuthWaitActivityName                 = "ProtocolAuthWaitActivity"
+	ProtocolAuthCompleteActivityName             = "ProtocolAuthCompleteActivity"
+	ProtocolAuthCancelActivityName               = "ProtocolAuthCancelActivity"
 	CodexOAuthAcquirePhoneActivityName           = "CodexOAuthAcquirePhoneActivity"
 	CodexOAuthStartProtocolActivityName          = "CodexOAuthStartProtocolActivity"
 	CodexOAuthDetectProtocolStageActivityName    = "CodexOAuthDetectProtocolStageActivity"
@@ -131,6 +137,10 @@ func WorkflowID(action string, jobID string) (string, bool) {
 		return "probe-" + jobID, true
 	case ActionLoginSession:
 		return "login-session-" + jobID, true
+	case ActionRegisterProtocol:
+		return "register-protocol-" + jobID, true
+	case ActionLoginSessionProtocol:
+		return "login-session-protocol-" + jobID, true
 	case ActionCodexOAuth:
 		return "codex-oauth-" + jobID, true
 	case ActionCodexOAuthProtocol:
@@ -148,7 +158,7 @@ func WorkflowID(action string, jobID string) (string, bool) {
 
 func ManualOTPWorkflowID(action string, jobID string) (string, bool) {
 	switch strings.TrimSpace(action) {
-	case ActionRegister, ActionActivate, ActionAutopay, ActionGoPayApp, ActionGoPayPayment, ActionGoPayQRISPaymentActivate, ActionGoPayWAPayment, ActionGoPayPaymentRebind, ActionRegisterAndActivate, ActionLoginSession:
+	case ActionRegister, ActionRegisterProtocol, ActionActivate, ActionAutopay, ActionGoPayApp, ActionGoPayPayment, ActionGoPayQRISPaymentActivate, ActionGoPayWAPayment, ActionGoPayPaymentRebind, ActionRegisterAndActivate, ActionLoginSession, ActionLoginSessionProtocol:
 		return WorkflowID(action, jobID)
 	default:
 		return "", false

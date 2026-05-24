@@ -118,9 +118,22 @@
   margin-left: auto;
 }
 
+.accountHeaderActionGroups {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.accountHeaderActionRow {
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: center;
+}
+
 .appDrawer .accountSectionTitle {
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
 }
 
 .appDrawer .accountSectionTitle h3 {

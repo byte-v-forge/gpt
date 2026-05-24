@@ -1,4 +1,4 @@
-import { FileKey, KeyRound, Play, Zap } from 'lucide-react';
+import { Zap } from 'lucide-react';
 import {
   RecordActionButtons,
   RecordActions,
@@ -14,18 +14,16 @@ import {
   accountActivationChannel,
   accountCodexPhoneState,
   canGoPayPayment,
-  canLoginSession,
-  canRefreshAccessToken,
-  canRegister,
   isUserAlreadyExistsAccount
 } from './account-utils';
 import { AccountChannelTag, AccountCodexPhoneTag, AccountSignalBadge, PaymentChannelIcon } from './account-badges';
 import { AccountRunningWorkflowActions } from './account-otp-actions';
+import { AccountRowAuthGroups } from './account-row-auth-groups';
 import { OpenAIIcon } from './brand-icons';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegister, onCodexOAuthAddPhone, onCodexOAuthProtocol, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, refreshingAccessTokenIds, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegister, onRegisterProtocol, onLogin, onLoginProtocol, onCodexOAuthAddPhone, onCodexOAuthProtocol, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
@@ -38,6 +36,9 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
   onOpenWorkflow: (job: Job) => void;
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (a: Account) => void;
+  onRegisterProtocol: (a: Account) => void;
+  onLogin: (a: Account) => void;
+  onLoginProtocol: (a: Account) => void;
   onCodexOAuthAddPhone: (a: Account) => void;
   onCodexOAuthProtocol: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
@@ -77,6 +78,9 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
               onOpenWorkflow={onOpenWorkflow}
               onCancelWorkflow={onCancelWorkflow}
               onRegister={onRegister}
+              onRegisterProtocol={onRegisterProtocol}
+              onLogin={onLogin}
+              onLoginProtocol={onLoginProtocol}
               onCodexOAuthAddPhone={onCodexOAuthAddPhone}
               onCodexOAuthProtocol={onCodexOAuthProtocol}
               onGoPayPayment={onGoPayPayment}
@@ -108,7 +112,7 @@ function AccountCardIdentity({ account, showSecrets }: {
   );
 }
 
-function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onCancelWorkflow, onRegister, onCodexOAuthAddPhone, onCodexOAuthProtocol, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refreshingAccessToken, onOpenWorkflow, onCancelWorkflow, onRegister, onRegisterProtocol, onLogin, onLoginProtocol, onCodexOAuthAddPhone, onCodexOAuthProtocol, onGoPayPayment, onRefreshAccessToken, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
   account: Account;
   accountBusy: boolean;
   currentWorkflow?: Job;
@@ -117,6 +121,9 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
   onOpenWorkflow: (job: Job) => void;
   onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegister: (a: Account) => void;
+  onRegisterProtocol: (a: Account) => void;
+  onLogin: (a: Account) => void;
+  onLoginProtocol: (a: Account) => void;
   onCodexOAuthAddPhone: (a: Account) => void;
   onCodexOAuthProtocol: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
@@ -135,14 +142,6 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
     );
   }
 
-  const actions: RowActionDescriptor[] = [];
-  if (canRegister(account)) actions.push({ label: '注册账号', icon: <Play size={14} />, onClick: () => onRegister(account), disabled: busy, kind: 'primary' });
-  if (canRefreshAccessToken(account)) actions.push({ label: refreshingAccessToken ? '获取中' : '获取 Access', icon: <KeyRound size={14} />, onClick: () => void onRefreshAccessToken(account), disabled: busy || refreshingAccessToken, kind: actions.length ? 'secondary' : 'primary' });
-  if (canLoginSession(account)) {
-    actions.push({ label: '生成 auth.json', icon: <FileKey size={14} />, onClick: () => onCodexOAuthAddPhone(account), disabled: busy, kind: 'secondary' });
-    actions.push({ label: '协议 auth.json', icon: <FileKey size={14} />, onClick: () => onCodexOAuthProtocol(account), disabled: busy, kind: 'secondary' });
-  }
-
   const paymentActions: RowActionDescriptor[] = canGoPayPayment(account) ? GO_PAY_PAYMENT_CHANNELS.filter((channel) => channel !== 'wa').map((channel) => ({
     label: goPayPaymentActionLabel(channel),
     icon: <span className="activationPaymentIcon"><Zap size={13} /><PaymentChannelIcon channel={channel} /></span>,
@@ -151,14 +150,14 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, refres
     kind: 'secondary' as const,
     className: 'paymentIconAction activationAction'
   })) : [];
-  const primary = actions.find((action) => action.kind === 'primary' && !action.disabled) || actions.find((action) => !action.disabled) || actions[0];
   const leftActions = paymentActions;
-  const rightActions = primary ? [primary, ...actions.filter((action) => action !== primary)] : actions;
   return (
     <RecordActions className="rowActions">
       <div className="rowActionsMain splitRowActions">
         <div className="rowActionsLeft"><RecordActionButtons actions={leftActions} /></div>
-        <div className="rowActionsRight"><RecordActionButtons actions={rightActions} /></div>
+        <div className="rowActionsRight">
+          <AccountRowAuthGroups account={account} busy={busy} refreshingAccessToken={refreshingAccessToken} onRegister={onRegister} onRegisterProtocol={onRegisterProtocol} onLogin={onLogin} onLoginProtocol={onLoginProtocol} onCodexOAuthAddPhone={onCodexOAuthAddPhone} onCodexOAuthProtocol={onCodexOAuthProtocol} onRefreshAccessToken={onRefreshAccessToken} />
+        </div>
       </div>
     </RecordActions>
   );

@@ -11,7 +11,9 @@ option go_package = "./;pb";
 service AccountWorkflowService {
   rpc CreateGPTAccount(CreateGPTAccountRequest) returns (CreateGPTAccountResponse);
   rpc RegisterAccount(RegisterAccountRequest) returns (RegisterAccountResponse);
+  rpc RegisterAccountProtocol(RegisterAccountRequest) returns (RegisterAccountResponse);
   rpc LoginAccount(LoginAccountRequest) returns (LoginAccountResponse);
+  rpc LoginAccountProtocol(LoginAccountRequest) returns (LoginAccountResponse);
   rpc CodexOAuth(CodexOAuthRequest) returns (CodexOAuthResponse);
   rpc CodexOAuthProtocol(CodexOAuthRequest) returns (CodexOAuthResponse);
   rpc CodexOAuthAddPhone(CodexOAuthAddPhoneRequest) returns (CodexOAuthAddPhoneResponse);
@@ -193,6 +195,7 @@ message BrowserAuthWaitOutput {
 message BrowserAuthCancelInput {
   string flow_id = 1;
   string mode = 2;
+  string job_id = 3;
 }
 
 message LoginSessionActivityOutput {

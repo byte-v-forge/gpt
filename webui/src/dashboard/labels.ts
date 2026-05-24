@@ -31,7 +31,11 @@ const emailAllocationStatusLabels: DisplayLabelMap = {
 
 const actionLabels: DisplayLabelMap = {
   REGISTER: '注册账号',
+  REGISTER_PROTOCOL: '协议注册账号',
   LOGIN_SESSION: '登录取 Token',
+  LOGIN_SESSION_PROTOCOL: '协议登录取 Token',
+  CODEX_OAUTH: '浏览器 auth.json',
+  CODEX_OAUTH_PROTOCOL: '协议 auth.json',
   CODEX_OAUTH_ADD_PHONE: 'Codex OAuth 加手机号',
   ACTIVATE: '激活支付',
   AUTOPAY: '自动支付',

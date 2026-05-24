@@ -65,6 +65,8 @@ const (
 	actionGoPayPaymentRebind       = contracts.ActionGoPayPaymentRebind
 	actionProbeAccount             = contracts.ActionProbeAccount
 	actionLoginSession             = contracts.ActionLoginSession
+	actionRegisterProtocol         = contracts.ActionRegisterProtocol
+	actionLoginSessionProtocol     = contracts.ActionLoginSessionProtocol
 	actionCodexOAuth               = contracts.ActionCodexOAuth
 	actionCodexOAuthProtocol       = contracts.ActionCodexOAuthProtocol
 	actionCodexOAuthAddPhone       = contracts.ActionCodexOAuthAddPhone

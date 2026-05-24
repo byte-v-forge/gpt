@@ -62,6 +62,28 @@ func (s *Server) RegisterAccount(ctx context.Context, req *pb.RegisterAccountReq
 	return &pb.RegisterAccountResponse{JobId: jobID, Started: true}, nil
 }
 
+func (s *Server) RegisterAccountProtocol(ctx context.Context, req *pb.RegisterAccountRequest) (*pb.RegisterAccountResponse, error) {
+	jobID := uuid.NewString()
+	accountID := strings.TrimSpace(req.GetAccountId())
+	if accountID == "" {
+		accountID = uuid.NewString()
+	}
+	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionRegisterProtocol, jobID)), workflows.RegisterAccountProtocolWorkflow, workflows.RegisterAccountWorkflowInput{
+		JobId: jobID,
+		Account: &workflows.AccountSpec{
+			AccountId:     accountID,
+			Email:         req.GetEmail(),
+			Password:      req.GetPassword(),
+			EmailStrategy: requestEmailStrategy(req.GetEmailStrategy()),
+		},
+		OtpOptions: req.GetOtpOptions(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &pb.RegisterAccountResponse{JobId: jobID, Started: true}, nil
+}
+
 func (s *Server) ActivateAccount(ctx context.Context, req *pb.ActivateAccountRequest) (*pb.ActivateAccountResponse, error) {
 	jobID := uuid.NewString()
 	var result workflows.ActivateAccountWorkflowResult
@@ -124,6 +146,22 @@ func (s *Server) LoginAccount(ctx context.Context, req *pb.LoginAccountRequest) 
 	}
 	jobID := uuid.NewString()
 	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionLoginSession, jobID)), workflows.LoginSessionWorkflow, workflows.LoginSessionWorkflowInput{
+		JobId:     jobID,
+		AccountId: accountID,
+	})
+	if err != nil {
+		return &pb.LoginAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
+	}
+	return &pb.LoginAccountResponse{JobId: jobID, Started: true}, nil
+}
+
+func (s *Server) LoginAccountProtocol(ctx context.Context, req *pb.LoginAccountRequest) (*pb.LoginAccountResponse, error) {
+	accountID := strings.TrimSpace(req.GetAccountId())
+	if accountID == "" {
+		return &pb.LoginAccountResponse{ErrorMessage: "account_id is required"}, nil
+	}
+	jobID := uuid.NewString()
+	_, err := s.temporal.ExecuteWorkflow(ctx, s.workflowOptions(workflowIDForAction(actionLoginSessionProtocol, jobID)), workflows.LoginSessionProtocolWorkflow, workflows.LoginSessionWorkflowInput{
 		JobId:     jobID,
 		AccountId: accountID,
 	})

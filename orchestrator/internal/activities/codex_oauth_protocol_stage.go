@@ -126,10 +126,14 @@ func codexOAuthProtocolStageFromJSON(payload map[string]any) (string, string) {
 	}
 	pageType := strings.ToLower(codexOAuthProtocolPageType(payload))
 	switch pageType {
+	case "create_account_password":
+		return "create_password", continueURL
 	case "login_password":
 		return "password", continueURL
 	case "email_otp_verification":
 		return "email_otp", continueURL
+	case "create_account_profile", "create_account", "about_you":
+		return "about_you", continueURL
 	case "add_phone":
 		return "add_phone", continueURL
 	case "phone_otp_verification":
@@ -175,8 +179,14 @@ func codexOAuthProtocolStageFromURL(rawURL, body string) string {
 		return "add_phone"
 	case strings.Contains(lowerURL, "/email-verification"):
 		return "email_otp"
+	case strings.Contains(lowerURL, "/create-account/password"):
+		return "create_password"
+	case strings.Contains(lowerURL, "/about-you"):
+		return "about_you"
 	case strings.Contains(lowerURL, "/log-in/password"):
 		return "password"
+	case strings.Contains(lowerURL, "/create-account"):
+		return "email"
 	case strings.Contains(lowerURL, "/log-in"):
 		return "email"
 	case strings.Contains(lowerURL, "/choose-an-account"):
@@ -191,6 +201,10 @@ func codexOAuthProtocolStageFromURL(rawURL, body string) string {
 		return "phone_otp"
 	case strings.Contains(lowerBody, "enter your password"):
 		return "password"
+	case strings.Contains(lowerBody, "create your account") || strings.Contains(lowerBody, "create a password"):
+		return "create_password"
+	case strings.Contains(lowerBody, "tell us about you") || strings.Contains(lowerBody, "about you"):
+		return "about_you"
 	case strings.Contains(lowerBody, "email verification") || strings.Contains(lowerBody, "verification code"):
 		return "email_otp"
 	case strings.Contains(lowerBody, "codex cli") || strings.Contains(lowerBody, "sign in with chatgpt"):

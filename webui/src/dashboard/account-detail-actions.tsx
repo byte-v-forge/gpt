@@ -1,30 +1,11 @@
-import { Bug, Copy, Inbox, KeyRound, RefreshCw, Search, Trash2 } from 'lucide-react';
+import { Bug, Copy, Inbox, Trash2 } from 'lucide-react';
 import { ActionButtonGroup, Button, buttonHint, formatUnix, mask } from '@/dashboard/module-kit';
 import type { ActionButtonDescriptor } from '@/dashboard/module-kit';
 import { PaymentChannelIcon } from './account-badges';
-import { CodexIcon } from './brand-icons';
 import { accountInboxHint } from './account-mail-utils';
-import { canGoPayPayment, canLoginSession, canProbeAccount, canRefreshAccessToken, loginActionHint, loginActionLabel, probeAccountHint } from './account-utils';
+import { canGoPayPayment } from './account-utils';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
-
-export function AccountPrimaryActions({ account, busy, refreshingAccessToken, onProbeAccount, onLogin, onCodexOAuthAddPhone, onCodexOAuthProtocol, onRefreshAccessToken }: {
-  account: Account;
-  busy: boolean;
-  refreshingAccessToken: boolean;
-  onProbeAccount: (account: Account) => void;
-  onLogin: (account: Account) => void;
-  onCodexOAuthAddPhone: (account: Account) => void;
-  onCodexOAuthProtocol: (account: Account) => void;
-  onRefreshAccessToken: (account: Account) => Promise<void>;
-}) {
-  return (
-    <ActionButtonGroup
-      className="sectionActions accountHeaderActions"
-      actions={accountActions(account, busy, refreshingAccessToken, onLogin, onRefreshAccessToken, onCodexOAuthAddPhone, onCodexOAuthProtocol, onProbeAccount)}
-    />
-  );
-}
 
 export function AccountDetailActions({ account, showSecrets, busy, inboxLoading, mailboxContext, latestOtp, canFetchOTP, onCopy, onFetchInbox, onGoPayPayment }: {
   account: Account;
@@ -96,49 +77,6 @@ function LatestOTPValue({ latestOtp, showSecrets, onCopy }: {
 
 function hasVisibleAction(actions: ActionButtonDescriptor[]) {
   return actions.some((action) => action.visible !== false);
-}
-
-function accountActions(account: Account, busy: boolean, refreshing: boolean, onLogin: (account: Account) => void, onRefresh: (account: Account) => Promise<void>, onAuth: (account: Account) => void, onProtocol: (account: Account) => void, onProbe: (account: Account) => void): ActionButtonDescriptor[] {
-  return [{
-    id: 'login-session',
-    visible: canLoginSession(account),
-    label: loginActionLabel(account),
-    hint: loginActionHint(account),
-    icon: <KeyRound size={14} />,
-    disabled: busy,
-    onClick: () => onLogin(account),
-  }, {
-    id: 'refresh-access-token',
-    visible: canRefreshAccessToken(account),
-    label: refreshing ? '刷新中' : '刷新 Token',
-    hint: '使用当前 Session 刷新 Access Token',
-    icon: <RefreshCw size={14} />,
-    disabled: busy || refreshing,
-    onClick: () => void onRefresh(account),
-  }, {
-    id: 'codex-oauth',
-    visible: canLoginSession(account),
-    label: '获取 auth.json',
-    hint: '自动 OAuth 登录并产出 auth.json；遇到 add phone 页面会停下报错',
-    icon: <CodexIcon size={14} />,
-    disabled: busy,
-    onClick: () => onAuth(account),
-  }, {
-    id: 'codex-oauth-protocol',
-    visible: canLoginSession(account),
-    label: '协议 auth.json',
-    hint: '不依赖浏览器，使用协议 OAuth 产出 auth.json',
-    icon: <CodexIcon size={14} />,
-    disabled: busy,
-    onClick: () => onProtocol(account),
-  }, {
-    id: 'probe-account',
-    label: '探测账号',
-    hint: probeAccountHint(account),
-    icon: <Search size={14} />,
-    disabled: busy || !canProbeAccount(account),
-    onClick: () => onProbe(account),
-  }];
 }
 
 function mailboxActions(account: Account, showSecrets: boolean, busy: boolean, inboxLoading: boolean, mailboxContext: AccountMailboxContext | null, canFetchOTP: boolean, onFetchInbox: (account: Account) => Promise<void>): ActionButtonDescriptor[] {

@@ -95,6 +95,11 @@ func (c *codexOAuthProtocolHTTPClient) postJSON(ctx context.Context, rawURL, ref
 	return c.request(ctx, fhttp.MethodPost, rawURL, referer, false, body, extraHeaders...)
 }
 
+func (c *codexOAuthProtocolHTTPClient) postForm(ctx context.Context, rawURL, referer string, form url.Values, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
+	headers := append([]map[string]string{{"Content-Type": "application/x-www-form-urlencoded"}}, extraHeaders...)
+	return c.request(ctx, fhttp.MethodPost, rawURL, referer, false, []byte(form.Encode()), headers...)
+}
+
 func (c *codexOAuthProtocolHTTPClient) request(ctx context.Context, method, rawURL, referer string, acceptHTML bool, body []byte, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
 	var reader io.Reader
 	if body != nil {
@@ -143,6 +148,33 @@ func (c *codexOAuthProtocolHTTPClient) deviceID() string {
 			if cookie != nil && strings.EqualFold(cookie.Name, "oai-did") && strings.TrimSpace(cookie.Value) != "" {
 				c.state.DeviceID = strings.TrimSpace(cookie.Value)
 				return c.state.DeviceID
+			}
+		}
+	}
+	return ""
+}
+
+func (c *codexOAuthProtocolHTTPClient) cookieValue(name string, hostHints ...string) string {
+	name = strings.TrimSpace(name)
+	if c == nil || name == "" {
+		return ""
+	}
+	for hostKey, cookies := range c.jar.GetAllCookies() {
+		if len(hostHints) > 0 {
+			matched := false
+			for _, hint := range hostHints {
+				if hint = strings.TrimSpace(strings.ToLower(hint)); hint != "" && strings.Contains(strings.ToLower(hostKey), hint) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
+		}
+		for _, cookie := range cookies {
+			if cookie != nil && strings.EqualFold(cookie.Name, name) && strings.TrimSpace(cookie.Value) != "" {
+				return strings.TrimSpace(cookie.Value)
 			}
 		}
 	}
@@ -225,10 +257,14 @@ func codexOAuthProtocolRefererForStage(stage string) string {
 	switch stage {
 	case "email":
 		return "https://auth.openai.com/log-in"
+	case "create_password":
+		return "https://auth.openai.com/create-account/password"
 	case "password":
 		return "https://auth.openai.com/log-in/password"
 	case "email_otp":
 		return "https://auth.openai.com/email-verification"
+	case "about_you":
+		return "https://auth.openai.com/about-you"
 	case "add_phone":
 		return "https://auth.openai.com/add-phone"
 	case "phone_otp":

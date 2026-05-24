@@ -61,17 +61,6 @@ func normalizeCountryCode(value string) string {
 	return normalizeDigits(value)
 }
 
-func normalizeOTPChannel(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "sms", "otp_sms":
-		return "sms"
-	case "wa", "whatsapp", "otp_wa":
-		return "wa"
-	default:
-		return ""
-	}
-}
-
 func extractCheckoutSessionID(data map[string]any) string {
 	for _, key := range []string{"checkout_session_id", "session_id", "id"} {
 		value := stringAt(data, key)

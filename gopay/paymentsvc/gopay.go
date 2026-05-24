@@ -72,7 +72,7 @@ func (c *charger) startLinkingUntilOTP(ctx context.Context, snapToken, csID, str
 		return nil, err
 	}
 	otpRequired := linkingConsentRequiresOTP(consent)
-	if otpRequired && otpChannel == "sms" {
+	if otpRequired && goPayOTPChannelRequiresSMSActivation(otpChannel) {
 		_, _ = c.gopayResendOTP(ctx, referenceID)
 	}
 	state := map[string]any{

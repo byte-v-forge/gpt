@@ -9,29 +9,64 @@ import (
 )
 
 func normalizeGoPayOTPChannel(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "sms", "otp_sms":
-		return "sms"
-	case "wa", "whatsapp", "otp_wa":
-		return "wa"
-	default:
+	descriptor := goPayOTPChannelDescriptor(value)
+	if descriptor == nil {
 		return ""
 	}
+	return descriptor.GetApiValue()
 }
 
 func goPayOTPMethod(channel string) string {
-	switch normalizeGoPayOTPChannel(channel) {
-	case "sms":
-		return "sms"
-	case "wa":
-		return "wa"
-	default:
+	descriptor := goPayOTPChannelDescriptor(channel)
+	if descriptor == nil {
 		return ""
 	}
+	return descriptor.GetApiValue()
 }
 
 func goPayOTPChannelFromMethod(method string) string {
 	return normalizeGoPayOTPChannel(method)
+}
+
+func goPayOTPChannelRequiresSMSActivation(channel string) bool {
+	descriptor := goPayOTPChannelDescriptor(channel)
+	return descriptor != nil && descriptor.GetRequiresSmsActivation()
+}
+
+func goPayOTPChannelDescriptor(value string) *pb.GoPayOTPChannelDescriptor {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return nil
+	}
+	for _, descriptor := range goPayOTPChannelDescriptors() {
+		if normalized == descriptor.GetApiValue() || normalized == descriptor.GetProviderMethod() {
+			return descriptor
+		}
+		for _, alias := range descriptor.GetAliases() {
+			if normalized == strings.ToLower(strings.TrimSpace(alias)) {
+				return descriptor
+			}
+		}
+	}
+	return nil
+}
+
+func goPayOTPChannelDescriptors() []*pb.GoPayOTPChannelDescriptor {
+	return []*pb.GoPayOTPChannelDescriptor{
+		{
+			Channel:               pb.GoPayOTPChannel_GOPAY_OTP_CHANNEL_SMS,
+			ApiValue:              "sms",
+			ProviderMethod:        "otp_sms",
+			Aliases:               []string{"sms", "otp_sms"},
+			RequiresSmsActivation: true,
+		},
+		{
+			Channel:        pb.GoPayOTPChannel_GOPAY_OTP_CHANNEL_WHATSAPP,
+			ApiValue:       "wa",
+			ProviderMethod: "otp_wa",
+			Aliases:        []string{"wa", "whatsapp", "otp_wa"},
+		},
+	}
 }
 
 func (s *Server) markGoPaySMSMessageSent(ctx context.Context, activationID string, data map[string]any) error {

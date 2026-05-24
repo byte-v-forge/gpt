@@ -137,7 +137,7 @@ func (s *Server) startGoPayAppSignup(ctx context.Context, input GoPayAppOTPStart
 
 	output.OtpRequired = true
 	output.IssuedAfterUnix = authOtpIssuedAfterUnix(statusAfter, startedAt)
-	if normalizeGoPayOTPChannel(output.GetOtpChannel()) == "sms" {
+	if goPayOTPChannelRequiresSMSActivation(output.GetOtpChannel()) {
 		if err := s.markGoPaySMSMessageSent(ctx, input.GetSmsActivationId(), data); err != nil {
 			return output, s.completeGoPayAppOTPStep(ctx, input.GetJobId(), stepName, data, err)
 		}

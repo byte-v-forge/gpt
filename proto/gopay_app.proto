@@ -4,6 +4,20 @@ package gopay_app;
 
 option go_package = "./;pb";
 
+enum GoPayOTPChannel {
+  GOPAY_OTP_CHANNEL_UNSPECIFIED = 0;
+  GOPAY_OTP_CHANNEL_SMS = 1;
+  GOPAY_OTP_CHANNEL_WHATSAPP = 2;
+}
+
+message GoPayOTPChannelDescriptor {
+  GoPayOTPChannel channel = 1;
+  string api_value = 2;        // 稳定请求/投影值：sms、wa
+  string provider_method = 3;  // GoPay verification_method：otp_sms、otp_wa
+  repeated string aliases = 4;
+  bool requires_sms_activation = 5;
+}
+
 // === 改手机号 ===
 
 message ChangePhoneStartRequest {

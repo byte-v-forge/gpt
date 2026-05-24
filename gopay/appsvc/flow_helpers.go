@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byte-v-forge/gpt/gopay/otpchannel"
 	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
@@ -316,14 +317,7 @@ func contains(values []string, needle string) bool {
 }
 
 func otpMethodFromChannel(value string) string {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "sms", "otp_sms":
-		return "otp_sms"
-	case "wa", "whatsapp", "otp_wa":
-		return "otp_wa"
-	default:
-		return ""
-	}
+	return otpchannel.ProviderMethod(value)
 }
 
 func chooseOTPMethod(methods []string, preferred, defaultMethod string) string {
@@ -337,11 +331,8 @@ func chooseOTPMethod(methods []string, preferred, defaultMethod string) string {
 		}
 		return ""
 	}
-	defaultMethod = firstNonEmpty(otpMethodFromChannel(defaultMethod), "otp_sms")
-	fallbacks := []string{defaultMethod, "otp_sms", "otp_wa"}
-	if defaultMethod == "otp_wa" {
-		fallbacks = []string{defaultMethod, "otp_wa", "otp_sms"}
-	}
+	defaultMethod = firstNonEmpty(otpMethodFromChannel(defaultMethod), otpchannel.DefaultProviderMethod())
+	fallbacks := otpchannel.ProviderMethodFallbacks(defaultMethod)
 	for _, method := range fallbacks {
 		if method != "" && (len(methods) == 0 || contains(methods, method)) {
 			return method

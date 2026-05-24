@@ -15,6 +15,7 @@ import (
 
 type charger struct {
 	cfg              Config
+	checkoutProfile  requestProfile
 	paymentProfile   requestProfile
 	cs               *httpSession
 	ext              *httpSession
@@ -44,14 +45,15 @@ func (s *Server) newCharger(ctx context.Context, cred credential, phone, country
 	}
 	paymentFingerprint.applyBrowserHeaders(ext.headers)
 	return &charger{
-		cfg:            s.cfg,
-		paymentProfile: paymentProfile,
-		cs:             cs,
-		ext:            ext,
-		countryCode:    normalizeCountryCode(countryCode),
-		phone:          normalizeDigits(phone),
-		pin:            strings.TrimSpace(pin),
-		tokenization:   normalizeTokenization(tokenization),
+		cfg:             s.cfg,
+		checkoutProfile: checkoutProfile,
+		paymentProfile:  paymentProfile,
+		cs:              cs,
+		ext:             ext,
+		countryCode:     normalizeCountryCode(countryCode),
+		phone:           normalizeDigits(phone),
+		pin:             strings.TrimSpace(pin),
+		tokenization:    normalizeTokenization(tokenization),
 	}, nil
 }
 
@@ -81,9 +83,12 @@ func isQRISTokenization(tokenization string) bool {
 }
 
 func (c *charger) createCheckout(ctx context.Context) (string, error) {
+	if err := c.cs.setProxy(c.checkoutProfile.ProxyURL); err != nil {
+		return "", fmt.Errorf("checkout proxy switch: %w", err)
+	}
 	c.chatGPTWarmup(ctx)
 	plan := c.cfg.CheckoutPlan
-	checkoutMode := firstNonEmpty(plan["checkout_ui_mode"], "custom")
+	checkoutMode := firstNonEmpty(plan["checkout_ui_mode"], "hosted")
 	body := map[string]any{
 		"entry_point": firstNonEmpty(plan["entry_point"], "all_plans_pricing_modal"),
 		"plan_name":   firstNonEmpty(plan["plan_name"], "chatgptplusplan"),
@@ -93,11 +98,7 @@ func (c *charger) createCheckout(ctx context.Context) (string, error) {
 		},
 		"checkout_ui_mode": checkoutMode,
 	}
-	if cancelURL := strings.TrimSpace(plan["cancel_url"]); cancelURL != "" {
-		body["cancel_url"] = cancelURL
-	} else if checkoutMode != "custom" {
-		body["cancel_url"] = "https://chatgpt.com/#pricing"
-	}
+	body["cancel_url"] = firstNonEmpty(plan["cancel_url"], "https://chatgpt.com/#pricing")
 	if promo := firstNonEmpty(plan["promo_campaign_id"], "plus-1-month-free"); promo != "" {
 		body["promo_campaign"] = map[string]any{"promo_campaign_id": promo, "is_coupon_from_query_param": false}
 	}
@@ -118,23 +119,13 @@ func (c *charger) createCheckout(ctx context.Context) (string, error) {
 }
 
 func (c *charger) chatGPTWarmup(ctx context.Context) {
-	billingCountry := firstNonEmpty(c.cfg.CheckoutPlan["billing_country"], "ID")
 	warmups := []struct {
 		method string
 		url    string
 		accept string
 		body   any
 	}{
-		{http.MethodGet, "https://chatgpt.com/", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8", nil},
 		{http.MethodGet, "https://chatgpt.com/api/auth/session", "application/json", nil},
-		{http.MethodGet, "https://chatgpt.com/backend-api/accounts/check/v4-2023-04-27?timezone_offset_min=-420", "application/json", nil},
-		{http.MethodGet, "https://chatgpt.com/backend-api/accounts/domain-density-eligibility", "application/json", nil},
-		{http.MethodGet, "https://chatgpt.com/backend-api/checkout_pricing_config/countries", "application/json", nil},
-		{http.MethodGet, "https://chatgpt.com/backend-api/checkout_pricing_config/configs/" + billingCountry, "application/json", nil},
-		{http.MethodPost, "https://chatgpt.com/backend-api/conversation/init", "application/json", map[string]any{"gizmo_id": nil, "requested_default_model": nil, "conversation_id": nil, "timezone_offset_min": -420}},
-		{http.MethodGet, "https://chatgpt.com/backend-api/apps/sources_dropdown", "application/json", nil},
-		{http.MethodGet, "https://chatgpt.com/backend-api/user_segments", "application/json", nil},
-		{http.MethodGet, "https://chatgpt.com/backend-api/beacons/home", "application/json", nil},
 	}
 	for _, item := range warmups {
 		select {
@@ -308,18 +299,16 @@ func (c *charger) stripeConfirm(ctx context.Context, csID, pmID string) (map[str
 }
 
 func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
-	approve, err := c.newChatGPTApproveSession()
-	if err != nil {
-		return err
+	if err := c.cs.setProxy(c.paymentProfile.ProxyURL); err != nil {
+		return fmt.Errorf("chatgpt approve proxy switch: %w", err)
 	}
-	defer approve.close()
 	headers := c.chatGPTApproveHeaders(csID)
-	c.chatGPTSentinelPing(ctx, approve)
+	c.chatGPTSentinelPing(ctx, c.cs)
 
 	var lastStatus int
 	var lastBody string
 	for attempt := 1; attempt <= 3; attempt++ {
-		resp, err := approve.request(ctx, http.MethodPost, "https://chatgpt.com/backend-api/payments/checkout/approve", requestOptions{
+		resp, err := c.cs.request(ctx, http.MethodPost, "https://chatgpt.com/backend-api/payments/checkout/approve", requestOptions{
 			jsonBody: map[string]any{"checkout_session_id": csID, "processor_entity": c.processorEntityOrDefault()},
 			headers:  headers,
 		})
@@ -338,7 +327,7 @@ func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
 				return ctx.Err()
 			case <-time.After(time.Duration(2+attempt) * time.Second):
 			}
-			c.chatGPTSentinelPing(ctx, approve)
+			c.chatGPTSentinelPing(ctx, c.cs)
 			continue
 		}
 		if resp.status == http.StatusForbidden && strings.Contains(strings.ToLower(lastBody), "<html") {
@@ -355,14 +344,6 @@ func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
 	return chatGPTApproveBlockedError{status: lastStatus, body: lastBody}
 }
 
-func (c *charger) newChatGPTApproveSession() (*httpSession, error) {
-	approve, err := newHTTPSession(c.paymentProfile.ProxyURL, c.paymentFingerprint())
-	if err != nil {
-		return nil, fmt.Errorf("chatgpt approve session init: %w", err)
-	}
-	return approve, nil
-}
-
 func (c *charger) chatGPTSentinelPing(ctx context.Context, session *httpSession) {
 	if session == nil {
 		return
@@ -374,7 +355,7 @@ func (c *charger) chatGPTSentinelPing(ctx context.Context, session *httpSession)
 }
 
 func (c *charger) chatGPTAuthHeaders(referer string) http.Header {
-	fingerprint := c.paymentFingerprint()
+	fingerprint := c.chatGPTFingerprint()
 	headers := http.Header{
 		"Accept":       []string{"*/*"},
 		"Content-Type": []string{"application/json"},
@@ -395,14 +376,20 @@ func (c *charger) chatGPTAuthHeaders(referer string) http.Header {
 }
 
 func (c *charger) chatGPTApproveHeaders(csID string) http.Header {
-	// DanOps-style approve: use a fresh, clean HTTP session and only carry the
-	// browser-identifying headers plus auth/cookie material needed for this checkout.
-	// Reusing the long-lived checkout session can keep stale default headers/referer
-	// context and make ChatGPT return {"result":"blocked"}.
+	// nb-register style: keep the same ChatGPT browser identity that created the
+	// checkout, then move the session to the payment proxy only for approve.
+	// Switching to a fresh payment-profile device can make approve return blocked.
 	headers := c.chatGPTAuthHeaders(c.checkoutApprovalURL(csID))
 	headers.Set("x-openai-target-path", "/backend-api/payments/checkout/approve")
 	headers.Set("x-openai-target-route", "/backend-api/payments/checkout/approve")
 	return headers
+}
+
+func (c *charger) chatGPTFingerprint() browserFingerprint {
+	if c != nil && c.cs != nil {
+		return c.cs.fingerprint.withFallback(c.checkoutProfile.Locale)
+	}
+	return defaultRequestProfile("checkout").fingerprint()
 }
 
 type chatGPTApproveBlockedError struct {

@@ -81,6 +81,18 @@ func (s *httpSession) rebuildClient(fingerprint browserFingerprint) error {
 	return nil
 }
 
+func (s *httpSession) setProxy(proxyURL string) error {
+	if s == nil {
+		return fmt.Errorf("http session is nil")
+	}
+	proxyURL = strings.TrimSpace(proxyURL)
+	if s.proxyURL == proxyURL {
+		return nil
+	}
+	s.proxyURL = proxyURL
+	return s.rebuildClient(s.fingerprint)
+}
+
 func (s *httpSession) close() {
 	if s != nil && s.client != nil {
 		s.client.CloseIdleConnections()

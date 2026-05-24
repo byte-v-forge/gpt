@@ -2,59 +2,105 @@ import { numberValue, objectValue, stringValue } from '@/dashboard/module-kit';
 import { stepDetailData } from '@/dashboard/modules/workflow/sdk';
 import type { ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job, WorkflowProgress } from './types';
 
-export const GO_PAY_PAYMENT_CHANNELS: ConcreteGoPayPaymentChannel[] = ['sms', 'app_wa', 'wa'];
+type PaymentChannelDescriptor = {
+  value: ConcreteGoPayPaymentChannel;
+  canonical: '' | 'gopay_sms' | 'gopay_wa';
+  requestChannel: 'sms' | 'wa';
+  label: string;
+  actionLabel?: string;
+  aliases: string[];
+  match?: (value: string) => boolean;
+  pureWA?: boolean;
+};
+
+const PAYMENT_CHANNELS: PaymentChannelDescriptor[] = [{
+  value: 'sms',
+  canonical: 'gopay_sms',
+  requestChannel: 'sms',
+  label: 'Gopay-SMS',
+  aliases: ['sms', 'gopay_sms', 'gopay-sms'],
+  match: (value) => value.includes('sms') && value.includes('gopay')
+}, {
+  value: 'app_wa',
+  canonical: '',
+  requestChannel: 'wa',
+  label: 'Gopay App-WA',
+  aliases: ['app_wa', 'gopay_app_wa', 'gopay-app-wa']
+}, {
+  value: 'wa',
+  canonical: 'gopay_wa',
+  requestChannel: 'wa',
+  label: 'Gopay-WA',
+  actionLabel: '纯WA支付',
+  aliases: ['wa', 'whatsapp', 'gopay_wa', 'gopay-wa'],
+  match: (value) => (value.includes('wa') || value.includes('whatsapp')) && value.includes('gopay'),
+  pureWA: true
+}];
+
+type AddBalanceDescriptor = {
+  value: ConcreteGoPayAddBalanceMethod;
+  label: string;
+  aliases: string[];
+  payload: Record<string, Record<string, never>>;
+  match?: (value: string) => boolean;
+};
+
+const ADD_BALANCE_METHODS: AddBalanceDescriptor[] = [{
+  value: 'manual_transfer',
+  label: '手动转账',
+  aliases: ['manual_transfer', 'manual-transfer'],
+  payload: { manualTransfer: {} },
+  match: (value) => value.includes('manual_transfer') || value.includes('手动转账')
+}, {
+  value: 'envelope',
+  label: '红包',
+  aliases: ['envelope', 'claim_envelope'],
+  payload: { envelope: {} },
+  match: (value) => value.includes('envelope') || value.includes('红包')
+}, {
+  value: 'rekberinaja',
+  label: 'R平台',
+  aliases: ['rekberinaja', 'r_platform'],
+  payload: { rekberinaja: {} },
+  match: (value) => value.includes('rekberinaja') || value.includes('r平台')
+}];
+
+export const GO_PAY_PAYMENT_CHANNELS: ConcreteGoPayPaymentChannel[] = PAYMENT_CHANNELS.map((item) => item.value);
 
 export function paymentChannelValue(value: string): '' | 'gopay_sms' | 'gopay_wa' {
   const normalized = String(value || '').trim().toLowerCase();
   if (!normalized) return '';
-  if (normalized === 'sms' || normalized === 'gopay_sms' || normalized === 'gopay-sms') return 'gopay_sms';
-  if (normalized === 'wa' || normalized === 'whatsapp' || normalized === 'gopay_wa' || normalized === 'gopay-wa') return 'gopay_wa';
-  if (normalized.includes('sms') && normalized.includes('gopay')) return 'gopay_sms';
-  if ((normalized.includes('wa') || normalized.includes('whatsapp')) && normalized.includes('gopay')) return 'gopay_wa';
-  return '';
+  return paymentChannelDescriptor(normalized)?.canonical || '';
 }
 
 export function goPayPaymentChannelLabel(value: string) {
   const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'app_wa' || normalized === 'gopay_app_wa' || normalized === 'gopay-app-wa') return 'Gopay App-WA';
-  const channel = paymentChannelValue(value);
-  if (channel === 'gopay_sms') return 'Gopay-SMS';
-  if (channel === 'gopay_wa') return 'Gopay-WA';
-  return '-';
+  return paymentChannelDescriptor(normalized)?.label || '-';
 }
 
 export function goPayPaymentActionLabel(channel: ConcreteGoPayPaymentChannel) {
-  if (channel === 'wa') return '纯WA支付';
-  return goPayPaymentChannelLabel(channel);
+  const descriptor = paymentChannelDescriptor(channel);
+  return descriptor?.actionLabel || descriptor?.label || '-';
 }
 
 export function goPayPaymentRequestChannel(channel: ConcreteGoPayPaymentChannel): 'sms' | 'wa' {
-  return channel === 'app_wa' ? 'wa' : channel;
+  return paymentChannelDescriptor(channel)?.requestChannel || 'sms';
 }
 
 export function isPureGoPayWAPaymentChannel(channel: ConcreteGoPayPaymentChannel) {
-  return channel === 'wa';
+  return paymentChannelDescriptor(channel)?.pureWA === true;
 }
 
 export function goPayAddBalancePayload(method: ConcreteGoPayAddBalanceMethod) {
-  if (method === 'rekberinaja') return { rekberinaja: {} };
-  if (method === 'envelope') return { envelope: {} };
-  return { manualTransfer: {} };
+  return addBalanceDescriptor(method)?.payload || { manualTransfer: {} };
 }
 
 export function addBalanceMethodValue(value: string) {
-  if (isRekberinajaActivation(value)) return 'rekberinaja';
-  if (isEnvelopeActivation(value)) return 'envelope';
-  if (isManualTransferActivation(value)) return 'manual_transfer';
-  return '';
+  return addBalanceDescriptor(value)?.value || '';
 }
 
 export function addBalanceMethodLabel(value: string) {
-  const method = addBalanceMethodValue(value);
-  if (method === 'rekberinaja') return 'R平台';
-  if (method === 'envelope') return '红包';
-  if (method === 'manual_transfer') return '手动转账';
-  return '';
+  return addBalanceDescriptor(value)?.label || '';
 }
 
 export function canRetryGoPayPaymentRebind(job: Job) {
@@ -127,17 +173,12 @@ function isHttpURL(value: string) {
   return /^https?:\/\//i.test(String(value || '').trim());
 }
 
-function isManualTransferActivation(value: string) {
+function paymentChannelDescriptor(value: string) {
   const normalized = String(value || '').trim().toLowerCase();
-  return normalized === 'manual_transfer' || normalized === 'manual-transfer' || normalized.includes('manual_transfer') || normalized.includes('手动转账');
+  return PAYMENT_CHANNELS.find((item) => item.aliases.includes(normalized) || item.match?.(normalized));
 }
 
-function isRekberinajaActivation(value: string) {
+function addBalanceDescriptor(value: string) {
   const normalized = String(value || '').trim().toLowerCase();
-  return normalized === 'rekberinaja' || normalized === 'r_platform' || normalized.includes('rekberinaja') || normalized.includes('r平台');
-}
-
-function isEnvelopeActivation(value: string) {
-  const normalized = String(value || '').trim().toLowerCase();
-  return normalized === 'envelope' || normalized === 'claim_envelope' || normalized.includes('envelope') || normalized.includes('红包');
+  return ADD_BALANCE_METHODS.find((item) => item.aliases.includes(normalized) || item.match?.(normalized));
 }

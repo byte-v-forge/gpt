@@ -2,7 +2,6 @@ package activities
 
 import (
 	"context"
-	"time"
 
 	"orchestrator/pb"
 )
@@ -90,23 +89,24 @@ func (s *Server) CodexOAuthDetectProtocolStageActivity(ctx context.Context, inpu
 
 func (s *Server) CodexOAuthSubmitProtocolEmailActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthProtocolStageStep(ctx, input, stepCodexOAuthProtocolEmail, "submitting codex oauth protocol email", func(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
+		issuedAfter := codexOAuthEmailOTPRequestIssuedAfterUnix()
 		sentinel := codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue")
 		resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/authorize/continue", "https://auth.openai.com/log-in", map[string]any{
 			"username":    map[string]any{"value": account.GetEmail(), "kind": "email"},
 			"screen_hint": "login",
 		}, sentinel)
 		if err != nil {
-			return "", 0, err
+			return "", issuedAfter, err
 		}
 		stage, err := advanceCodexOAuthProtocolJSON(ctx, client, state, resp, "email", data)
 		_ = fetchCodexOAuthClientAuthSessionDump(ctx, client, state, data, stage)
-		return codexOAuthProtocolStageFromDump(state, stage), 0, err
+		return codexOAuthProtocolStageFromDump(state, stage), issuedAfter, err
 	})
 }
 
 func (s *Server) CodexOAuthSubmitProtocolPasswordActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthProtocolStageStep(ctx, input, stepCodexOAuthProtocolPassword, "submitting codex oauth protocol password", func(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
-		issuedAfter := time.Now().Add(-time.Second).Unix()
+		issuedAfter := codexOAuthEmailOTPRequestIssuedAfterUnix()
 		sentinel := codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue")
 		resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/password/verify", "https://auth.openai.com/log-in/password", map[string]any{"password": account.GetPassword()}, sentinel)
 		if err != nil {

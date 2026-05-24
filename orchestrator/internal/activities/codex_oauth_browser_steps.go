@@ -11,11 +11,12 @@ func (s *Server) CodexOAuthDetectBrowserStageActivity(ctx context.Context, input
 
 func (s *Server) CodexOAuthSubmitEmailActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthBrowserStageStep(ctx, input, stepCodexOAuthBrowserEmail, "submitting codex oauth email", func(flow *codexOAuthBrowserFlow, accountEmail string) (string, int64, error) {
-		if err := flow.browserFlow.submitCodexOAuthEmail(flow.server.browserAutomationClient, flow.server.browserAuthConfig, accountEmail); err != nil {
-			return "", 0, err
+		issuedAfter, err := flow.browserFlow.submitCodexOAuthEmail(flow.server.browserAutomationClient, flow.server.browserAuthConfig, accountEmail)
+		if err != nil {
+			return "", issuedAfter, err
 		}
 		stage, err := flow.browserFlow.detectCodexOAuthStage(flow.server.browserAutomationClient, flow.server.browserAuthConfig)
-		return stage, 0, err
+		return stage, issuedAfter, err
 	})
 }
 

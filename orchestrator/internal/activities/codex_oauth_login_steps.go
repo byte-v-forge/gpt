@@ -9,6 +9,23 @@ import (
 	"orchestrator/pb"
 )
 
+const codexOAuthEmailOTPClockSkew = 5 * time.Second
+
+func codexOAuthEmailOTPRequestIssuedAfterUnix() int64 {
+	return time.Now().Unix()
+}
+
+func codexOAuthEmailOTPWaitIssuedAfterUnix(issuedAfter int64) int64 {
+	if issuedAfter <= 0 {
+		return 0
+	}
+	skew := int64(codexOAuthEmailOTPClockSkew / time.Second)
+	if issuedAfter <= skew {
+		return 0
+	}
+	return issuedAfter - skew
+}
+
 func (f *browserAuthFlow) openCodexOAuthEntry(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, authorizeURL string) error {
 	results, err := f.execute(client, cfg, "codex-oauth-open", []*browserautomationv1.BrowserCommand{
 		navigateCommand("open-codex-oauth", authorizeURL, cfg.CommandTimeout),
@@ -36,7 +53,7 @@ func (f *browserAuthFlow) ensureCodexOAuthLoggedIn(ctx context.Context, s *Serve
 		data["login_stage"] = stage
 		return nil
 	}
-	if err := f.submitCodexOAuthEmail(s.browserAutomationClient, cfg, account.GetEmail()); err != nil {
+	if _, err := f.submitCodexOAuthEmail(s.browserAutomationClient, cfg, account.GetEmail()); err != nil {
 		return err
 	}
 	issuedAfter, err := f.submitCodexOAuthPassword(s.browserAutomationClient, cfg, account.GetPassword())
@@ -64,7 +81,8 @@ func (f *browserAuthFlow) ensureCodexOAuthLoggedIn(ctx context.Context, s *Serve
 	return nil
 }
 
-func (f *browserAuthFlow) submitCodexOAuthEmail(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, email string) error {
+func (f *browserAuthFlow) submitCodexOAuthEmail(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, email string) (int64, error) {
+	issuedAfter := codexOAuthEmailOTPRequestIssuedAfterUnix()
 	results, err := f.execute(client, cfg, "codex-oauth-email", []*browserautomationv1.BrowserCommand{
 		waitForLoadStateCommand("wait-email-dom-ready", browserautomationv1.BrowserLoadState_BROWSER_LOAD_STATE_DOM_CONTENT_LOADED, 10*time.Second, true),
 		waitForLoadStateCommand("wait-email-network-idle", browserautomationv1.BrowserLoadState_BROWSER_LOAD_STATE_NETWORK_IDLE, 5*time.Second, true),
@@ -77,16 +95,16 @@ func (f *browserAuthFlow) submitCodexOAuthEmail(client browserautomationv1.Brows
 		getPageStateCommand("email-state", true, true, false, 5*time.Second),
 	})
 	if err != nil {
-		return err
+		return issuedAfter, err
 	}
 	if browserAuthAnyCommandSucceeded(results, "wait-password-or-otp") {
-		return nil
+		return issuedAfter, nil
 	}
-	return browserAuthStepError(f.mode, "email", "next_step_missing", browserAuthPageStateData(results, "email-state"))
+	return issuedAfter, browserAuthStepError(f.mode, "email", "next_step_missing", browserAuthPageStateData(results, "email-state"))
 }
 
 func (f *browserAuthFlow) submitCodexOAuthPassword(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, password string) (int64, error) {
-	issuedAfter := time.Now().Add(-time.Second).Unix()
+	issuedAfter := codexOAuthEmailOTPRequestIssuedAfterUnix()
 	if _, err := f.execute(client, cfg, "codex-oauth-password", []*browserautomationv1.BrowserCommand{
 		waitForLoadStateCommand("wait-password-dom-ready", browserautomationv1.BrowserLoadState_BROWSER_LOAD_STATE_DOM_CONTENT_LOADED, 10*time.Second, true),
 		waitTimeoutCommand("settle-password-page", 500*time.Millisecond),
@@ -114,7 +132,7 @@ func (s *Server) waitCodexOAuthEmailOTP(ctx context.Context, _ string, email str
 	resp, err := s.mailboxClient.WaitForMailboxEmail(reqCtx, &pb.WaitForEmailRequest{
 		EmailAddress:    email,
 		TimeoutSeconds:  wait,
-		IssuedAfterUnix: issuedAfter,
+		IssuedAfterUnix: codexOAuthEmailOTPWaitIssuedAfterUnix(issuedAfter),
 		SignalKind:      pb.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP,
 	})
 	if err != nil {

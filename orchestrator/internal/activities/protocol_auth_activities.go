@@ -592,16 +592,30 @@ func protocolAuthCompleteStepName(mode string) (string, error) {
 }
 
 func protocolAuthProfile(account *pb.Account) (string, string) {
-	name := strings.TrimSpace(strings.Join([]string{account.GetFirstName(), account.GetLastName()}, " "))
+	name := protocolAuthDisplayName(account)
 	if name == "" {
 		name = browserAuthDefaultRegistrationName
 	}
-	birthdate := strings.TrimSpace(account.GetDob())
-	if parsed, err := time.Parse("01/02/2006", birthdate); err == nil {
-		birthdate = parsed.Format("2006-01-02")
+	return name, "2000-01-01"
+}
+
+func protocolAuthDisplayName(account *pb.Account) string {
+	if account == nil {
+		return ""
 	}
-	if _, err := time.Parse("2006-01-02", birthdate); err != nil {
-		birthdate = "1990-01-15"
+	name := strings.TrimSpace(strings.Join([]string{account.GetFirstName(), account.GetLastName()}, " "))
+	var out strings.Builder
+	lastSpace := false
+	for _, r := range name {
+		if r >= 'A' && r <= 'Z' || r >= 'a' && r <= 'z' {
+			out.WriteRune(r)
+			lastSpace = false
+			continue
+		}
+		if r == ' ' && !lastSpace && out.Len() > 0 {
+			out.WriteRune(' ')
+			lastSpace = true
+		}
 	}
-	return name, birthdate
+	return strings.TrimSpace(out.String())
 }

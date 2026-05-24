@@ -13,16 +13,15 @@ export function AccountRowAuthGroups({ account, busy, onRegisterProtocol, onLogi
 }) {
   return (
     <div className="rowAuthGroups">
-      <RowActionGroup label="协议" actions={protocolActions(account, busy, onRegisterProtocol, onLoginProtocol, onCodexOAuthProtocol)} />
+      <RowActionGroup actions={protocolActions(account, busy, onRegisterProtocol, onLoginProtocol, onCodexOAuthProtocol)} />
     </div>
   );
 }
 
-function RowActionGroup({ label, actions }: { label: string; actions: RowActionDescriptor[] }) {
+function RowActionGroup({ actions }: { actions: RowActionDescriptor[] }) {
   if (actions.length === 0) return null;
   return (
     <span className="rowActionGroup">
-      <span className="rowActionGroupLabel">{label}</span>
       <RecordActionButtons actions={actions} />
     </span>
   );
@@ -30,10 +29,10 @@ function RowActionGroup({ label, actions }: { label: string; actions: RowActionD
 
 function protocolActions(account: Account, busy: boolean, onRegister: (a: Account) => void, onLogin: (a: Account) => void, onAuth: (a: Account) => void): RowActionDescriptor[] {
   const actions: RowActionDescriptor[] = [];
-  if (canRegister(account)) actions.push({ label: '协议注册', icon: <Play size={14} />, onClick: () => onRegister(account), disabled: busy, kind: 'secondary' });
+  if (canRegister(account)) actions.push({ label: '注册', icon: <Play size={14} />, onClick: () => onRegister(account), disabled: busy, kind: 'secondary' });
   if (canLoginSession(account)) {
-    actions.push({ label: '协议登录', icon: <KeyRound size={14} />, onClick: () => onLogin(account), disabled: busy, kind: 'secondary' });
-    actions.push({ label: '协议 auth.json', icon: <FileKey size={14} />, onClick: () => onAuth(account), disabled: busy, kind: 'secondary' });
+    actions.push({ label: '登录', icon: <KeyRound size={14} />, onClick: () => onLogin(account), disabled: busy, kind: 'secondary' });
+    actions.push({ label: 'auth.json', icon: <FileKey size={14} />, onClick: () => onAuth(account), disabled: busy, kind: 'secondary' });
   }
   return actions;
 }

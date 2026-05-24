@@ -29,14 +29,34 @@ func (f *browserAuthFlow) completeCodexOAuthConsentAndCallback(client browseraut
 	if err != nil {
 		return "", err
 	}
-	rawURL := stringMapValue(commandResultMap(results, "callback-state"), "url")
-	if rawURL == "" {
-		rawURL = stringMapValue(commandResultMap(results, "wait-callback-url"), "current_url")
-	}
+	rawURL := codexOAuthCallbackURLFromResults(results)
 	if rawURL == "" {
 		return "", browserAuthStepError(f.mode, "callback", "callback_url_missing", browserAuthPageStateData(results, "callback-state"))
 	}
 	return rawURL, nil
+}
+
+func codexOAuthCallbackURLFromResults(results []*browserautomationv1.BrowserCommandResult) string {
+	candidates := []string{
+		commandResultCurrentURL(results, "callback-state"),
+		commandResultCurrentURL(results, "wait-callback-url"),
+		stringMapValue(commandResultMap(results, "callback-state"), "url"),
+		stringMapValue(commandResultMap(results, "wait-callback-url"), "current_url"),
+	}
+	fallback := ""
+	for _, candidate := range candidates {
+		candidate = strings.TrimSpace(candidate)
+		if candidate == "" {
+			continue
+		}
+		if fallback == "" {
+			fallback = candidate
+		}
+		if strings.Contains(candidate, "/auth/callback") {
+			return candidate
+		}
+	}
+	return fallback
 }
 
 func (f *browserAuthFlow) detectCodexOAuthStage(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig) (string, error) {

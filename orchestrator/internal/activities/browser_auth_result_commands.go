@@ -23,6 +23,15 @@ func commandResultMap(results []*browserautomationv1.BrowserCommandResult, comma
 	return nil
 }
 
+func commandResultCurrentURL(results []*browserautomationv1.BrowserCommandResult, commandID string) string {
+	for _, result := range results {
+		if result.GetCommandId() == commandID {
+			return strings.TrimSpace(result.GetCurrentUrl())
+		}
+	}
+	return ""
+}
+
 func browserAuthCommandSucceeded(results []*browserautomationv1.BrowserCommandResult, commandID string) bool {
 	for _, result := range results {
 		if result.GetCommandId() == commandID {

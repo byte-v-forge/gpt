@@ -69,12 +69,12 @@ func (s *Server) newCodexOAuthBrowserStartFlow(ctx context.Context, account *pb.
 		pkce:          pkce,
 		state:         state,
 		authorizeURL:  buildCodexOAuthAuthorizeURL(cfg, pkce, state),
-		browserFlow:   newCodexOAuthBrowserAuthFlow(ctx, jobID, account),
+		browserFlow:   newCodexOAuthBrowserAuthFlow(ctx, jobID, account, stepCodexOAuthBrowserStart),
 		failure:       "codex oauth browser did not complete",
 	}, nil
 }
 
-func (s *Server) newCodexOAuthBrowserSessionFlow(ctx context.Context, account *pb.Account, jobID, label string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, allowAddPhone bool, markPhoneConfirmed bool, session *CodexOAuthBrowserSession, data map[string]any) (*codexOAuthBrowserFlow, error) {
+func (s *Server) newCodexOAuthBrowserSessionFlow(ctx context.Context, account *pb.Account, jobID, label string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, allowAddPhone bool, markPhoneConfirmed bool, session *CodexOAuthBrowserSession, data map[string]any, taskScope string) (*codexOAuthBrowserFlow, error) {
 	if s.browserAutomationClient == nil {
 		return nil, fmt.Errorf("browser automation client is not configured")
 	}
@@ -86,7 +86,7 @@ func (s *Server) newCodexOAuthBrowserSessionFlow(ctx context.Context, account *p
 			return nil, err
 		}
 	}
-	browserFlow := newCodexOAuthBrowserAuthFlow(ctx, jobID, account)
+	browserFlow := newCodexOAuthBrowserAuthFlow(ctx, jobID, account, taskScope)
 	browserFlow.flowID = strings.TrimSpace(session.GetFlowId())
 	browserFlow.sessionID = strings.TrimSpace(session.GetSessionId())
 	return &codexOAuthBrowserFlow{
@@ -106,8 +106,9 @@ func (s *Server) newCodexOAuthBrowserSessionFlow(ctx context.Context, account *p
 	}, nil
 }
 
-func newCodexOAuthBrowserAuthFlow(ctx context.Context, jobID string, account *pb.Account) *browserAuthFlow {
+func newCodexOAuthBrowserAuthFlow(ctx context.Context, jobID string, account *pb.Account, taskScope string) *browserAuthFlow {
 	flow := newBrowserAuthFlow(codexOAuthBrowserMode, jobID, account)
+	flow.setTaskScope(taskScope)
 	flow.cancel()
 	flow.ctx, flow.cancel = context.WithCancel(ctx)
 	return flow

@@ -64,5 +64,8 @@ func (f *browserAuthFlow) nextTaskRequestID(taskKey string) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.taskSeq++
+	if f.taskScope != "" {
+		return fmt.Sprintf("gpt-browser-auth-%s-%s-%04d-%s", f.flowID, f.taskScope, f.taskSeq, taskKey)
+	}
 	return fmt.Sprintf("gpt-browser-auth-%s-%04d-%s", f.flowID, f.taskSeq, taskKey)
 }

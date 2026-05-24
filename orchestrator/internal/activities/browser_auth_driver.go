@@ -14,6 +14,7 @@ import (
 type browserAuthFlow struct {
 	mu         sync.Mutex
 	flowID     string
+	taskScope  string
 	mode       string
 	jobID      string
 	email      string
@@ -74,6 +75,18 @@ func newBrowserAuthFlow(mode, jobID string, account *pb.Account) *browserAuthFlo
 		otpCh:     make(chan string, 1),
 		doneCh:    make(chan struct{}),
 	}
+}
+
+func (f *browserAuthFlow) setTaskScope(scope string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.taskScope = strings.TrimSpace(scope)
+}
+
+func (f *browserAuthFlow) getTaskScope() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.taskScope
 }
 
 func (s *Server) browserAuthStart(ctx context.Context, mode, jobID string, account *pb.Account) (*pb.StartRegisterResponse, error) {

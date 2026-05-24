@@ -23,7 +23,7 @@ func (s *Server) CodexOAuthCompleteBrowserActivity(ctx context.Context, input Co
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		flow, err := s.newCodexOAuthBrowserSessionFlow(ctx, account, input.GetJobId(), label, nil, cfg, false, input.GetMarkPhoneConfirmedOnSuccess(), input.GetSession(), data)
+		flow, err := s.newCodexOAuthBrowserSessionFlow(ctx, account, input.GetJobId(), label, nil, cfg, false, input.GetMarkPhoneConfirmedOnSuccess(), input.GetSession(), data, stepCodexOAuthBrowserComplete)
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err

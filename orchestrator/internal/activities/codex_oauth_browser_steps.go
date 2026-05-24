@@ -59,7 +59,7 @@ func (s *Server) codexOAuthBrowserStageStep(ctx context.Context, input CodexOAut
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		flow, err := s.newCodexOAuthBrowserSessionFlow(ctx, account, input.GetJobId(), label, nil, cfg, false, false, input.GetSession(), data)
+		flow, err := s.newCodexOAuthBrowserSessionFlow(ctx, account, input.GetJobId(), label, nil, cfg, false, false, input.GetSession(), data, stepName)
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err

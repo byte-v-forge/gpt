@@ -16,7 +16,7 @@ func (s *Server) CodexOAuthAddPhoneBrowserActivity(ctx context.Context, input Co
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		flow, err := s.newCodexOAuthBrowserSessionFlow(ctx, account, input.GetJobId(), label, input.GetPhone(), cfg, input.GetAllowAddPhone(), false, input.GetSession(), data)
+		flow, err := s.newCodexOAuthBrowserSessionFlow(ctx, account, input.GetJobId(), label, input.GetPhone(), cfg, input.GetAllowAddPhone(), false, input.GetSession(), data, stepCodexOAuthBrowserAddPhone)
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err

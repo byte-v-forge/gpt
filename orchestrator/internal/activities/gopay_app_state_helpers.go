@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,77 @@ func goPayWorkflowStatePresent(stateJSON string) bool {
 		return false
 	}
 	return len(state) > 0
+}
+
+func goPayCachedBalanceReadyData(stateJSON, source string) (map[string]any, bool) {
+	var state map[string]any
+	if err := json.Unmarshal([]byte(normalizeGoPayWorkflowStateJSON(stateJSON)), &state); err != nil || len(state) == 0 {
+		return nil, false
+	}
+	amount := int64MapValue(state, "balance_amount")
+	currency := stringMapValue(state, "balance_currency")
+	hasMinBalance := boolMapValue(state, "has_min_balance") || amount >= 1
+	tokenPresent := stringMapValue(state, "token") != "" || boolMapValue(state, "token_present")
+	if !hasMinBalance || !tokenPresent || stringMapValue(state, "stage") != "ready" {
+		return nil, false
+	}
+	if currency == "" {
+		currency = "IDR"
+	}
+	data := map[string]any{
+		"response_present": true,
+		"success":          true,
+		"token_valid":      true,
+		"balance_ready":    true,
+		"has_min_balance":  true,
+		"balance_amount":   amount,
+		"balance_currency": currency,
+		"cache_fallback":   true,
+	}
+	if source = strings.TrimSpace(source); source != "" {
+		data["source"] = source
+	}
+	if stage := stringMapValue(state, "stage"); stage != "" {
+		data["stage"] = stage
+	}
+	if phone := stringMapValue(state, "phone"); phone != "" {
+		data["phone"] = phone
+	}
+	return data, true
+}
+
+func boolMapValue(data map[string]any, key string) bool {
+	if data == nil {
+		return false
+	}
+	value, ok := data[key]
+	if !ok || value == nil {
+		return false
+	}
+	switch typed := value.(type) {
+	case bool:
+		return typed
+	case int:
+		return typed != 0
+	case int32:
+		return typed != 0
+	case int64:
+		return typed != 0
+	case float32:
+		return typed != 0
+	case float64:
+		return typed != 0
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "1" {
+			return true
+		}
+		parsed, _ := strconv.ParseBool(trimmed)
+		return parsed
+	default:
+		parsed, _ := strconv.ParseBool(strings.TrimSpace(fmt.Sprint(typed)))
+		return parsed
+	}
 }
 
 func goPayWorkflowStateAfter(current, next string) string {

@@ -225,16 +225,29 @@ func (s *Server) checkTokenValid(ctx context.Context, state stateMap) map[string
 
 func (s *Server) tokenValidResult(ctx context.Context, state stateMap, profile map[string]any, refreshed bool) map[string]any {
 	balance := s.checkBalance(ctx, state)
+	balanceOK := anyBool(balance["success"])
+	amount := anyInt(balance["balance_amount"])
+	currency := anyString(balance["balance_currency"])
+	if !balanceOK {
+		amount = firstNonZero(amount, stateInt(state, "balance_amount"))
+		currency = firstNonEmpty(currency, stateString(state, "balance_currency"))
+	}
+	cachedMinBalance := !balanceOK && (anyBool(state["has_min_balance"]) || stateInt(state, "balance_amount") >= s.cfg.MinBalanceRp)
+	hasMinBalance := anyBool(balance["has_min_balance"]) || cachedMinBalance
 	result := map[string]any{
-		"success":          anyBool(balance["success"]),
+		"success":          balanceOK || cachedMinBalance,
 		"token_valid":      true,
 		"refreshed":        refreshed,
 		"phone":            profile["phone"],
-		"balance_amount":   firstNonZero(anyInt(balance["balance_amount"]), stateInt(state, "balance_amount")),
-		"balance_currency": firstNonEmpty(anyString(balance["balance_currency"]), stateString(state, "balance_currency")),
-		"has_min_balance":  anyBool(balance["has_min_balance"]),
+		"balance_amount":   amount,
+		"balance_currency": firstNonEmpty(currency, "IDR"),
+		"has_min_balance":  hasMinBalance,
 	}
-	if !anyBool(balance["success"]) {
+	if cachedMinBalance {
+		result["cached_balance"] = true
+		result["balance_check_error"] = firstNonEmpty(anyString(balance["error"]), "balance check failed")
+	}
+	if !balanceOK && !cachedMinBalance {
 		result["error"] = firstNonEmpty(anyString(balance["error"]), "balance check failed")
 	}
 	return result

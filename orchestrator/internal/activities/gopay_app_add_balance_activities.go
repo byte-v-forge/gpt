@@ -25,6 +25,7 @@ func (s *Server) GoPayAppAddBalanceActivity(ctx context.Context, input GoPayAppA
 
 func (s *Server) GoPayAppBalanceCheckActivity(ctx context.Context, input GoPayAppStepInput) (GoPayAppStepOutput, error) {
 	output := GoPayAppStepOutput{StateJson: normalizeGoPayWorkflowStateJSON(input.GetStateJson())}
+	step := s.activityStep(ctx, input.GetJobId(), stepGoPayAppEnsureBalance, false, true)
 	resp, nextStateJSON, err := s.validateGoPayAccountTokenForState(ctx, output.GetStateJson())
 	output.StateJson = nextStateJSON
 	data := checkTokenValidData(resp)
@@ -37,8 +38,69 @@ func (s *Server) GoPayAppBalanceCheckActivity(ctx context.Context, input GoPayAp
 		output.AccountTokenReady = output.GetReady()
 		data["balance_ready"] = resp.GetHasMinBalance() || resp.GetBalanceAmount() >= 1
 	}
+	if !goPayBalanceCheckDataReady(data) && (err != nil || resp == nil || !resp.GetSuccess()) {
+		if cached, ok := goPayCachedBalanceReadyData(output.GetStateJson(), "workflow_state_cache"); ok {
+			data = mergeGoPayBalanceCheckData(data, cached)
+			applyGoPayBalanceCheckReadyOutput(&output, data)
+		} else if storedStateJSON, loadErr := s.loadGoPayAppState(ctx); loadErr == nil {
+			if cached, ok := goPayCachedBalanceReadyData(storedStateJSON, "stored_state_cache"); ok {
+				output.StateJson = normalizeGoPayWorkflowStateJSON(storedStateJSON)
+				data = mergeGoPayBalanceCheckData(data, cached)
+				applyGoPayBalanceCheckReadyOutput(&output, data)
+			}
+		} else {
+			data["state_cache_error"] = loadErr.Error()
+		}
+	}
+	if input.GetJobId() != "" {
+		if goPayBalanceCheckDataReady(data) {
+			step.progress("gopay balance ready", map[string]any{
+				"balance_amount":   data["balance_amount"],
+				"balance_currency": data["balance_currency"],
+				"source":           data["source"],
+			})
+		} else {
+			step.progress("checking gopay balance", map[string]any{
+				"balance_amount":   data["balance_amount"],
+				"balance_currency": data["balance_currency"],
+				"error_message":    data["error_message"],
+			})
+		}
+	}
 	output.Data = protoData(data)
 	return output, nil
+}
+
+func goPayBalanceCheckDataReady(data map[string]any) bool {
+	if boolMapValue(data, "has_min_balance") || int64MapValue(data, "balance_amount") >= 1 {
+		return true
+	}
+	return boolMapValue(data, "balance_ready")
+}
+
+func mergeGoPayBalanceCheckData(current, cached map[string]any) map[string]any {
+	if len(current) == 0 {
+		return cached
+	}
+	merged := make(map[string]any, len(current)+len(cached)+1)
+	for key, value := range current {
+		merged[key] = value
+	}
+	for key, value := range cached {
+		merged[key] = value
+	}
+	merged["live_check"] = current
+	return merged
+}
+
+func applyGoPayBalanceCheckReadyOutput(output *GoPayAppStepOutput, data map[string]any) {
+	if output == nil {
+		return
+	}
+	output.Stage = stringMapValue(data, "stage")
+	output.Phone = stringMapValue(data, "phone")
+	output.Ready = true
+	output.AccountTokenReady = true
 }
 
 func (s *Server) applyGoPayAddBalanceReadyFromToken(ctx context.Context, output *GoPayAppAddBalanceOutput, data map[string]any, reason string) bool {

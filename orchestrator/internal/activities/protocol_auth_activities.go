@@ -389,7 +389,7 @@ func (s *Server) protocolAuthValidateEmailOTP(ctx context.Context, client *codex
 	if err != nil {
 		return err
 	}
-	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/email-otp/validate", "https://auth.openai.com/email-verification", map[string]any{"code": normalizeOTP(otp)})
+	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/email-otp/validate", "https://auth.openai.com/email-verification", map[string]any{"code": normalizeOTP(otp)}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue"))
 	if err != nil {
 		return err
 	}
@@ -399,10 +399,12 @@ func (s *Server) protocolAuthValidateEmailOTP(ctx context.Context, client *codex
 
 func (s *Server) protocolAuthCreateAccount(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, error) {
 	name, birthdate := protocolAuthProfile(account)
+	data["profile_name_present"] = name != ""
+	data["profile_birthdate_fixed"] = birthdate == "2000-01-01"
 	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/create_account", "https://auth.openai.com/about-you", map[string]any{
 		"name":      name,
 		"birthdate": birthdate,
-	}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "create_account"))
+	}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "oauth_create_account"))
 	if err != nil {
 		return "", err
 	}

@@ -22,6 +22,21 @@ func navigateCommand(commandID, url string, timeout time.Duration) *browserautom
 	}
 }
 
+func reloadCommand(commandID string, timeout time.Duration, continueOnError bool) *browserautomationv1.BrowserCommand {
+	return &browserautomationv1.BrowserCommand{
+		CommandId:       commandID,
+		CommandKey:      commandID,
+		Timeout:         durationpb.New(timeout),
+		ContinueOnError: continueOnError,
+		Operation: &browserautomationv1.BrowserCommand_Reload{
+			Reload: &browserautomationv1.ReloadCommand{
+				WaitUntil: browserautomationv1.BrowserNavigationWaitUntil_BROWSER_NAVIGATION_WAIT_UNTIL_DOM_CONTENT_LOADED,
+				Timeout:   durationpb.New(timeout),
+			},
+		},
+	}
+}
+
 func clickCommand(commandID string, selectorGroup *browserautomationv1.BrowserSelectorGroup, timeout time.Duration, continueOnError bool) *browserautomationv1.BrowserCommand {
 	return &browserautomationv1.BrowserCommand{
 		CommandId:       commandID,

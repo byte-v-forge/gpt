@@ -67,7 +67,7 @@ func browserAuthRegisterPasswordSelector() *browserautomationv1.BrowserSelector 
 }
 
 func browserAuthRegisterOTPSelector() *browserautomationv1.BrowserSelector {
-	return cssSelector(`input[name="code"][autocomplete="one-time-code"][placeholder="Code"]`)
+	return cssSelector(`input[name="code"][autocomplete="one-time-code"],input[name="code"],input[autocomplete="one-time-code"],input[placeholder="Code"],input[placeholder*="verification" i],input[aria-label*="code" i],input[id$="-code"],input[id*="code" i],input[data-testid*="code" i],input[data-testid*="otp" i]`)
 }
 
 func browserAuthLoginEmailAdvancedSelector() *browserautomationv1.BrowserSelectorGroup {

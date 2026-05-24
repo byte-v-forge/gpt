@@ -23,12 +23,22 @@ func (f *browserAuthFlow) resendRegisterEmailOTP(client browserautomationv1.Brow
 	if !browserAuthCommandSucceeded(results, "wait-resend-email-request") {
 		return 0, browserAuthStepError(f.mode, "resend", "resend_email_request_missing", state)
 	}
-	if !browserAuthCommandSucceeded(results, "wait-resend-email-code") {
-		return 0, browserAuthStepError(f.mode, "resend", "email_verification_input_missing", state)
-	}
 	startedAt := browserAuthNetworkRequestStartedAtUnixMs(results, "wait-resend-email-request")
 	if startedAt <= 0 {
 		startedAt = startedAfter
+	}
+	if !browserAuthCommandSucceeded(results, "wait-resend-email-code") {
+		recoveredState, recovered, recoverErr := f.recoverRegisterEmailVerificationCode(client, cfg, "register-resend-email-verification-reload")
+		if recoverErr != nil {
+			return 0, recoverErr
+		}
+		if recovered {
+			return startedAt, nil
+		}
+		if recoveredState != nil {
+			state = recoveredState
+		}
+		return 0, browserAuthStepError(f.mode, "resend", "email_verification_input_missing", state)
 	}
 	return startedAt, nil
 }

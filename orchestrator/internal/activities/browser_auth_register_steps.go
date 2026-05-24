@@ -62,12 +62,22 @@ func (f *browserAuthFlow) submitRegisterEmail(client browserautomationv1.Browser
 	if !browserAuthCommandSucceeded(results, "wait-email-submit-request") {
 		return 0, browserAuthStepError(f.mode, "email", "email_submit_request_missing", state)
 	}
-	if !browserAuthCommandSucceeded(results, "wait-email-verification-code") {
-		return 0, browserAuthStepError(f.mode, "email", "email_verification_input_missing", state)
-	}
 	startedAt := browserAuthNetworkRequestStartedAtUnixMs(results, "wait-email-submit-request")
 	if startedAt <= 0 {
 		startedAt = startedAfter
+	}
+	if !browserAuthCommandSucceeded(results, "wait-email-verification-code") {
+		recoveredState, recovered, recoverErr := f.recoverRegisterEmailVerificationCode(client, cfg, "register-email-verification-reload")
+		if recoverErr != nil {
+			return 0, recoverErr
+		}
+		if recovered {
+			return startedAt, nil
+		}
+		if recoveredState != nil {
+			state = recoveredState
+		}
+		return 0, browserAuthStepError(f.mode, "email", "email_verification_input_missing", state)
 	}
 	return startedAt, nil
 }
@@ -136,12 +146,37 @@ func (f *browserAuthFlow) submitRegisterPassword(client browserautomationv1.Brow
 	if !browserAuthCommandSucceeded(results, "wait-password-register-request") {
 		return 0, browserAuthStepError(f.mode, "password", "password_register_request_missing", state)
 	}
-	if !browserAuthCommandSucceeded(results, "wait-password-email-verification-code") {
-		return 0, browserAuthStepError(f.mode, "password", "email_verification_input_missing", state)
-	}
 	startedAt := browserAuthNetworkRequestStartedAtUnixMs(results, "wait-password-register-request")
 	if startedAt <= 0 {
 		startedAt = startedAfter
 	}
+	if !browserAuthCommandSucceeded(results, "wait-password-email-verification-code") {
+		recoveredState, recovered, recoverErr := f.recoverRegisterEmailVerificationCode(client, cfg, "register-password-email-verification-reload")
+		if recoverErr != nil {
+			return 0, recoverErr
+		}
+		if recovered {
+			return startedAt, nil
+		}
+		if recoveredState != nil {
+			state = recoveredState
+		}
+		return 0, browserAuthStepError(f.mode, "password", "email_verification_input_missing", state)
+	}
 	return startedAt, nil
+}
+
+func (f *browserAuthFlow) recoverRegisterEmailVerificationCode(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, taskKey string) (map[string]any, bool, error) {
+	results, err := f.execute(client, cfg, taskKey, []*browserautomationv1.BrowserCommand{
+		waitTimeoutCommand("wait-before-email-verification-reload", 2*time.Second),
+		reloadCommand("reload-email-verification", 20*time.Second, true),
+		waitForLoadStateCommand("wait-email-verification-dom", browserautomationv1.BrowserLoadState_BROWSER_LOAD_STATE_DOM_CONTENT_LOADED, 20*time.Second, true),
+		waitForSelectorCommand("wait-email-verification-code-after-reload", browserAuthRegisterOTPSelector(), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 45*time.Second, true),
+		getPageStateCommand("email-verification-reload-state", true, true, false, 5*time.Second),
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	state := browserAuthPageStateData(results, "email-verification-reload-state")
+	return state, browserAuthCommandSucceeded(results, "wait-email-verification-code-after-reload"), nil
 }

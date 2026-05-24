@@ -58,24 +58,6 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     }
   }
 
-  async function submitJobOTP(jobId: string, otp: string) {
-    const resp = await api<{ success?: boolean; error_message?: string }>(`/api/jobs/${jobId}/otp`, {
-      method: 'POST',
-      body: JSON.stringify({ otp })
-    });
-    toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || 'OTP 已提交');
-    if (!resp.error_message) await data.invalidate();
-  }
-
-  async function resendJobOTP(jobId: string) {
-    const resp = await api<{ success?: boolean; error_message?: string }>(`/api/jobs/${jobId}/otp/resend`, {
-      method: 'POST',
-      body: '{}'
-    });
-    toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || 'OTP 重发已触发');
-    if (!resp.error_message) await data.invalidate();
-  }
-
   async function runGoPayPayment(account: Account, otpChannel: ConcreteGoPayPaymentChannel) {
     if (!canMutateAccount(account)) return;
     setWorking(true);
@@ -191,7 +173,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
 
   function canMutateAccount(account: Account) { if (!isInvalidGptAccount(account)) return true; toast.showError('失效账号只能删除'); return false; }
 
-  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, syncingMailboxes, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, submitJobOTP, resendJobOTP, updateAccount, refreshAccessToken, fetchInbox, syncMailboxes, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
+  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, syncingMailboxes, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, updateAccount, refreshAccessToken, fetchInbox, syncMailboxes, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
 }
 
 function loadGoPayProfile() {

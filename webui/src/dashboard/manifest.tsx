@@ -3,6 +3,7 @@ import type { DashboardModuleRegistration } from '@/dashboard/module-kit';
 import { GptAccountsPage } from './accounts-page';
 import { GoPayWalletIcon, OpenAIIcon } from './brand-icons';
 import { GoPayLabPage } from './gopay-page';
+import { registerGptWorkflowActionRenderers } from './gpt-workflow-actions';
 import { registerGoPayWorkflowRenderers } from './gopay-workflow-renderers';
 import './gopay-actions.css';
 import './gopay-workflow.css';
@@ -11,6 +12,7 @@ import './account-detail-actions.css';
 import './styles.css';
 
 registerGoPayWorkflowRenderers();
+registerGptWorkflowActionRenderers();
 
 const registration: DashboardModuleRegistration = {
   manifest: {

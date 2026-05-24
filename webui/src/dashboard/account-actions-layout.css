@@ -60,6 +60,12 @@
   border-left: 0;
 }
 
+.accountWorkflowNotice {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  font-weight: 750;
+}
+
 .rowActionGroupLabel {
   color: var(--muted-foreground);
   font-size: 11px;

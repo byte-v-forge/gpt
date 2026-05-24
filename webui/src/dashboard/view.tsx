@@ -5,7 +5,6 @@ import {
 } from '@/dashboard/module-kit';
 import type {
   Account,
-  ConcreteGoPayAddBalanceMethod,
   ConcreteGoPayPaymentChannel,
   GPTEmailAllocation,
   GoPayDashboardStateResponse,
@@ -40,17 +39,10 @@ export type GptAccountsViewProps = {
   onSyncMailboxes: () => void | Promise<void>;
   onCleanInvalidAccounts: () => void | Promise<void>;
   onSelectAccount: (account: Account) => void;
-  onOpenWorkflow: (job: Job) => void | Promise<void>;
-  onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegisterProtocol: (account: Account) => void | Promise<void>;
   onCodexOAuthBatchAddPhone: (accounts: Account[]) => void | Promise<void>;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onDeleteAccount: (account: Account) => void | Promise<void>;
-  onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
-  onResendOTP: (jobId: string) => Promise<void>;
-  onConfirmManualPayment: (jobId: string) => Promise<void>;
-  onSelectAddBalance: (jobId: string, method: ConcreteGoPayAddBalanceMethod) => Promise<void>;
-  onConfirmAddBalance: (jobId: string) => Promise<void>;
 };
 
 export function GptAccountsView(props: GptAccountsViewProps) {
@@ -78,16 +70,9 @@ export function GptAccountsView(props: GptAccountsViewProps) {
           runningWorkflowByAccountID={props.runningWorkflowByAccountID}
           busy={props.busy}
           onSelect={props.onSelectAccount}
-          onOpenWorkflow={props.onOpenWorkflow}
-          onCancelWorkflow={props.onCancelWorkflow}
           onRegisterProtocol={props.onRegisterProtocol}
           onGoPayPayment={props.onGoPayPayment}
           onDelete={props.onDeleteAccount}
-          onSubmitOTP={props.onSubmitOTP}
-          onResendOTP={props.onResendOTP}
-          onConfirmManualPayment={props.onConfirmManualPayment}
-          onSelectAddBalance={props.onSelectAddBalance}
-          onConfirmAddBalance={props.onConfirmAddBalance}
         />
       </div>
     </section>

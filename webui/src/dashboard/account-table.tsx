@@ -18,13 +18,12 @@ import {
   isUserAlreadyExistsAccount
 } from './account-utils';
 import { AccountChannelTag, AccountCodexPhoneTag, AccountSignalBadge, PaymentChannelIcon } from './account-badges';
-import { AccountRunningWorkflowActions } from './account-otp-actions';
 import { AccountRowAuthGroups } from './account-row-auth-groups';
 import { OpenAIIcon } from './brand-icons';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
-import type { Account, ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job } from './types';
+import type { Account, ConcreteGoPayPaymentChannel, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, busy, onSelect, onOpenWorkflow, onCancelWorkflow, onRegisterProtocol, onGoPayPayment, onDelete, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, busy, onSelect, onRegisterProtocol, onGoPayPayment, onDelete }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
@@ -33,16 +32,9 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
   runningWorkflowByAccountID: Map<string, Job>;
   busy: boolean;
   onSelect: (a: Account) => void;
-  onOpenWorkflow: (job: Job) => void;
-  onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegisterProtocol: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onDelete: (a: Account) => void | Promise<void>;
-  onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
-  onResendOTP: (jobId: string) => Promise<void>;
-  onConfirmManualPayment: (jobId: string) => Promise<void>;
-  onSelectAddBalance: (jobId: string, method: ConcreteGoPayAddBalanceMethod) => Promise<void>;
-  onConfirmAddBalance: (jobId: string) => Promise<void>;
 }) {
   return (
     <RecordList className="accountsList" emptyText="暂无账号。可以先创建账号，或切换为全部状态查看。">
@@ -68,16 +60,9 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
               accountBusy={accountBusy}
               currentWorkflow={currentWorkflow}
               busy={busy}
-              onOpenWorkflow={onOpenWorkflow}
-              onCancelWorkflow={onCancelWorkflow}
               onRegisterProtocol={onRegisterProtocol}
               onGoPayPayment={onGoPayPayment}
               onDelete={onDelete}
-              onSubmitOTP={onSubmitOTP}
-              onResendOTP={onResendOTP}
-              onConfirmManualPayment={onConfirmManualPayment}
-              onSelectAddBalance={onSelectAddBalance}
-              onConfirmAddBalance={onConfirmAddBalance}
             />
           </RecordCard>
         );
@@ -100,21 +85,14 @@ function AccountCardIdentity({ account, showSecrets }: {
   );
 }
 
-function AccountRowActions({ account, accountBusy, currentWorkflow, busy, onOpenWorkflow, onCancelWorkflow, onRegisterProtocol, onGoPayPayment, onDelete, onSubmitOTP, onResendOTP, onConfirmManualPayment, onSelectAddBalance, onConfirmAddBalance }: {
+function AccountRowActions({ account, accountBusy, currentWorkflow, busy, onRegisterProtocol, onGoPayPayment, onDelete }: {
   account: Account;
   accountBusy: boolean;
   currentWorkflow?: Job;
   busy: boolean;
-  onOpenWorkflow: (job: Job) => void;
-  onCancelWorkflow: (jobId: string) => Promise<void>;
   onRegisterProtocol: (a: Account) => void;
   onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
   onDelete: (a: Account) => void | Promise<void>;
-  onSubmitOTP: (jobId: string, otp: string) => Promise<void>;
-  onResendOTP: (jobId: string) => Promise<void>;
-  onConfirmManualPayment: (jobId: string) => Promise<void>;
-  onSelectAddBalance: (jobId: string, method: ConcreteGoPayAddBalanceMethod) => Promise<void>;
-  onConfirmAddBalance: (jobId: string) => Promise<void>;
 }) {
   if (isInvalidGptAccount(account)) {
     const actions: RowActionDescriptor[] = [{
@@ -134,7 +112,7 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, onOpen
   if (accountBusy && currentWorkflow && !isUserAlreadyExistsAccount(account)) {
     return (
       <RecordActions className="rowActions">
-        <AccountRunningWorkflowActions job={currentWorkflow} busy={busy} onOpenWorkflow={onOpenWorkflow} onCancelWorkflow={onCancelWorkflow} onSubmitOTP={onSubmitOTP} onResendOTP={onResendOTP} onConfirmManualPayment={onConfirmManualPayment} onSelectAddBalance={onSelectAddBalance} onConfirmAddBalance={onConfirmAddBalance} />
+        <div className="rowActionsMain"><span className="accountWorkflowNotice">流程运行中，请到工作流页处理</span></div>
       </RecordActions>
     );
   }

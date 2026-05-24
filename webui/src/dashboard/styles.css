@@ -129,11 +129,6 @@
   white-space: nowrap;
 }
 
-.runningOtpActions,
-.runningOtpForm { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
-.runningOtpForm { min-width: 0; }
-.runningOtpInput { width: 72px; height: 32px; font-size: 13px; font-variant-numeric: tabular-nums; }
-
 .accountSignalBadge.compact {
   margin: 0;
 }

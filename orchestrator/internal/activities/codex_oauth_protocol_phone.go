@@ -122,6 +122,9 @@ func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *codexOA
 	}
 	_ = fetchCodexOAuthClientAuthSessionDump(ctx, client, state, data, stage)
 	state.Stage = codexOAuthProtocolStageFromDump(state, stage)
+	if codexOAuthProtocolAddPhoneConfirmedByStage(state.Stage) {
+		state.PhonePresent = true
+	}
 	data["post_add_phone_stage"] = state.Stage
 	data["add_phone_confirmed"] = state.PhonePresent
 	data["add_phone_required"] = !state.PhonePresent
@@ -129,6 +132,15 @@ func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *codexOA
 		return true, fmt.Errorf("phone_rejected: add phone status not confirmed")
 	}
 	return true, nil
+}
+
+func codexOAuthProtocolAddPhoneConfirmedByStage(stage string) bool {
+	switch strings.TrimSpace(stage) {
+	case "callback", "consent":
+		return true
+	default:
+		return false
+	}
 }
 
 func codexOAuthProtocolPhoneFailure(resp *codexOAuthProtocolHTTPResponse) string {

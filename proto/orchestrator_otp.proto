@@ -47,13 +47,6 @@ message OTPWaitOutput {
   string activation_id = 6;
 }
 
-message ManualOTPSignal {
-  string kind = 1;
-}
-
-message OTPResendSignal {
-  string kind = 1;
-}
 
 message SubmitOTPRequest {
   string job_id = 1;

@@ -1,4 +1,4 @@
-import { api } from '@/dashboard/module-kit';
+import { api } from '@byte-v-forge/common-ui';
 import { isInvalidGptAccount } from './account-utils';
 import type { Account } from './types';
 
@@ -14,7 +14,7 @@ export function isInvalidAccountForCleanup(account: Account) {
 }
 
 export async function deleteGptAccount(accountID: string) {
-  return api(`/api/accounts/${accountID}`, { method: 'DELETE' });
+  return api(`/api/gpt/accounts/${accountID}`, { method: 'DELETE' });
 }
 
 export async function cleanInvalidGptAccounts() {
@@ -32,5 +32,5 @@ export async function cleanInvalidGptAccounts() {
 }
 
 function loadInvalidAccountsBatch() {
-  return api<Account[]>(`/api/accounts?status=DEACTIVATED&limit=${CLEANUP_BATCH_LIMIT}`);
+  return api<Account[]>(`/api/gpt/accounts?status=DEACTIVATED&limit=${CLEANUP_BATCH_LIMIT}`);
 }

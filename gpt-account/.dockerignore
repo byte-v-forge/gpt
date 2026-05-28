@@ -1,0 +1,7 @@
+pb/
+gpt-account
+gpt_account_bin
+*.test
+*.out
+.git/
+.DS_Store

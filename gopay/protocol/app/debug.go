@@ -7,17 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/byte-v-forge/gpt/gopay/protocol"
+	"github.com/byte-v-forge/common-lib/httpjson"
 )
-
-func envBool(name string) bool {
-	switch strings.ToLower(strings.TrimSpace(getenv(name))) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
-	}
-}
 
 func (c *Client) logHTTPRequest(ctx context.Context, method, rawURL string, headers http.Header, body []byte) {
 	if !c.shouldLogHTTP(rawURL) {
@@ -31,7 +22,7 @@ func (c *Client) logHTTPRequest(ctx context.Context, method, rawURL string, head
 	})
 }
 
-func (c *Client) logHTTPResponse(ctx context.Context, method, rawURL string, resp *protocol.Response, err error) {
+func (c *Client) logHTTPResponse(ctx context.Context, method, rawURL string, resp *httpjson.Response, err error) {
 	if !c.shouldLogHTTP(rawURL) {
 		return
 	}

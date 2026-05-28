@@ -6,110 +6,94 @@ import {
   Button,
   ControlledInputFieldList,
   ControlledSelectField,
+  DashboardDialog,
   errorText,
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
   ToolbarIconButton,
   useForm
-} from '@/dashboard/module-kit';
-import type { ActionButtonDescriptor, Control, ControlledInputFieldDescriptor, SubmitHandler } from '@/dashboard/module-kit';
-import type { MailboxDomain } from './types';
+} from '@byte-v-forge/common-ui';
+import type { ActionButtonDescriptor, Control, ControlledInputFieldDescriptor, SubmitHandler } from '@byte-v-forge/common-ui';
+import {
+  accountEmail,
+  defaultMailboxChoice,
+  domainsForProvider,
+  emailStrategyForValues,
+  mailboxChoiceOptions,
+  mailboxProviderOptions,
+  type CreateAccountValues
+} from './create-account-options';
+import { CreateAccountGeoFields } from './create-account-geo-fields';
+import { randomRegionForCountry, regionOptionsForCountry } from './geo-options';
+import type { MailboxDomain, MailboxProviderCapability } from './types';
 
-type EmailSource = 'cloudflare' | 'outlook_primary' | 'outlook_alias' | 'manual';
-type CreateAccountValues = { source: EmailSource; email: string; password: string; local: string; domain: string };
-const emailSourceOptions = [
-  { value: 'cloudflare', label: 'Cloudflare 域名' },
-  { value: 'outlook_primary', label: 'Outlook 主邮箱' },
-  { value: 'outlook_alias', label: 'Outlook 别名' },
-  { value: 'manual', label: '手动邮箱' },
-];
+const defaultCountryCode = 'JP';
 
-export function CreateAccountForm({ compact, domains = [], onDone, onError }: {
+export function CreateAccountForm({ compact, domains = [], providerCapabilities = [], onDone, onError }: {
   compact?: boolean;
   domains?: MailboxDomain[];
+  providerCapabilities?: MailboxProviderCapability[];
   onDone: (message: string) => void;
   onError: (message: string) => void;
 }) {
-  const cloudflareDomains = useMemo(() => Array.from(new Set(domains
-    .filter((domain) => domain.enabled !== false)
-    .filter((domain) => String(domain.provider).toLowerCase().includes('cloudflare') || Number(domain.provider) === 2)
-    .map((domain) => domain.domain.trim())
-    .filter(Boolean))), [domains]);
   const [open, setOpen] = useState(false);
   const [working, setWorking] = useState('');
-  const { control, getValues, handleSubmit, reset, setValue, watch } = useForm<CreateAccountValues>({
-    defaultValues: { source: 'cloudflare', email: '', password: '', local: '', domain: '' }
-  });
-  const source = watch('source');
-  const activeDomain = watch('domain') || cloudflareDomains[0] || '';
-  const accountFields: ControlledInputFieldDescriptor<CreateAccountValues>[] = [{
-    id: 'manual-email',
-    name: 'email',
-    label: '邮箱',
-    placeholder: '邮箱',
-    inputId: 'create-account-email',
-    visible: source === 'manual',
-  }, {
-    id: 'password',
-    name: 'password',
-    label: '密码',
-    placeholder: '密码，可空',
-    type: 'password',
-    inputId: 'create-account-password',
-  }];
-  const footerActions: ActionButtonDescriptor[] = [{
-    id: 'create-account',
-    label: working ? '提交中' : '创建',
-    icon: <Plus className="size-4" />,
-    type: 'submit',
-    form: 'create-account-form',
-    disabled: !!working || (source === 'cloudflare' && !activeDomain),
-  }];
+  const { control, getValues, handleSubmit, reset, setValue, watch } = useForm<CreateAccountValues>({ defaultValues: createDefaultValues() });
+  const providerOptions = useMemo(() => mailboxProviderOptions(providerCapabilities, domains), [providerCapabilities, domains]);
+  const selectedProviderKey = watch('provider_key');
+  const providerKey = selectedProviderKey || providerOptions[0]?.value || 'manual';
+  const choiceOptions = useMemo(() => mailboxChoiceOptions(providerKey, domains), [providerKey, domains]);
+  const mailboxChoice = (watch('mailbox_choice') || defaultMailboxChoice(providerKey, domains)) as CreateAccountValues['mailbox_choice'];
+  const activeDomains = useMemo(() => domainsForProvider(domains, providerKey), [domains, providerKey]);
+  const activeDomain = watch('domain') || activeDomains[0] || '';
+  const countryCode = watch('country_code');
+  const regionOptions = useMemo(() => regionOptionsForCountry(countryCode), [countryCode]);
+  const requiresDomain = mailboxChoice === 'domain';
+  const isManual = mailboxChoice === 'manual';
 
   useEffect(() => {
-    if (source === 'cloudflare' && !getValues('domain') && cloudflareDomains[0]) {
-      setValue('domain', cloudflareDomains[0]);
+    if (!choiceOptions.some((option) => option.value === mailboxChoice && !option.disabled)) {
+      setValue('mailbox_choice', defaultMailboxChoice(providerKey, domains));
     }
-  }, [cloudflareDomains, getValues, setValue, source]);
+  }, [choiceOptions, domains, mailboxChoice, providerKey, setValue]);
 
-  function accountEmail(values: CreateAccountValues) {
-    if (values.source === 'manual') return values.email.trim();
-    if (values.source === 'outlook_primary' || values.source === 'outlook_alias') return '';
-    if (!activeDomain) return '';
-    return `${cloudflareLocalPart(values.local)}@${activeDomain}`;
-  }
+  useEffect(() => {
+    if (requiresDomain && activeDomains.length && !activeDomains.includes(getValues('domain'))) {
+      setValue('domain', activeDomains[0]);
+    }
+  }, [activeDomains, getValues, requiresDomain, setValue]);
+
+  useEffect(() => {
+    const region = getValues('region');
+    if (!regionOptions.length) {
+      if (region) setValue('region', '');
+      return;
+    }
+    if (!regionOptions.some((option) => option.value === region)) setValue('region', randomRegionForCountry(countryCode));
+  }, [countryCode, getValues, regionOptions, setValue]);
 
   const createAccount: SubmitHandler<CreateAccountValues> = async (values) => {
-    if (values.source === 'cloudflare' && !activeDomain) {
-      onError('Cloudflare 域名未配置');
-      return;
-    }
-    const email = accountEmail(values);
-    if (values.source === 'manual' && !email) {
-      onError('手动邮箱不能为空');
-      return;
-    }
+    const effective = { ...values, provider_key: providerKey, mailbox_choice: mailboxChoice, domain: activeDomain };
+    if (requiresDomain && !activeDomain) return onError('未配置可用域名');
+    const email = accountEmail(effective, activeDomain);
+    if (isManual && !email) return onError('邮箱不能为空');
     setWorking('创建账号');
     try {
-      const resp = await api<any>('/api/accounts', {
+      const resp = await api<any>('/api/gpt/accounts', {
         method: 'POST',
         body: JSON.stringify({
           email,
+          email_domain: requiresDomain ? activeDomain : '',
+          email_local_part: requiresDomain ? values.local : '',
+          domain: requiresDomain ? activeDomain : '',
+          local_part: requiresDomain ? values.local : '',
           password: values.password,
-          email_strategy: values.source
+          country_code: values.country_code,
+          region: values.region,
+          email_strategy: emailStrategyForValues(effective)
         })
       });
-      if (resp.error_message) {
-        onError(resp.error_message);
-      } else {
-        onDone(`创建账号 已提交: ${resp.job_id || resp.account_id || email || 'ok'}`);
-        reset({ source: values.source, email: '', password: '', local: '', domain: activeDomain });
-        setOpen(false);
-      }
+      onDone(`创建账号 已提交: ${resp.job_id || resp.account_id || email || 'ok'}`);
+      reset({ ...createDefaultValues(), provider_key: providerKey, mailbox_choice: mailboxChoice, domain: activeDomain });
+      setOpen(false);
     } catch (err) {
       onError(errorText(err));
     } finally {
@@ -118,75 +102,75 @@ export function CreateAccountForm({ compact, domains = [], onDone, onError }: {
   };
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <>
       {compact ? (
         <ToolbarIconButton label="创建 GPT 账号" tone="primary" icon={<Plus className="size-4" />} onClick={() => setOpen(true)} />
       ) : (
         <Button size="sm" onClick={() => setOpen(true)}><Plus className="size-4" /> 添加账号</Button>
       )}
-      <SheetContent className="w-[420px] max-w-[calc(100vw-24px)]">
-        <SheetHeader>
-          <SheetTitle>创建 GPT 账号</SheetTitle>
-          <SheetDescription>选择邮箱来源后创建账号记录。</SheetDescription>
-        </SheetHeader>
-        <form id="create-account-form" className="grid gap-3 px-4" onSubmit={handleSubmit(createAccount)}>
-          <CreateAccountSourceField control={control} />
-          {source === 'cloudflare' && <CloudflareEmailFields control={control} domains={cloudflareDomains} domain={activeDomain} />}
-          {source === 'outlook_primary' && <StrategyHint text="从 GPT 邮箱池分配一个 Outlook 主邮箱" />}
-          {source === 'outlook_alias' && <StrategyHint text="主邮箱不足时允许创建 Outlook 别名" />}
-          <ControlledInputFieldList control={control} fields={accountFields} />
+      <DashboardDialog
+        open={open}
+        title="创建 GPT 账号"
+        description="选择 Mailbox Provider、邮箱类型和地区。"
+        size="sm"
+        footer={<ActionButtonGroup actions={dialogActions(working, requiresDomain && !activeDomain)} />}
+        onOpenChange={setOpen}
+      >
+        <form id="create-account-form" className="grid gap-3" onSubmit={handleSubmit(createAccount)}>
+          <CreateAccountMailboxFields control={control} providerOptions={providerOptions} providerKey={providerKey} choiceOptions={choiceOptions} mailboxChoice={mailboxChoice} domains={activeDomains} activeDomain={activeDomain} showDomain={requiresDomain} showEmail={isManual} />
+          <div className="grid gap-2 sm:grid-cols-2"><CreateAccountGeoFields control={control} regionOptions={regionOptions} /></div>
+          <ControlledInputFieldList control={control} fields={passwordFields} />
         </form>
-        <SheetFooter>
-          <ActionButtonGroup actions={footerActions} />
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
-  );
-}
-
-function StrategyHint({ text }: { text: string }) {
-  return <div className="min-h-8 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">{text}</div>;
-}
-
-function CreateAccountSourceField({ control }: { control: Control<CreateAccountValues> }) {
-  return <ControlledSelectField control={control} name="source" options={emailSourceOptions} />;
-}
-
-function CloudflareEmailFields({ control, domains, domain }: {
-  control: Control<CreateAccountValues>;
-  domains: string[];
-  domain: string;
-}) {
-  const fields: ControlledInputFieldDescriptor<CreateAccountValues>[] = [{
-    id: 'local',
-    name: 'local',
-    label: '邮箱前缀',
-    placeholder: '留空自动生成',
-    inputId: 'create-account-local',
-  }];
-
-  return (
-    <>
-      <ControlledInputFieldList control={control} fields={fields} />
-      <ControlledSelectField
-        control={control}
-        name="domain"
-        label="域名"
-        inputId="create-account-domain"
-        placeholder="未配置域名"
-        value={domain}
-        options={domains.map((item) => ({ value: item, label: item }))}
-      />
+      </DashboardDialog>
     </>
   );
 }
 
-function randomLocalPart() {
-  const bytes = new Uint8Array(6);
-  crypto.getRandomValues(bytes);
-  return `gpt-${Array.from(bytes).map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+function CreateAccountMailboxFields({ control, providerOptions, providerKey, choiceOptions, mailboxChoice, domains, activeDomain, showDomain, showEmail }: {
+  control: Control<CreateAccountValues>;
+  providerOptions: ReturnType<typeof mailboxProviderOptions>;
+  providerKey: string;
+  choiceOptions: ReturnType<typeof mailboxChoiceOptions>;
+  mailboxChoice: CreateAccountValues['mailbox_choice'];
+  domains: string[];
+  activeDomain: string;
+  showDomain: boolean;
+  showEmail: boolean;
+}) {
+  return (
+    <>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <ControlledSelectField control={control} name="provider_key" label="Mailbox Provider" value={providerKey} options={providerOptions} />
+        <ControlledSelectField control={control} name="mailbox_choice" label="邮箱类型" value={mailboxChoice} options={choiceOptions} />
+      </div>
+      {showDomain && (
+        <div className="grid gap-2 sm:grid-cols-[1fr_1.25fr]">
+          <ControlledInputFieldList control={control} fields={localFields} />
+          <ControlledSelectField control={control} name="domain" label="域名" inputId="create-account-domain" value={activeDomain} placeholder="未配置域名" options={domains.map((item) => ({ value: item, label: item }))} />
+        </div>
+      )}
+      {showEmail && <ControlledInputFieldList control={control} fields={manualEmailFields} />}
+    </>
+  );
 }
 
-function cloudflareLocalPart(value: string) {
-  return (value.trim().split('@')[0] || randomLocalPart()).toLowerCase();
+function dialogActions(working: string, disabled: boolean): ActionButtonDescriptor[] {
+  return [{ id: 'create-account', label: working ? '提交中' : '创建', icon: <Plus className="size-4" />, type: 'submit', form: 'create-account-form', disabled: !!working || disabled }];
+}
+
+const localFields: ControlledInputFieldDescriptor<CreateAccountValues>[] = [{ id: 'local', name: 'local', label: '邮箱前缀', placeholder: '留空自动生成', inputId: 'create-account-local' }];
+const manualEmailFields: ControlledInputFieldDescriptor<CreateAccountValues>[] = [{ id: 'manual-email', name: 'email', label: '邮箱', placeholder: '邮箱', inputId: 'create-account-email' }];
+const passwordFields: ControlledInputFieldDescriptor<CreateAccountValues>[] = [{ id: 'password', name: 'password', label: '密码', placeholder: '密码，可空', type: 'password', inputId: 'create-account-password' }];
+
+function createDefaultValues(): CreateAccountValues {
+  return {
+    provider_key: '',
+    mailbox_choice: 'domain',
+    email: '',
+    password: '',
+    local: '',
+    domain: '',
+    country_code: defaultCountryCode,
+    region: randomRegionForCountry(defaultCountryCode)
+  };
 }

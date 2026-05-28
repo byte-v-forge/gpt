@@ -463,7 +463,7 @@ message DeleteGoPayStateResponse {
 }
 
 service GopayAppService {
-  // GoPay state 持久化；account-db 不参与。
+  // GoPay state 持久化；gpt-account 不参与。
   rpc GetGoPayState(GetGoPayStateRequest) returns (GetGoPayStateResponse);
   rpc UpsertGoPayState(UpsertGoPayStateRequest) returns (UpsertGoPayStateResponse);
   rpc DeleteGoPayState(DeleteGoPayStateRequest) returns (DeleteGoPayStateResponse);

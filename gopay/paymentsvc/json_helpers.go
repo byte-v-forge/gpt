@@ -1,19 +1,19 @@
 package paymentsvc
 
 import (
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/jsonx"
+	"github.com/byte-v-forge/common-lib/jwtx"
+	"github.com/byte-v-forge/common-lib/redactx"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
 func stringAt(value any, path ...string) string {
-	return strings.TrimSpace(protocol.StringAt(value, path...))
+	return strings.TrimSpace(jsonx.StringAt(value, path...))
 }
 
 func boolAt(value any, path ...string) bool {
@@ -48,13 +48,7 @@ func intAt(value any, path ...string) int64 {
 }
 
 func normalizeDigits(value string) string {
-	var out strings.Builder
-	for _, ch := range value {
-		if ch >= '0' && ch <= '9' {
-			out.WriteRune(ch)
-		}
-	}
-	return out.String()
+	return stringx.Digits(value)
 }
 
 func normalizeCountryCode(value string) string {
@@ -241,8 +235,8 @@ func extractMidtransURL(data map[string]any, names ...string) string {
 
 func midtransChargeURLs(data map[string]any) map[string]string {
 	return map[string]string{
-		"deeplink_url":            firstNonEmpty(extractMidtransURL(data, "deeplink_url", "deeplink"), stringAt(data, "gopay_deeplink_url")),
-		"qr_code_url":             firstNonEmpty(extractMidtransURL(data, "qr_code_url", "qr_code", "qrcode"), stringAt(data, "qr_string"), stringAt(data, "qris_string"), stringAt(data, "qris_url"), stringAt(data, "gopay_verification_link_url")),
+		"deeplink_url":            stringx.FirstNonEmpty(extractMidtransURL(data, "deeplink_url", "deeplink"), stringAt(data, "gopay_deeplink_url")),
+		"qr_code_url":             stringx.FirstNonEmpty(extractMidtransURL(data, "qr_code_url", "qr_code", "qrcode"), stringAt(data, "qr_string"), stringAt(data, "qris_string"), stringAt(data, "qris_url"), stringAt(data, "gopay_verification_link_url")),
 		"finish_redirect_url":     extractMidtransURL(data, "finish_redirect_url"),
 		"finish_200_redirect_url": extractMidtransURL(data, "finish_200_redirect_url"),
 	}
@@ -252,7 +246,7 @@ func midtransChargeLooksUsable(data map[string]any) bool {
 	if extractMidtransChargeReference(data) != "" {
 		return true
 	}
-	if firstNonEmpty(stringAt(data, "qr_string"), stringAt(data, "qris_string")) != "" {
+	if stringx.FirstNonEmpty(stringAt(data, "qr_string"), stringAt(data, "qris_string")) != "" {
 		return true
 	}
 	urls := midtransChargeURLs(data)
@@ -292,30 +286,15 @@ func redactMidtransChargeDebug(data map[string]any) map[string]any {
 }
 
 func decodeJWTPayload(token string) map[string]any {
-	parts := strings.Split(token, ".")
-	if len(parts) < 2 {
-		return nil
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		raw, err = base64.URLEncoding.DecodeString(parts[1])
-	}
-	if err != nil {
-		return nil
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return nil
-	}
-	return payload
+	return jwtx.PayloadOrNil(token)
 }
 
 func jsonExcerpt(value any, limit int) string {
-	raw, err := protocol.CompactJSON(value)
+	raw, err := jsonx.Compact(value)
 	if err != nil {
-		return protocol.Snippet(protocol.RedactText(fmt.Sprint(value)), limit)
+		return redactx.Snippet(redactx.Text(fmt.Sprint(value)), limit)
 	}
-	return protocol.Snippet(protocol.RedactText(string(raw)), limit)
+	return redactx.Snippet(redactx.Text(string(raw)), limit)
 }
 
 func regexpMust(pattern string) *regexp.Regexp {

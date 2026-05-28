@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/byte-v-forge/common-lib/grpchealth"
 	"github.com/byte-v-forge/gpt/gopay/paymentsvc"
 	"github.com/byte-v-forge/gpt/gopay/pb"
 	"google.golang.org/grpc"
@@ -18,6 +19,7 @@ func main() {
 	server := grpc.NewServer()
 	service := paymentsvc.NewServer(cfg)
 	pb.RegisterPaymentServiceServer(server, service)
+	grpchealth.RegisterServing(server)
 	listener, err := net.Listen("tcp", paymentsvc.NormalizeListenForMain(*listen))
 	if err != nil {
 		log.Fatalf("listen payment service: %v", err)

@@ -9,11 +9,15 @@ import (
 )
 
 func (s *Server) PersistRegisteredActivity(ctx context.Context, input PersistRegisteredInput) error {
+	if err := s.saveChatGPTSessionToken(ctx, input.GetAccountId(), input.GetSessionToken()); err != nil {
+		return err
+	}
+	if err := s.saveChatGPTAccessToken(ctx, input.GetAccountId(), input.GetAccessToken()); err != nil {
+		return err
+	}
 	account := &pb.Account{
-		AccountId:    input.GetAccountId(),
-		Status:       "REGISTERED",
-		SessionToken: input.GetSessionToken(),
-		AccessToken:  input.GetAccessToken(),
+		AccountId: input.GetAccountId(),
+		Status:    "REGISTERED",
 	}
 	if input.GetPlusTrialChecked() {
 		account.PlusTrialEligible = boolPtr(input.GetPlusTrialEligible())
@@ -43,20 +47,24 @@ func (s *Server) PersistActivatedActivity(ctx context.Context, input PersistActi
 	}
 	sessionToken := input.GetSessionToken()
 	if sessionToken == "" {
-		sessionToken = account.GetSessionToken()
+		sessionToken = s.cachedChatGPTSessionToken(ctx, account.GetAccountId())
 	}
 	accessToken := input.GetAccessToken()
 	if accessToken == "" {
-		accessToken = account.GetAccessToken()
+		accessToken = s.cachedChatGPTAccessToken(ctx, account.GetAccountId())
+	}
+	if err := s.saveChatGPTSessionToken(ctx, input.GetAccountId(), sessionToken); err != nil {
+		return err
+	}
+	if err := s.saveChatGPTAccessToken(ctx, input.GetAccountId(), accessToken); err != nil {
+		return err
 	}
 	update := &pb.Account{
-		AccountId:    input.GetAccountId(),
-		Status:       accountStatusActivated,
-		SessionToken: sessionToken,
-		AccessToken:  accessToken,
-		ChargeRef:    input.GetChargeRef(),
-		PlusActive:   boolPtr(true),
-		Tier:         "plus",
+		AccountId:  input.GetAccountId(),
+		Status:     accountStatusActivated,
+		ChargeRef:  input.GetChargeRef(),
+		PlusActive: boolPtr(true),
+		Tier:       "plus",
 	}
 	if input.GetPlusTrialChecked() {
 		update.PlusTrialEligible = boolPtr(input.GetPlusTrialEligible())

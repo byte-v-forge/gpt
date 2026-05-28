@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	smsv1 "github.com/byte-v-forge/sms/gen/go/byte/v/forge/contracts/sms/v1"
+	smsv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/sms/v1"
 	pb "orchestrator/pb"
 )
 
@@ -104,7 +104,7 @@ func (s *Server) cancelSMSActivationBeforeRotation(ctx context.Context, activati
 		return fmt.Errorf("activation id missing")
 	}
 
-	resp, err := s.smsClient.CancelActivation(ctx, &smsv1.CancelActivationRequest{ActivationId: activationID, Reason: "change phone rotation"})
+	resp, err := s.smsClient.CancelOrder(ctx, &smsv1.CancelOrderRequest{OrderId: activationID, Reason: "change phone rotation"})
 	if err != nil {
 		return fmt.Errorf("CancelActivation: %w", err)
 	}
@@ -117,7 +117,7 @@ func (s *Server) cancelSMSActivationBeforeRotation(ctx context.Context, activati
 	return fmt.Errorf("CancelActivation: %s", smsCancelResponseText(resp))
 }
 
-func smsCancelSettled(resp *smsv1.CancelActivationResponse) bool {
+func smsCancelSettled(resp *smsv1.CancelOrderResponse) bool {
 	if resp == nil {
 		return false
 	}
@@ -125,16 +125,16 @@ func smsCancelSettled(resp *smsv1.CancelActivationResponse) bool {
 		return true
 	}
 	switch resp.GetError().GetCode() {
-	case smsv1.SmsErrorCode_SMS_ERROR_CODE_ACTIVATION_NOT_FOUND,
-		smsv1.SmsErrorCode_SMS_ERROR_CODE_ACTIVATION_ALREADY_FINALIZED,
-		smsv1.SmsErrorCode_SMS_ERROR_CODE_ACTIVATION_EXPIRED:
+	case smsv1.SmsErrorCode_SMS_ERROR_CODE_ORDER_NOT_FOUND,
+		smsv1.SmsErrorCode_SMS_ERROR_CODE_ORDER_ALREADY_FINALIZED,
+		smsv1.SmsErrorCode_SMS_ERROR_CODE_ORDER_EXPIRED:
 		return true
 	default:
 		return false
 	}
 }
 
-func smsCancelResponseText(resp *smsv1.CancelActivationResponse) string {
+func smsCancelResponseText(resp *smsv1.CancelOrderResponse) string {
 	if resp == nil {
 		return "empty response"
 	}

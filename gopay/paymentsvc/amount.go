@@ -3,6 +3,7 @@ package paymentsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"strconv"
 	"strings"
 )
@@ -44,7 +45,7 @@ func (c *charger) probePlusTrialCheckout(ctx context.Context) (trialProbe, error
 	if err != nil {
 		return trialProbe{}, fmt.Errorf("checkout create failed: %w", err)
 	}
-	checkoutURL := firstNonEmpty(c.checkoutURL, "https://checkout.stripe.com/c/pay/"+csID)
+	checkoutURL := stringx.FirstNonEmpty(c.checkoutURL, "https://checkout.stripe.com/c/pay/"+csID)
 	initData, err := c.stripeInit(ctx, csID)
 	if err != nil {
 		return trialProbe{
@@ -86,7 +87,7 @@ func (c *charger) resolveExpectedAmount(initData map[string]any) (string, string
 		return "0", "fallback_zero_unknown", nil
 	}
 	if amount != 0 && !configBool(c.cfg.Runtime["allow_nonzero_expected_amount"]) {
-		currency := firstNonEmpty(strings.ToUpper(stringAt(initData, "currency")), "UNKNOWN")
+		currency := stringx.FirstNonEmpty(strings.ToUpper(stringAt(initData, "currency")), "UNKNOWN")
 		return "", "", fmt.Errorf("checkout amount is %d %s from %s, not free-trial 0; refusing to confirm payment", amount, currency, source)
 	}
 	return strconv.FormatInt(amount, 10), source, nil

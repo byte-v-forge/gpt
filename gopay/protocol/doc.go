@@ -1,3 +1,2 @@
-// Package protocol contains shared HTTP, JSON, redaction, and state helpers for
-// GoPay protocol clients.
+// Package protocol contains GoPay-specific browser HTTP and state helpers.
 package protocol

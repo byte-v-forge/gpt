@@ -1,16 +1,17 @@
 package app
 
 import (
-	"crypto/rand"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"math/big"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/byte-v-forge/common-lib/envx"
+	"github.com/byte-v-forge/common-lib/randx"
 	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
@@ -115,7 +116,7 @@ type DeviceConfig struct {
 
 func DeviceConfigFromEnv() DeviceConfig {
 	return DeviceConfig{
-		StaticIdentity:   envBool("GOPAY_STATIC_DEVICE_IDENTITY"),
+		StaticIdentity:   envx.Bool("GOPAY_STATIC_DEVICE_IDENTITY", false),
 		AppVersion:       getenv("GOPAY_APP_VERSION"),
 		AppID:            getenv("GOPAY_APP_ID"),
 		AppBuild:         getenv("GOPAY_APP_BUILD"),
@@ -135,20 +136,20 @@ func DeviceConfigFromEnv() DeviceConfig {
 		WiFiMAC:          getenv("GOPAY_WIFI_MAC"),
 		WiFiSSID:         getenv("GOPAY_WIFI_SSID"),
 		M1ConnectionID:   getenv("GOPAY_M1_CONNECTION_ID"),
-		M1Hardware:       firstNonEmpty(getenv("GOPAY_M1_HARDWARE"), getenv("GOPAY_M1_DEVICE_HARDWARE")),
+		M1Hardware:       stringx.FirstNonEmpty(getenv("GOPAY_M1_HARDWARE"), getenv("GOPAY_M1_DEVICE_HARDWARE")),
 		M1Signature:      getenv("GOPAY_M1_SIGNATURE"),
 		M1SignatureTime:  getenv("GOPAY_M1_SIGNATURE_TIME"),
 		M1DeviceUUID:     getenv("GOPAY_M1_DEVICE_UUID"),
-		FirebaseID:       firstNonEmpty(getenv("GOPAY_FIREBASE_APP_INSTANCE_ID"), getenv("GOPAY_FIREBASE_ID")),
-		AdvertisingID:    firstNonEmpty(getenv("GOPAY_ADVERTISING_ID"), getenv("GOPAY_AD_ID")),
+		FirebaseID:       stringx.FirstNonEmpty(getenv("GOPAY_FIREBASE_APP_INSTANCE_ID"), getenv("GOPAY_FIREBASE_ID")),
+		AdvertisingID:    stringx.FirstNonEmpty(getenv("GOPAY_ADVERTISING_ID"), getenv("GOPAY_AD_ID")),
 		AppSetID:         getenv("GOPAY_APP_SET_ID"),
 		InstallReferrer:  getenv("GOPAY_INSTALL_REFERRER"),
 		InstallerPackage: getenv("GOPAY_INSTALLER_PACKAGE"),
-		GMSVersion:       firstNonEmpty(getenv("GOPAY_GMS_VERSION"), getenv("GOPAY_PLAY_SERVICES_VERSION")),
+		GMSVersion:       stringx.FirstNonEmpty(getenv("GOPAY_GMS_VERSION"), getenv("GOPAY_PLAY_SERVICES_VERSION")),
 		UserUUID:         getenv("GOPAY_USER_UUID"),
 		DeviceToken:      getenv("GOPAY_DEVICE_TOKEN"),
 		IMEI:             getenv("GOPAY_IMEI"),
-		IPAddress:        firstNonEmpty(getenv("GOPAY_IP_ADDRESS"), getenv("GOPAY_LOCAL_IP_ADDRESS")),
+		IPAddress:        stringx.FirstNonEmpty(getenv("GOPAY_IP_ADDRESS"), getenv("GOPAY_LOCAL_IP_ADDRESS")),
 		Location:         getenv("GOPAY_LOCATION"),
 		LocationAccuracy: getenv("GOPAY_LOCATION_ACCURACY"),
 		GojekCountryCode: getenv("GOPAY_COUNTRY_CODE"),
@@ -200,27 +201,27 @@ type DeviceFingerprint struct {
 
 func NewDeviceFingerprint(cfg DeviceConfig) (DeviceFingerprint, error) {
 	profile := randomHardwareProfile(cfg.StaticIdentity)
-	appVersion := firstNonEmpty(cfg.AppVersion, defaultAppVersion)
-	appID := firstNonEmpty(cfg.AppID, defaultAppID)
-	appBuild := firstNonEmpty(cfg.AppBuild, defaultAppBuild)
-	deviceOS := androidDeviceOS(firstNonEmpty(cfg.AndroidVersion, profile.AndroidVersion))
-	phoneMake := firstNonEmpty(cfg.PhoneMake, profile.PhoneMake)
-	phoneModel := normalizePhoneModel(firstNonEmpty(cfg.PhoneModel, profile.PhoneModel))
-	userAgent := firstNonEmpty(cfg.UserAgent, fmt.Sprintf("GoPay/%s (%s; build:%s; %s)", appVersion, appID, appBuild, deviceOS))
-	uniqueID := firstNonEmpty(cfg.UniqueID, generatedOrStatic(cfg.StaticIdentity, defaultUniqueID, func() string { return randomHex(8) }))
-	d1 := firstNonEmpty(cfg.D1, generatedOrStatic(cfg.StaticIdentity, defaultD1, randomD1))
-	appsFlyerID := firstNonEmpty(cfg.AppsFlyerID, generatedOrStatic(cfg.StaticIdentity, defaultAppsFlyerID, randomAppsFlyerID))
-	widevineID := firstNonEmpty(cfg.WidevineID, generatedOrStatic(cfg.StaticIdentity, defaultWidevineID, randomWidevineID))
-	wifiMAC := strings.ToLower(firstNonEmpty(cfg.WiFiMAC, generatedOrStatic(cfg.StaticIdentity, defaultXM1WiFiMAC, randomWiFiMAC)))
-	wifiSSID := firstNonEmpty(cfg.WiFiSSID, generatedOrStatic(cfg.StaticIdentity, defaultXM1WiFiSSID, randomWiFiSSID))
-	m1ConnectionID := firstNonEmpty(cfg.M1ConnectionID, generatedOrStatic(cfg.StaticIdentity, defaultXM1ConnectionID, randomM1ConnectionID))
-	m1Hardware := firstNonEmpty(cfg.M1Hardware, defaultXM1Hardware)
-	m1Signature := firstNonEmpty(cfg.M1Signature, generatedOrStatic(cfg.StaticIdentity, defaultM1Signature, func() string { return randomHex(8) }))
-	m1SignatureTime := firstNonEmpty(cfg.M1SignatureTime, generatedOrStatic(cfg.StaticIdentity, "0", randomM1SignatureTime))
-	m1DeviceUUID := firstNonEmpty(cfg.M1DeviceUUID, generatedOrStatic(cfg.StaticIdentity, defaultM1DeviceUUID, uuid.NewString))
-	firebaseID := firstNonEmpty(cfg.FirebaseID, generatedOrStatic(cfg.StaticIdentity, defaultFirebaseID, func() string { return randomHex(16) }))
-	advertisingID := firstNonEmpty(cfg.AdvertisingID, generatedOrStatic(cfg.StaticIdentity, defaultAdvertisingID, uuid.NewString))
-	appSetID := firstNonEmpty(cfg.AppSetID, generatedOrStatic(cfg.StaticIdentity, defaultAppSetID, uuid.NewString))
+	appVersion := stringx.FirstNonEmpty(cfg.AppVersion, defaultAppVersion)
+	appID := stringx.FirstNonEmpty(cfg.AppID, defaultAppID)
+	appBuild := stringx.FirstNonEmpty(cfg.AppBuild, defaultAppBuild)
+	deviceOS := androidDeviceOS(stringx.FirstNonEmpty(cfg.AndroidVersion, profile.AndroidVersion))
+	phoneMake := stringx.FirstNonEmpty(cfg.PhoneMake, profile.PhoneMake)
+	phoneModel := normalizePhoneModel(stringx.FirstNonEmpty(cfg.PhoneModel, profile.PhoneModel))
+	userAgent := stringx.FirstNonEmpty(cfg.UserAgent, fmt.Sprintf("GoPay/%s (%s; build:%s; %s)", appVersion, appID, appBuild, deviceOS))
+	uniqueID := stringx.FirstNonEmpty(cfg.UniqueID, generatedOrStatic(cfg.StaticIdentity, defaultUniqueID, func() string { return randomHex(8) }))
+	d1 := stringx.FirstNonEmpty(cfg.D1, generatedOrStatic(cfg.StaticIdentity, defaultD1, randomD1))
+	appsFlyerID := stringx.FirstNonEmpty(cfg.AppsFlyerID, generatedOrStatic(cfg.StaticIdentity, defaultAppsFlyerID, randomAppsFlyerID))
+	widevineID := stringx.FirstNonEmpty(cfg.WidevineID, generatedOrStatic(cfg.StaticIdentity, defaultWidevineID, randomWidevineID))
+	wifiMAC := strings.ToLower(stringx.FirstNonEmpty(cfg.WiFiMAC, generatedOrStatic(cfg.StaticIdentity, defaultXM1WiFiMAC, randomWiFiMAC)))
+	wifiSSID := stringx.FirstNonEmpty(cfg.WiFiSSID, generatedOrStatic(cfg.StaticIdentity, defaultXM1WiFiSSID, randomWiFiSSID))
+	m1ConnectionID := stringx.FirstNonEmpty(cfg.M1ConnectionID, generatedOrStatic(cfg.StaticIdentity, defaultXM1ConnectionID, randomM1ConnectionID))
+	m1Hardware := stringx.FirstNonEmpty(cfg.M1Hardware, defaultXM1Hardware)
+	m1Signature := stringx.FirstNonEmpty(cfg.M1Signature, generatedOrStatic(cfg.StaticIdentity, defaultM1Signature, func() string { return randomHex(8) }))
+	m1SignatureTime := stringx.FirstNonEmpty(cfg.M1SignatureTime, generatedOrStatic(cfg.StaticIdentity, "0", randomM1SignatureTime))
+	m1DeviceUUID := stringx.FirstNonEmpty(cfg.M1DeviceUUID, generatedOrStatic(cfg.StaticIdentity, defaultM1DeviceUUID, uuid.NewString))
+	firebaseID := stringx.FirstNonEmpty(cfg.FirebaseID, generatedOrStatic(cfg.StaticIdentity, defaultFirebaseID, func() string { return randomHex(16) }))
+	advertisingID := stringx.FirstNonEmpty(cfg.AdvertisingID, generatedOrStatic(cfg.StaticIdentity, defaultAdvertisingID, uuid.NewString))
+	appSetID := stringx.FirstNonEmpty(cfg.AppSetID, generatedOrStatic(cfg.StaticIdentity, defaultAppSetID, uuid.NewString))
 	deviceToken := strings.TrimSpace(cfg.DeviceToken)
 	return DeviceFingerprint{
 		AppType:          defaultApplicationType,
@@ -232,15 +233,15 @@ func NewDeviceFingerprint(cfg DeviceConfig) (DeviceFingerprint, error) {
 		PhoneModel:       phoneModel,
 		DeviceOS:         deviceOS,
 		UserType:         defaultUserType,
-		SessionID:        firstNonEmpty(cfg.SessionID, uuid.NewString()),
-		TransactionID:    firstNonEmpty(cfg.TransactionID, uuid.NewString()),
+		SessionID:        stringx.FirstNonEmpty(cfg.SessionID, uuid.NewString()),
+		TransactionID:    stringx.FirstNonEmpty(cfg.TransactionID, uuid.NewString()),
 		UserAgent:        userAgent,
 		D1:               d1,
-		XE2:              firstNonEmpty(cfg.XE2, defaultXE2),
-		AdjTS:            firstNonEmpty(cfg.AdjTS, "host:D"),
+		XE2:              stringx.FirstNonEmpty(cfg.XE2, defaultXE2),
+		AdjTS:            stringx.FirstNonEmpty(cfg.AdjTS, "host:D"),
 		AppsFlyerID:      appsFlyerID,
 		WidevineID:       widevineID,
-		Screen:           firstNonEmpty(cfg.Screen, profile.Screen),
+		Screen:           stringx.FirstNonEmpty(cfg.Screen, profile.Screen),
 		WiFiMAC:          wifiMAC,
 		WiFiSSID:         wifiSSID,
 		M1ConnectionID:   m1ConnectionID,
@@ -251,16 +252,16 @@ func NewDeviceFingerprint(cfg DeviceConfig) (DeviceFingerprint, error) {
 		FirebaseID:       firebaseID,
 		AdvertisingID:    advertisingID,
 		AppSetID:         appSetID,
-		InstallReferrer:  firstNonEmpty(cfg.InstallReferrer, defaultInstallReferrer),
-		InstallerPackage: firstNonEmpty(cfg.InstallerPackage, defaultInstaller),
-		GMSVersion:       firstNonEmpty(cfg.GMSVersion, defaultGMSVersion),
+		InstallReferrer:  stringx.FirstNonEmpty(cfg.InstallReferrer, defaultInstallReferrer),
+		InstallerPackage: stringx.FirstNonEmpty(cfg.InstallerPackage, defaultInstaller),
+		GMSVersion:       stringx.FirstNonEmpty(cfg.GMSVersion, defaultGMSVersion),
 		UserUUID:         strings.TrimSpace(cfg.UserUUID),
 		DeviceToken:      deviceToken,
-		IMEI:             firstNonEmpty(cfg.IMEI, uniqueID),
-		IPAddress:        firstNonEmpty(cfg.IPAddress, generatedOrStatic(cfg.StaticIdentity, "", randomPrivateIP)),
-		Location:         firstNonEmpty(cfg.Location, defaultLocation),
-		LocationAccuracy: firstNonEmpty(cfg.LocationAccuracy, defaultLocationAcc),
-		GojekCountryCode: firstNonEmpty(cfg.GojekCountryCode, defaultGojekCountry),
+		IMEI:             stringx.FirstNonEmpty(cfg.IMEI, uniqueID),
+		IPAddress:        stringx.FirstNonEmpty(cfg.IPAddress, generatedOrStatic(cfg.StaticIdentity, "", randomPrivateIP)),
+		Location:         stringx.FirstNonEmpty(cfg.Location, defaultLocation),
+		LocationAccuracy: stringx.FirstNonEmpty(cfg.LocationAccuracy, defaultLocationAcc),
+		GojekCountryCode: stringx.FirstNonEmpty(cfg.GojekCountryCode, defaultGojekCountry),
 		TLSProfileName:   protocol.ResolveTLSProfileName(cfg.TLSProfileName),
 	}, nil
 }
@@ -268,31 +269,31 @@ func NewDeviceFingerprint(cfg DeviceConfig) (DeviceFingerprint, error) {
 func (d DeviceFingerprint) XM1() string {
 	if d.usesGoPay27Profile() {
 		return strings.Join([]string{
-			"3:" + firstNonEmpty(d.AppsFlyerID, defaultAppsFlyerID),
-			"4:" + firstNonEmpty(d.M1ConnectionID, defaultXM1ConnectionID),
-			"5:" + firstNonEmpty(d.M1Hardware, defaultXM1Hardware),
-			"6:" + firstNonEmpty(d.WiFiMAC, defaultXM1WiFiMAC),
-			"7:" + firstNonEmpty(d.WiFiSSID, defaultXM1WiFiSSID),
-			"8:" + firstNonEmpty(d.Screen, defaultXM1Screen),
+			"3:" + stringx.FirstNonEmpty(d.AppsFlyerID, defaultAppsFlyerID),
+			"4:" + stringx.FirstNonEmpty(d.M1ConnectionID, defaultXM1ConnectionID),
+			"5:" + stringx.FirstNonEmpty(d.M1Hardware, defaultXM1Hardware),
+			"6:" + stringx.FirstNonEmpty(d.WiFiMAC, defaultXM1WiFiMAC),
+			"7:" + stringx.FirstNonEmpty(d.WiFiSSID, defaultXM1WiFiSSID),
+			"8:" + stringx.FirstNonEmpty(d.Screen, defaultXM1Screen),
 			"10:0",
-			"11:" + firstNonEmpty(d.WidevineID, defaultWidevineID),
-			"15:" + firstNonEmpty(d.FirebaseID, defaultFirebaseID),
+			"11:" + stringx.FirstNonEmpty(d.WidevineID, defaultWidevineID),
+			"15:" + stringx.FirstNonEmpty(d.FirebaseID, defaultFirebaseID),
 		}, ",")
 	}
 	return strings.Join([]string{
-		"3:" + firstNonEmpty(d.AppsFlyerID, defaultAppsFlyerID),
-		"4:" + firstNonEmpty(d.M1ConnectionID, defaultXM1ConnectionID),
-		"5:" + firstNonEmpty(d.PhoneMake, defaultPhoneMake) + "|3200|2",
-		"6:" + firstNonEmpty(d.WiFiMAC, defaultXM1WiFiMAC),
-		"7:" + firstNonEmpty(d.WiFiSSID, defaultXM1WiFiSSID),
-		"8:" + firstNonEmpty(d.Screen, defaultXM1Screen),
+		"3:" + stringx.FirstNonEmpty(d.AppsFlyerID, defaultAppsFlyerID),
+		"4:" + stringx.FirstNonEmpty(d.M1ConnectionID, defaultXM1ConnectionID),
+		"5:" + stringx.FirstNonEmpty(d.PhoneMake, defaultPhoneMake) + "|3200|2",
+		"6:" + stringx.FirstNonEmpty(d.WiFiMAC, defaultXM1WiFiMAC),
+		"7:" + stringx.FirstNonEmpty(d.WiFiSSID, defaultXM1WiFiSSID),
+		"8:" + stringx.FirstNonEmpty(d.Screen, defaultXM1Screen),
 		"9:passive,network,fused,gps",
 		"10:1",
-		"11:" + firstNonEmpty(d.WidevineID, defaultWidevineID),
-		"13:" + firstNonEmpty(d.M1Signature, defaultM1Signature),
-		"14:" + firstNonEmpty(d.M1SignatureTime, "0"),
-		"15:" + firstNonEmpty(d.FirebaseID, defaultFirebaseID),
-		"16:" + firstNonEmpty(d.M1DeviceUUID, defaultM1DeviceUUID),
+		"11:" + stringx.FirstNonEmpty(d.WidevineID, defaultWidevineID),
+		"13:" + stringx.FirstNonEmpty(d.M1Signature, defaultM1Signature),
+		"14:" + stringx.FirstNonEmpty(d.M1SignatureTime, "0"),
+		"15:" + stringx.FirstNonEmpty(d.FirebaseID, defaultFirebaseID),
+		"16:" + stringx.FirstNonEmpty(d.M1DeviceUUID, defaultM1DeviceUUID),
 	}, ",")
 }
 
@@ -330,15 +331,6 @@ func normalizePhoneModel(value string) string {
 	return strings.TrimSpace(parts[0]) + ", " + strings.TrimSpace(parts[1])
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
 func generatedOrStatic(static bool, staticValue string, generate func() string) string {
 	if static {
 		return staticValue
@@ -356,7 +348,7 @@ func randomD1() string {
 }
 
 func randomHardwareProfile(static bool) hardwareProfile {
-	if static || !envBool("GOPAY_RANDOM_HARDWARE_PROFILE") || len(hardwareProfiles) == 0 {
+	if static || !envx.Bool("GOPAY_RANDOM_HARDWARE_PROFILE", false) || len(hardwareProfiles) == 0 {
 		return hardwareProfile{
 			AndroidVersion: defaultAndroidVersion,
 			PhoneMake:      defaultPhoneMake,
@@ -429,8 +421,9 @@ func randomHex(size int) string {
 }
 
 func randomBytes(size int) []byte {
-	raw := make([]byte, size)
-	if _, err := rand.Read(raw); err != nil {
+	raw, err := randx.Bytes(size)
+	if err != nil {
+		raw = make([]byte, size)
 		fallback := []byte(uuid.NewString())
 		for i := range raw {
 			raw[i] = fallback[i%len(fallback)]
@@ -443,9 +436,9 @@ func randomIntRange(minValue int, maxValue int) int {
 	if maxValue <= minValue {
 		return minValue
 	}
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(maxValue-minValue+1)))
+	n, err := randx.IntRange(minValue, maxValue)
 	if err != nil {
 		return minValue + int(time.Now().UnixNano()%int64(maxValue-minValue+1))
 	}
-	return minValue + int(n.Int64())
+	return n
 }

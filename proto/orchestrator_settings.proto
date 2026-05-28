@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package orchestrator;
+
+option go_package = "./;pb";
+
+message GPTProxyPreflightSettings {
+  bool enabled = 1;
+  optional bool require_residential = 2;
+  double min_ip_purity_score = 3;
+  optional bool cf_canary_enabled = 4;
+  uint32 max_proxy_attempts = 5;
+}
+
+message GPTSettings {
+  GPTProxyPreflightSettings proxy_preflight = 1;
+}
+
+message GetGPTSettingsResponse {
+  GPTSettings settings = 1;
+  string error_message = 2;
+}
+
+message UpdateGPTSettingsRequest {
+  GPTSettings settings = 1;
+}
+
+message UpdateGPTSettingsResponse {
+  GPTSettings settings = 1;
+  string error_message = 2;
+}

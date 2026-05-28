@@ -2,9 +2,10 @@ package activities
 
 import (
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"strings"
 
-	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
+	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
 )
 
 func browserAuthState(results []*browserautomationv1.BrowserCommandResult, commandID string) string {
@@ -45,7 +46,7 @@ func browserAuthFailureContext(data map[string]any) string {
 	}
 	fields := make([]string, 0, 4)
 	appendText := func(key, label string, max int) {
-		if value := compactBrowserAuthText(stringMapValue(data, key), max); value != "" {
+		if value := stringx.CompactSnippet(stringMapValue(data, key), max); value != "" {
 			fields = append(fields, label+"="+value)
 		}
 	}
@@ -70,7 +71,7 @@ func browserAuthStringList(value any, limit, maxLen int) []string {
 		if len(out) >= limit {
 			return
 		}
-		if text := compactBrowserAuthText(fmt.Sprint(raw), maxLen); text != "" {
+		if text := stringx.CompactSnippet(fmt.Sprint(raw), maxLen); text != "" {
 			out = append(out, text)
 		}
 	}
@@ -87,15 +88,4 @@ func browserAuthStringList(value any, limit, maxLen int) []string {
 		add(typed)
 	}
 	return out
-}
-
-func compactBrowserAuthText(value string, maxLen int) string {
-	value = strings.Join(strings.Fields(value), " ")
-	if value == "" {
-		return ""
-	}
-	if maxLen > 0 && len(value) > maxLen {
-		return value[:maxLen] + "..."
-	}
-	return value
 }

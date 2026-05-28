@@ -6,6 +6,7 @@ Rules:
 - Selectors are exact role/text selectors or exact attribute CSS selectors.
 - Email polling starts from the network request `started_at_unix_ms` that submits the email form.
 - After password registration returns to the email verification page, browser automation stops at an OTP-required state. The workflow waits for mailbox/manual OTP; auto mode may run a separate resend activity after the first 30 seconds, while manual mode only resends when the page triggers it.
+- Browser auth orchestration is checkpoint-based: start runs until a browser result or OTP checkpoint, and complete/resend reattach by the persisted browser-automation session id instead of relying on a gpt-service in-memory goroutine.
 - Business orchestration must follow the successful steps recorded below.
 
 ## Manual run 2026-05-20

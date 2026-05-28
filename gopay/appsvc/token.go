@@ -3,10 +3,12 @@ package appsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/httpjson"
+	"github.com/byte-v-forge/common-lib/jsonx"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/http"
 	"time"
 
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 	gopayapp "github.com/byte-v-forge/gpt/gopay/protocol/app"
 )
 
@@ -14,7 +16,7 @@ func (s *Server) newClientWithState(ctx context.Context, state stateMap, require
 	if requireToken {
 		refresh := s.ensureAccessToken(ctx, state, s.cfg.TokenRefreshMinTTL, false)
 		if !anyBool(refresh["success"]) && !tokenUsable(state, "token", 0) {
-			return nil, fmt.Errorf("%s", firstNonEmpty(anyString(refresh["error"]), "token refresh failed"))
+			return nil, fmt.Errorf("%s", stringx.FirstNonEmpty(anyString(refresh["error"]), "token refresh failed"))
 		}
 	}
 	device, err := s.ensureDevice(state)
@@ -25,12 +27,12 @@ func (s *Server) newClientWithState(ctx context.Context, state stateMap, require
 }
 
 func (s *Server) storeTokenResponse(state stateMap, data map[string]any, preserveRefresh bool) {
-	token := protocol.StringAt(data, "access_token")
+	token := jsonx.StringAt(data, "access_token")
 	if token == "" {
 		return
 	}
 	state["token"] = token
-	refresh := protocol.StringAt(data, "refresh_token")
+	refresh := jsonx.StringAt(data, "refresh_token")
 	if refresh != "" {
 		state["refresh_token"] = refresh
 	} else if !preserveRefresh {
@@ -64,7 +66,7 @@ func (s *Server) refreshAccessToken(ctx context.Context, state stateMap) map[str
 	if err != nil {
 		return map[string]any{"success": false, "error": err.Error()}
 	}
-	var last *protocol.Response
+	var last *httpjson.Response
 	for _, body := range []map[string]any{
 		s.authBody(map[string]any{"grant_type": "refresh_token", "token": refreshToken}),
 		s.authBody(map[string]any{"grant_type": "refresh_token", "refresh_token": refreshToken}),
@@ -75,7 +77,7 @@ func (s *Server) refreshAccessToken(ctx context.Context, state stateMap) map[str
 			continue
 		}
 		last = resp
-		if (resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated) && protocol.StringAt(resp.Data(), "access_token") != "" {
+		if (resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusCreated) && jsonx.StringAt(resp.Data(), "access_token") != "" {
 			s.storeTokenResponse(state, resp.Data(), true)
 			state["last_token_refresh_at"] = time.Now().Unix()
 			deleteKeys(state, "last_token_refresh_error", "last_token_refresh_failed_at")
@@ -131,7 +133,7 @@ func (s *Server) verifyAccessToken(ctx context.Context, state stateMap) map[stri
 		if profile := gojekCustomerProfile(data); len(profile) > 0 {
 			s.syncProfileFields(state, profile, "")
 		} else {
-			phone := firstNonEmpty(protocol.StringAt(data, "phone"), protocol.StringAt(data, "number"))
+			phone := stringx.FirstNonEmpty(jsonx.StringAt(data, "phone"), jsonx.StringAt(data, "number"))
 			if phone != "" {
 				state["phone"] = normalizePhone(phone, "")
 			}
@@ -177,14 +179,14 @@ func updatePINSetupState(state stateMap, pinSetup bool) {
 
 func pinSetupFlagFromProfileData(value any) (bool, bool) {
 	wanted := map[string]struct{}{
-		normalizeJSONKey("is_pin_setup"): {},
-		normalizeJSONKey("isPinSetup"):   {},
+		jsonx.NormalizeKey("is_pin_setup"): {},
+		jsonx.NormalizeKey("isPinSetup"):   {},
 	}
 	var walk func(any) (bool, bool)
 	walk = func(current any) (bool, bool) {
 		if obj, ok := jsonObject(current); ok {
 			for key, item := range obj {
-				if _, ok := wanted[normalizeJSONKey(key)]; ok {
+				if _, ok := wanted[jsonx.NormalizeKey(key)]; ok {
 					return anyBool(item), true
 				}
 			}
@@ -214,13 +216,13 @@ func (s *Server) checkTokenValid(ctx context.Context, state stateMap) map[string
 	}
 	refresh := s.refreshAccessToken(ctx, state)
 	if !anyBool(refresh["success"]) {
-		return map[string]any{"success": false, "token_valid": false, "refreshed": false, "error": firstNonEmpty(anyString(refresh["error"]), anyString(profile["error"]), "token invalid")}
+		return map[string]any{"success": false, "token_valid": false, "refreshed": false, "error": stringx.FirstNonEmpty(anyString(refresh["error"]), anyString(profile["error"]), "token invalid")}
 	}
 	profile = s.verifyAccessToken(ctx, state)
 	if anyBool(profile["success"]) {
 		return s.tokenValidResult(ctx, state, profile, true)
 	}
-	return map[string]any{"success": false, "token_valid": false, "refreshed": true, "error": firstNonEmpty(anyString(profile["error"]), "profile failed after refresh")}
+	return map[string]any{"success": false, "token_valid": false, "refreshed": true, "error": stringx.FirstNonEmpty(anyString(profile["error"]), "profile failed after refresh")}
 }
 
 func (s *Server) tokenValidResult(ctx context.Context, state stateMap, profile map[string]any, refreshed bool) map[string]any {
@@ -230,7 +232,7 @@ func (s *Server) tokenValidResult(ctx context.Context, state stateMap, profile m
 	currency := anyString(balance["balance_currency"])
 	if !balanceOK {
 		amount = firstNonZero(amount, stateInt(state, "balance_amount"))
-		currency = firstNonEmpty(currency, stateString(state, "balance_currency"))
+		currency = stringx.FirstNonEmpty(currency, stateString(state, "balance_currency"))
 	}
 	cachedMinBalance := !balanceOK && (anyBool(state["has_min_balance"]) || stateInt(state, "balance_amount") >= s.cfg.MinBalanceRp)
 	hasMinBalance := anyBool(balance["has_min_balance"]) || cachedMinBalance
@@ -240,15 +242,15 @@ func (s *Server) tokenValidResult(ctx context.Context, state stateMap, profile m
 		"refreshed":        refreshed,
 		"phone":            profile["phone"],
 		"balance_amount":   amount,
-		"balance_currency": firstNonEmpty(currency, "IDR"),
+		"balance_currency": stringx.FirstNonEmpty(currency, "IDR"),
 		"has_min_balance":  hasMinBalance,
 	}
 	if cachedMinBalance {
 		result["cached_balance"] = true
-		result["balance_check_error"] = firstNonEmpty(anyString(balance["error"]), "balance check failed")
+		result["balance_check_error"] = stringx.FirstNonEmpty(anyString(balance["error"]), "balance check failed")
 	}
 	if !balanceOK && !cachedMinBalance {
-		result["error"] = firstNonEmpty(anyString(balance["error"]), "balance check failed")
+		result["error"] = stringx.FirstNonEmpty(anyString(balance["error"]), "balance check failed")
 	}
 	return result
 }
@@ -285,7 +287,7 @@ func (s *Server) checkBalance(ctx context.Context, state stateMap) map[string]an
 	}
 	hasMin := amount >= s.cfg.MinBalanceRp
 	state["balance_amount"] = amount
-	state["balance_currency"] = firstNonEmpty(currency, "IDR")
+	state["balance_currency"] = stringx.FirstNonEmpty(currency, "IDR")
 	state["has_min_balance"] = hasMin
 	delete(state, "last_balance_error")
 	if hasMin {
@@ -349,6 +351,6 @@ func (s *Server) tokenCheckError(result map[string]any) string {
 		return err
 	}
 	amount := anyInt(result["balance_amount"])
-	currency := firstNonEmpty(anyString(result["balance_currency"]), "IDR")
+	currency := stringx.FirstNonEmpty(anyString(result["balance_currency"]), "IDR")
 	return fmt.Sprintf("insufficient gopay balance: %d %s < %d IDR", amount, currency, s.cfg.MinBalanceRp)
 }

@@ -5,13 +5,15 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/byte-v-forge/common-lib/stringx"
 )
 
 const (
 	defaultStripePublishableKey = "pk_live_51HOrSwC6h1nxGoI3lTAgRjYVrz4dU3fVOabyCcKR3pbEJguCVAlqCxdxCUvoRh1XWwRacViovU3kLKvpkjh7IqkW00iXQsjo3n"
 	defaultMidtransClientID     = "Mid-client-3TX8nUa-f_RgNrky"
 	defaultTokenization         = "true"
-	defaultBrowserLocale        = "zh-CN"
+	defaultBrowserLocale        = "en-US"
 	defaultPINLocale            = "id"
 	defaultBrowserPlatform      = "Windows"
 	defaultTLSProfile           = "chrome_146"
@@ -45,13 +47,13 @@ type requestProfile struct {
 
 func ConfigFromEnv() Config {
 	return Config{
-		ListenAddr:           firstNonEmpty(os.Getenv("GOPAY_PAYMENT_LISTEN_ADDR"), os.Getenv("GPT_GOPAY_PAYMENT_LISTEN_ADDR"), ":50054"),
+		ListenAddr:           stringx.FirstNonEmpty(os.Getenv("GOPAY_PAYMENT_LISTEN_ADDR"), os.Getenv("GPT_GOPAY_PAYMENT_LISTEN_ADDR"), ":50054"),
 		CheckoutProfile:      requestProfileFromEnv("GOPAY_CHECKOUT_PROFILE_JSON", defaultRequestProfile("checkout")),
 		PaymentProfile:       requestProfileFromEnv("GOPAY_PAYMENT_PROFILE_JSON", defaultRequestProfile("payment")),
-		StripePublishableKey: firstNonEmpty(os.Getenv("GOPAY_STRIPE_PUBLISHABLE_KEY"), defaultStripePublishableKey),
-		MidtransClientID:     firstNonEmpty(os.Getenv("GOPAY_MIDTRANS_CLIENT_ID"), defaultMidtransClientID),
+		StripePublishableKey: stringx.FirstNonEmpty(os.Getenv("GOPAY_STRIPE_PUBLISHABLE_KEY"), defaultStripePublishableKey),
+		MidtransClientID:     stringx.FirstNonEmpty(os.Getenv("GOPAY_MIDTRANS_CLIENT_ID"), defaultMidtransClientID),
 		Runtime: map[string]string{
-			"version":                         firstNonEmpty(os.Getenv("GOPAY_STRIPE_RUNTIME_VERSION"), "fed52f3bc6"),
+			"version":                         stringx.FirstNonEmpty(os.Getenv("GOPAY_STRIPE_RUNTIME_VERSION"), "fed52f3bc6"),
 			"js_checksum":                     strings.TrimSpace(os.Getenv("GOPAY_STRIPE_JS_CHECKSUM")),
 			"rv_timestamp":                    strings.TrimSpace(os.Getenv("GOPAY_STRIPE_RV_TIMESTAMP")),
 			"expected_amount":                 strings.TrimSpace(os.Getenv("GOPAY_EXPECTED_AMOUNT")),
@@ -100,12 +102,12 @@ func requestProfileFromEnv(envName string, fallback requestProfile) requestProfi
 }
 
 func (p requestProfile) withDefaults(fallback requestProfile) requestProfile {
-	p.Name = firstNonEmpty(p.Name, fallback.Name)
-	p.ProxyURL = strings.TrimSpace(p.ProxyURL)
-	p.TLSProfile = firstNonEmpty(p.TLSProfile, fallback.TLSProfile, defaultTLSProfile)
-	p.Locale = firstNonEmpty(p.Locale, fallback.Locale, defaultBrowserLocale)
-	p.Platform = firstNonEmpty(p.Platform, fallback.Platform, defaultBrowserPlatform)
-	p.PINLocale = firstNonEmpty(p.PINLocale, fallback.PINLocale, defaultPINLocale)
+	p.Name = stringx.FirstNonEmpty(p.Name, fallback.Name)
+	p.ProxyURL = stringx.FirstNonEmpty(p.ProxyURL, fallback.ProxyURL)
+	p.TLSProfile = stringx.FirstNonEmpty(p.TLSProfile, fallback.TLSProfile, defaultTLSProfile)
+	p.Locale = stringx.FirstNonEmpty(p.Locale, fallback.Locale, defaultBrowserLocale)
+	p.Platform = stringx.FirstNonEmpty(p.Platform, fallback.Platform, defaultBrowserPlatform)
+	p.PINLocale = stringx.FirstNonEmpty(p.PINLocale, fallback.PINLocale, defaultPINLocale)
 	p.UserAgent = strings.TrimSpace(p.UserAgent)
 	p.SecCHUA = strings.TrimSpace(p.SecCHUA)
 	p.SecCHPlatform = strings.TrimSpace(p.SecCHPlatform)
@@ -117,15 +119,6 @@ func (p requestProfile) withDefaults(fallback requestProfile) requestProfile {
 
 func (p requestProfile) fingerprint() browserFingerprint {
 	return browserFingerprintFromProfile(p)
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }
 
 func normalizeListen(value string) string {

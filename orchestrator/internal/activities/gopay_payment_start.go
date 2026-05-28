@@ -11,11 +11,11 @@ import (
 func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input GoPayActivityInput, account *pb.Account) (output GoPayPaymentStartOutput, err error) {
 	sessionToken := strings.TrimSpace(input.GetSessionToken())
 	if sessionToken == "" {
-		sessionToken = strings.TrimSpace(account.GetSessionToken())
+		sessionToken = s.cachedChatGPTSessionToken(ctx, account.GetAccountId())
 	}
 	accessToken := strings.TrimSpace(input.GetAccessToken())
 	if accessToken == "" {
-		accessToken = strings.TrimSpace(account.GetAccessToken())
+		accessToken = s.cachedChatGPTAccessToken(ctx, account.GetAccountId())
 	}
 	tokenization := strings.TrimSpace(input.GetTokenization())
 	checkoutURL := strings.TrimSpace(input.GetCheckoutUrl())
@@ -140,8 +140,12 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 
 	var started *pb.StartGoPayResponse
 	startFresh := func() (*pb.StartGoPayResponse, error) {
+		credential, err := s.paymentCredential(ctx, account.GetAccountId(), sessionToken, accessToken)
+		if err != nil {
+			return nil, err
+		}
 		return s.paymentClient.StartGoPay(ctx, &pb.StartGoPayRequest{
-			Credential:        paymentCredential(sessionToken, accessToken),
+			Credential:        credential,
 			UseAccountToken:   useAccountToken,
 			Tokenization:      tokenization,
 			CheckoutUrl:       checkoutURL,

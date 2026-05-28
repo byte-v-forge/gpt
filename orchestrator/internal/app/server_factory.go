@@ -9,14 +9,19 @@ func newActivityServer(cfg orchestratorConfig, deps *orchestratorDependencies) *
 func activityConfig(cfg orchestratorConfig, deps *orchestratorDependencies) activities.Config {
 	return activities.Config{
 		DB:                      deps.db,
+		OTPProjection:           deps.otpProjection,
 		JobStore:                deps.jobStore,
+		RuntimeSecrets:          deps.secrets,
+		Fingerprints:            deps.fingerprints,
 		AccountClient:           deps.accountClient,
 		BrowserAutomationClient: deps.browserAutomationClient,
 		PaymentClient:           deps.paymentClient,
 		OTPRelay:                deps.otpRelay,
 		GoPayClient:             deps.gopayClient,
 		SmsClient:               deps.smsClient,
-		MailboxClient:           deps.mailboxClient,
+		SmsCatalogClient:        deps.smsCatalogClient,
+		MailboxPollRequester:    deps.mailboxPollRequester,
+		GPTSettings:             deps.gptSettings,
 		BrowserAuth: activities.BrowserAuthConfig{
 			ProxyRef:       cfg.BrowserAuthProxyRef,
 			Locale:         cfg.BrowserAuthLocale,
@@ -47,7 +52,6 @@ func activityConfig(cfg orchestratorConfig, deps *orchestratorDependencies) acti
 			PhoneMaxReuseCount:            cfg.CodexOAuthPhoneMaxReuseCount,
 			PhoneCountryISO2:              cfg.CodexOAuthPhoneCountryISO2,
 			PhoneCountryCallingCode:       cfg.CodexOAuthPhoneCountryCallingCode,
-			PhoneMaxPriceUSD:              cfg.CodexOAuthPhoneMaxPriceUSD,
 			PhoneWaitSeconds:              cfg.CodexOAuthPhoneWaitSeconds,
 			PhoneMinReuseRemainingSeconds: cfg.CodexOAuthPhoneMinReuseRemainingSeconds,
 		},

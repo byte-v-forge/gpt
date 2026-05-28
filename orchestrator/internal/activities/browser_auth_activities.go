@@ -50,8 +50,11 @@ func (s *Server) BrowserAuthStartActivity(ctx context.Context, input BrowserAuth
 	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "starting browser auth", data)
 	defer stopHeartbeat()
 
-	startResp, err := s.browserAuthStart(ctx, input.GetMode(), input.GetJobId(), account)
+	startResp, otpKind, err := s.browserAuthStart(ctx, input.GetMode(), input.GetJobId(), account)
 	data["browser_start"] = browserStartData(startResp)
+	if otpKind != "" {
+		data["otp_kind"] = otpKind
+	}
 	if err != nil {
 		output.Data = protoData(data)
 		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
@@ -67,17 +70,24 @@ func (s *Server) BrowserAuthStartActivity(ctx context.Context, input BrowserAuth
 		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 
-	output.FlowId = startResp.GetFlowId()
+	output.BrowserSessionId = startResp.GetBrowserSessionId()
 	output.Email = account.GetEmail()
 	output.OtpRequired = startResp.GetOtpRequired()
 	output.OtpIssuedAfterUnix = startResp.GetOtpIssuedAfterUnix()
 	output.OtpWaitStartedAtUnix = startResp.GetOtpWaitStartedAtUnix()
 	output.OtpRequestActionStartedAtUnix = startResp.GetOtpRequestActionStartedAtUnix()
 	output.OtpTimeoutSeconds = s.registrationOtpTimeout()
+	if output.GetOtpRequired() && otpKind != "" {
+		if err := s.setJobParams(ctx, input.GetJobId(), map[string]string{browserAuthOTPKindParam: otpKind}); err != nil {
+			output.Data = protoData(data)
+			return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
+		}
+	}
 	step.progress("browser auth flow created", map[string]any{
-		"mode":         input.GetMode(),
-		"flow_id":      output.GetFlowId(),
-		"otp_required": output.GetOtpRequired(),
+		"mode":               input.GetMode(),
+		"browser_session_id": output.GetBrowserSessionId(),
+		"otp_required":       output.GetOtpRequired(),
+		"otp_kind":           otpKind,
 	})
 
 	if startResp.GetResult() != nil {

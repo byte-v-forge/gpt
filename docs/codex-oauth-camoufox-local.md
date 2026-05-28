@@ -1,6 +1,6 @@
 # Codex OAuth Local Camoufox Verification
 
-目标：先在本地用独立 Camoufox 流程跑通 Codex OAuth，最终产出 Codex 兼容的 `auth.json`。本阶段不接 Temporal、不部署远程 k8s、不自动接邮箱/SMS；OTP 和 add phone 分支先由操作者手动输入。
+目标：先在本地用独立 Camoufox 流程跑通 Codex OAuth，最终产出 Codex 兼容的 `auth.json`。本阶段不接编排服务、不部署远程 k8s、不自动接邮箱/SMS；OTP 和 add phone 分支先由操作者手动输入。
 
 ## 用法
 

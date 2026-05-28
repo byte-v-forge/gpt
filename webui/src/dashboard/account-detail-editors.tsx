@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { ClipboardEvent } from 'react';
 import { Copy, Save } from 'lucide-react';
-import { Button, ControlledInputControl, Label, useForm } from '@/dashboard/module-kit';
-import { buttonHint } from '@/dashboard/module-kit';
+import { Button, ControlledInputControl, Label, useForm } from '@byte-v-forge/common-ui';
+import { buttonHint } from '@byte-v-forge/common-ui';
 import type { Account } from './types';
 
 export function TokenEditor({ label, field, account, showSecrets, onCopy, onSave }: {
@@ -13,11 +13,11 @@ export function TokenEditor({ label, field, account, showSecrets, onCopy, onSave
   onCopy: (label: string, value: string) => void;
   onSave: (account: Account, token: string) => Promise<void>;
 }) {
-  const current = account[field] || '';
+  void account;
   const [saving, setSaving] = useState(false);
-  const { control, handleSubmit, reset, watch } = useForm<{ token: string }>({ defaultValues: { token: current } });
+  const { control, handleSubmit, reset, watch } = useForm<{ token: string }>({ defaultValues: { token: '' } });
   const value = watch('token');
-  useEffect(() => reset({ token: account[field] || '' }), [account.account_id, account.session_token, account.access_token, field, reset]);
+  useEffect(() => reset({ token: '' }), [account.account_id, field, reset]);
   async function save(values: { token: string }) {
     setSaving(true);
     try {
@@ -40,10 +40,10 @@ export function TokenEditor({ label, field, account, showSecrets, onCopy, onSave
         className="mono"
         type={showSecrets ? 'text' : 'password'}
         onCopy={copyFromInput}
-        placeholder={`${label.toLowerCase()} token`}
+        placeholder={`${label.toLowerCase()} token（Redis TTL 保存，不回显）`}
       />
       <Button className="copyButton" {...buttonHint(`复制 ${label}`)} disabled={!value.trim()} onClick={() => onCopy(label, value)}><Copy size={14} /></Button>
-      <Button type="submit" {...buttonHint(`保存 ${label}`)} disabled={saving || value.trim() === current}><Save size={14} /> 保存</Button>
+      <Button type="submit" {...buttonHint(`保存 ${label}`)} disabled={saving || !value.trim()}><Save size={14} /> 保存</Button>
     </form>
   );
 }

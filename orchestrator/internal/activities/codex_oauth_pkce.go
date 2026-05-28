@@ -2,21 +2,19 @@ package activities
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/byte-v-forge/common-lib/fingerprinthttp"
+	"github.com/byte-v-forge/common-lib/jwtx"
+	"golang.org/x/oauth2"
 )
 
 type codexOAuthPKCE struct {
-	verifier  string
-	challenge string
+	verifier string
 }
 
 type codexOAuthTokenResponse struct {
@@ -26,38 +24,19 @@ type codexOAuthTokenResponse struct {
 }
 
 func newCodexOAuthPKCE() (codexOAuthPKCE, error) {
-	verifier, err := randomURLToken(64)
-	if err != nil {
-		return codexOAuthPKCE{}, err
-	}
-	sum := sha256.Sum256([]byte(verifier))
-	return codexOAuthPKCE{
-		verifier:  verifier,
-		challenge: base64.RawURLEncoding.EncodeToString(sum[:]),
-	}, nil
-}
-
-func randomURLToken(size int) (string, error) {
-	buf := make([]byte, size)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
+	return codexOAuthPKCE{verifier: oauth2.GenerateVerifier()}, nil
 }
 
 func buildCodexOAuthAuthorizeURL(cfg CodexOAuthConfig, pkce codexOAuthPKCE, state string) string {
-	values := url.Values{}
-	values.Set("response_type", "code")
-	values.Set("client_id", cfg.ClientID)
-	values.Set("redirect_uri", cfg.RedirectURI)
-	values.Set("scope", cfg.Scope)
-	values.Set("code_challenge", pkce.challenge)
-	values.Set("code_challenge_method", "S256")
-	values.Set("id_token_add_organizations", "true")
-	values.Set("codex_cli_simplified_flow", "true")
-	values.Set("state", state)
-	values.Set("originator", "codex_cli_rs")
-	return strings.TrimRight(cfg.AuthURL, "?") + "?" + values.Encode()
+	cfg = cfg.withDefaults()
+	oauthCfg := codexOAuthConfig(cfg)
+	return oauthCfg.AuthCodeURL(
+		state,
+		oauth2.S256ChallengeOption(pkce.verifier),
+		oauth2.SetAuthURLParam("id_token_add_organizations", "true"),
+		oauth2.SetAuthURLParam("codex_cli_simplified_flow", "true"),
+		oauth2.SetAuthURLParam("originator", "codex_cli_rs"),
+	)
 }
 
 func codexOAuthCodeFromCallback(rawURL string) (string, string, error) {
@@ -77,39 +56,33 @@ func codexOAuthCodeFromCallback(rawURL string) (string, string, error) {
 	return code, state, nil
 }
 
-func exchangeCodexOAuthToken(ctx context.Context, cfg CodexOAuthConfig, code, verifier string) (codexOAuthTokenResponse, error) {
+func exchangeCodexOAuthTokenWithProfile(ctx context.Context, cfg CodexOAuthConfig, code, verifier string, profile fingerprinthttp.Profile) (codexOAuthTokenResponse, error) {
 	cfg = cfg.withDefaults()
-	form := url.Values{}
-	form.Set("grant_type", "authorization_code")
-	form.Set("client_id", cfg.ClientID)
-	form.Set("code", code)
-	form.Set("redirect_uri", cfg.RedirectURI)
-	form.Set("code_verifier", verifier)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, cfg.TokenURL, strings.NewReader(form.Encode()))
+	profile = profile.WithDefaults(codexOAuthProtocolDefaultProfile(cfg))
+	profile.ProxyURL = cfg.TokenProxyURL
+	client, err := newGptClient(cfg, nil, profile)
 	if err != nil {
-		return codexOAuthTokenResponse{}, err
+		return codexOAuthTokenResponse{}, fmt.Errorf("codex oauth token client init failed: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-	client, err := codexOAuthTokenHTTPClient(cfg)
-	if err != nil {
-		return codexOAuthTokenResponse{}, err
+	defer client.Close()
+	form := url.Values{
+		"grant_type":    {"authorization_code"},
+		"client_id":     {cfg.ClientID},
+		"code":          {strings.TrimSpace(code)},
+		"redirect_uri":  {cfg.RedirectURI},
+		"code_verifier": {strings.TrimSpace(verifier)},
 	}
-	resp, err := client.Do(req)
+	resp, err := client.postForm(ctx, cfg.TokenURL, "https://auth.openai.com/", form, map[string]string{"Accept": "application/json"})
 	if err != nil {
-		return codexOAuthTokenResponse{}, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return codexOAuthTokenResponse{}, err
+		return codexOAuthTokenResponse{}, fmt.Errorf("codex oauth token exchange failed: %w", err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return codexOAuthTokenResponse{}, fmt.Errorf("codex oauth token exchange failed: status %d %s", resp.StatusCode, compactBrowserAuthText(string(body), 500))
+		return codexOAuthTokenResponse{}, fmt.Errorf("codex oauth token exchange failed: status %d %s", resp.StatusCode, codexOAuthProtocolSafeText(string(resp.Body), 300))
 	}
-	var tokens codexOAuthTokenResponse
-	if err := json.Unmarshal(body, &tokens); err != nil {
-		return codexOAuthTokenResponse{}, err
+	tokens := codexOAuthTokenResponse{
+		IDToken:      strings.TrimSpace(stringAny(resp.JSON["id_token"])),
+		AccessToken:  strings.TrimSpace(stringAny(resp.JSON["access_token"])),
+		RefreshToken: strings.TrimSpace(stringAny(resp.JSON["refresh_token"])),
 	}
 	if tokens.IDToken == "" || tokens.AccessToken == "" || tokens.RefreshToken == "" {
 		return codexOAuthTokenResponse{}, fmt.Errorf("codex oauth token response missing required tokens")
@@ -117,19 +90,17 @@ func exchangeCodexOAuthToken(ctx context.Context, cfg CodexOAuthConfig, code, ve
 	return tokens, nil
 }
 
-func codexOAuthTokenHTTPClient(cfg CodexOAuthConfig) (*http.Client, error) {
-	client := &http.Client{Timeout: 45 * time.Second}
-	if cfg.TokenProxyURL == "" {
-		return client, nil
+func codexOAuthConfig(cfg CodexOAuthConfig) oauth2.Config {
+	return oauth2.Config{
+		ClientID:    cfg.ClientID,
+		RedirectURL: cfg.RedirectURI,
+		Scopes:      strings.Fields(cfg.Scope),
+		Endpoint: oauth2.Endpoint{
+			AuthURL:   strings.TrimRight(cfg.AuthURL, "?"),
+			TokenURL:  cfg.TokenURL,
+			AuthStyle: oauth2.AuthStyleInParams,
+		},
 	}
-	proxyURL, err := url.Parse(cfg.TokenProxyURL)
-	if err != nil {
-		return nil, fmt.Errorf("codex oauth token proxy url invalid")
-	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.Proxy = http.ProxyURL(proxyURL)
-	client.Transport = transport
-	return client, nil
 }
 
 func buildCodexAuthJSON(tokens codexOAuthTokenResponse) ([]byte, error) {
@@ -152,20 +123,8 @@ func buildCodexAuthJSON(tokens codexOAuthTokenResponse) ([]byte, error) {
 }
 
 func codexOAuthAuthClaims(idToken string) (string, string) {
-	parts := strings.Split(idToken, ".")
-	if len(parts) != 3 {
-		return "", ""
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		if padded, padErr := base64.URLEncoding.DecodeString(parts[1] + strings.Repeat("=", (4-len(parts[1])%4)%4)); padErr == nil {
-			payload = padded
-		} else {
-			return "", ""
-		}
-	}
-	var claims map[string]any
-	if err := json.Unmarshal(payload, &claims); err != nil {
+	claims := jwtx.PayloadOrNil(idToken)
+	if claims == nil {
 		return "", ""
 	}
 	email := claimString(claims["email"])

@@ -1,9 +1,11 @@
 package appsvc
 
 import (
+	"github.com/byte-v-forge/common-lib/envx"
+	"github.com/byte-v-forge/common-lib/stringx"
+
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -17,8 +19,9 @@ const (
 
 type Config struct {
 	Port                       string
-	StateDSN                   string
-	StateTable                 string
+	StateRedisURL              string
+	StateKeyPrefix             string
+	StateTTL                   time.Duration
 	SignupAuthUUID             string
 	PINClientID                string
 	GotoClientID               string
@@ -38,15 +41,11 @@ type Config struct {
 }
 
 func ConfigFromEnv() Config {
-	stateDSN := firstNonEmpty(
-		os.Getenv("GOPAY_APP_PG_DSN"),
-		os.Getenv("GOPAY_STATE_PG_DSN"),
-		os.Getenv("PG_DSN"),
-	)
 	return Config{
-		Port:                       firstNonEmpty(os.Getenv("GOPAY_APP_PORT"), "50051"),
-		StateDSN:                   stateDSN,
-		StateTable:                 firstNonEmpty(os.Getenv("GOPAY_STATE_TABLE"), "gopay_app_states"),
+		Port:                       stringx.FirstNonEmpty(os.Getenv("GOPAY_APP_PORT"), "50051"),
+		StateRedisURL:              strings.TrimSpace(os.Getenv("GOPAY_STATE_REDIS_URL")),
+		StateKeyPrefix:             stringx.FirstNonEmpty(os.Getenv("GOPAY_STATE_KEY_PREFIX"), "byte-v-forge:gpt:gopay-app-state"),
+		StateTTL:                   envx.PositiveDurationSeconds("GOPAY_STATE_TTL_SECONDS", 7*24*time.Hour),
 		SignupAuthUUID:             "bb648413-b637-443a-8ebf-176cf9b5dc32",
 		PINClientID:                "6d11d261d7ae462dbd4be0dc5f36a697-MFAGOJEK",
 		GotoClientID:               "gopay:consumer:app",
@@ -58,47 +57,10 @@ func ConfigFromEnv() Config {
 		EnvelopeShortlinkTimeout:   10 * time.Second,
 		DynamicEgress:              splitDynamicEgress(os.Getenv("GOPAY_DYNAMIC_EGRESS")),
 		ProxyRuntimeHTTPAddr:       strings.TrimSpace(os.Getenv("PROXY_RUNTIME_HTTP_ADDR")),
-		SignupInitiateJitterMin:    envSeconds("GOPAY_SIGNUP_INITIATE_JITTER_MIN_SECONDS", 8),
-		SignupInitiateJitterMax:    envSeconds("GOPAY_SIGNUP_INITIATE_JITTER_MAX_SECONDS", 25),
-		SignupRateLimitCooldown:    envSeconds("GOPAY_SIGNUP_RATE_LIMIT_COOLDOWN_SECONDS", 900),
+		SignupInitiateJitterMin:    envx.NonNegativeDurationSeconds("GOPAY_SIGNUP_INITIATE_JITTER_MIN_SECONDS", 8*time.Second),
+		SignupInitiateJitterMax:    envx.NonNegativeDurationSeconds("GOPAY_SIGNUP_INITIATE_JITTER_MAX_SECONDS", 25*time.Second),
+		SignupRateLimitCooldown:    envx.NonNegativeDurationSeconds("GOPAY_SIGNUP_RATE_LIMIT_COOLDOWN_SECONDS", 900*time.Second),
 		MinBalanceRp:               1,
-	}
-}
-
-func envSeconds(name string, fallback int64) time.Duration {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return time.Duration(fallback) * time.Second
-	}
-	parsed, err := strconv.ParseInt(value, 10, 64)
-	if err != nil || parsed < 0 {
-		return time.Duration(fallback) * time.Second
-	}
-	return time.Duration(parsed) * time.Second
-}
-
-func envFloatSeconds(name string, fallback float64) time.Duration {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return time.Duration(fallback * float64(time.Second))
-	}
-	parsed, err := strconv.ParseFloat(value, 64)
-	if err != nil || parsed < 0 {
-		return time.Duration(fallback * float64(time.Second))
-	}
-	return time.Duration(parsed * float64(time.Second))
-}
-
-func envBool(name string, fallback bool) bool {
-	value := strings.TrimSpace(os.Getenv(name))
-	if value == "" {
-		return fallback
-	}
-	switch strings.ToLower(value) {
-	case "1", "true", "yes", "on":
-		return true
-	default:
-		return false
 	}
 }
 

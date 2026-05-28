@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import type React from 'react';
 import { CheckCircle2, KeyRound, LogIn, RefreshCcw, Repeat, Save, Send, UserPlus, WalletCards, XCircle } from 'lucide-react';
-import { Button, Input, Label, api, useQuery } from '@/dashboard/module-kit';
-import type { GoPayUserWAPhoneResponse } from '@/proto/orchestrator_gopay_app';
+import { Button, DashboardField, Input, api, useQuery } from '@byte-v-forge/common-ui';
+import type { GoPayUserWAPhoneResponse } from '../proto/orchestrator_gopay_app';
 import { GoPayPhoneCheck } from './gopay-phone-check';
 import type { Job } from './types';
 
@@ -49,9 +49,9 @@ export function GoPayActionsPanel({ currentJob, onDone, onCancelWorkflow, onRefr
   return (
     <section className="goPayActions">
       <ActionGroup title="用户资料">
-        <GoPayField label="WA 手机号" value={waPhone} onChange={setWaPhone} placeholder="812..." />
-        <GoPayField label="PIN" value={pin} onChange={setPin} type="password" />
-        <GoPayField label="区号" value={countryCode} onChange={setCountryCode} placeholder="+62" />
+        <DashboardField className="goPayActionField" label="WA 手机号"><Input value={waPhone} placeholder="812..." onChange={(event) => setWaPhone(event.target.value)} /></DashboardField>
+        <DashboardField className="goPayActionField" label="PIN"><Input value={pin} type="password" onChange={(event) => setPin(event.target.value)} /></DashboardField>
+        <DashboardField className="goPayActionField" label="区号"><Input value={countryCode} placeholder="+62" onChange={(event) => setCountryCode(event.target.value)} /></DashboardField>
         <Button onClick={saveProfile} disabled={disabled}><Save size={15} />保存</Button>
       </ActionGroup>
       <ActionGroup title="手机号检测">
@@ -68,7 +68,7 @@ export function GoPayActionsPanel({ currentJob, onDone, onCancelWorkflow, onRefr
         <Button onClick={() => startAppWorkflow('换绑', 'change_phone')} disabled={disabled}><Repeat size={15} />换绑</Button>
       </ActionGroup>
       <ActionGroup title="手动 OTP">
-        <GoPayField label="OTP" value={otp} onChange={setOtp} placeholder="123456" />
+        <DashboardField className="goPayActionField" label="OTP"><Input value={otp} placeholder="123456" onChange={(event) => setOtp(event.target.value)} /></DashboardField>
         <Button onClick={submitOTP} disabled={disabled || !currentJob}><Send size={15} />提交当前流程</Button>
         <Button variant="destructive" onClick={cancelWorkflow} disabled={disabled || !currentJob}><XCircle size={15} />取消当前流程</Button>
         <Button onClick={() => void refreshAll('已刷新')} disabled={disabled}><RefreshCcw size={15} />刷新</Button>
@@ -77,12 +77,12 @@ export function GoPayActionsPanel({ currentJob, onDone, onCancelWorkflow, onRefr
   );
 
   async function saveProfile() {
-    await run('保存配置', '/api/gopay/profile', { wa_phone: waPhone, pin }, false);
+    await run('保存配置', '/api/gpt/gopay/profile', { wa_phone: waPhone, pin }, false);
     await profile.refetch();
   }
 
   async function startAppWorkflow(label: string, operation: string) {
-    await startWorkflow(label, '/api/workflows/gopay-app', {
+    await startWorkflow(label, '/api/gpt/workflows/gopay-app', {
       operation,
       user_id: USER_ID,
       phone: primaryPhone,
@@ -95,7 +95,7 @@ export function GoPayActionsPanel({ currentJob, onDone, onCancelWorkflow, onRefr
   async function submitOTP() {
     if (!currentJob?.job_id) return onDone('没有运行中的 GoPay 流程', true);
     if (!otp.trim()) return onDone('OTP 不能为空', true);
-    await run('提交 OTP', `/api/jobs/${currentJob.job_id}/otp`, { otp }, true);
+    await run('提交 OTP', `/api/gpt/jobs/${currentJob.job_id}/otp`, { otp }, true);
     setOtp('');
   }
 
@@ -146,17 +146,9 @@ function ActionGroup({ title, children }: { title: string; children: React.React
   return <div className="goPayActionGroup"><h3>{title}</h3><div>{children}</div></div>;
 }
 
-function GoPayField(props: { label: string; value: string; onChange: (value: string) => void; placeholder?: string; type?: string }) {
-  return (
-    <div className="goPayActionField">
-      <Label>{props.label}</Label>
-      <Input value={props.value} type={props.type || 'text'} placeholder={props.placeholder} onChange={(event) => props.onChange(event.target.value)} />
-    </div>
-  );
-}
 
 function loadProfile() {
-  return api<GoPayUserWAPhoneResponse>(`/api/gopay/profile?user_id=${USER_ID}`);
+  return api<GoPayUserWAPhoneResponse>(`/api/gpt/gopay/profile?user_id=${USER_ID}`);
 }
 
 function resultText(label: string, resp: ActionResult) {

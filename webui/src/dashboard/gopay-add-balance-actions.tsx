@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { WalletCards } from 'lucide-react';
 import QRCode from 'qrcode';
-import { Button, buttonHint } from '@/dashboard/module-kit';
+import { Button, Card, buttonHint } from '@byte-v-forge/common-ui';
 import { addBalanceMethodLabel, canConfirmManualAddBalance, canSelectGoPayAddBalance, manualAddBalanceView } from './gopay-utils';
 import type { ConcreteGoPayAddBalanceMethod, Job, WorkflowProgress } from './types';
 
@@ -78,7 +78,7 @@ function ManualTransferConfirm({ balance, disabled, pending, onConfirm }: {
     );
   }
   return (
-    <div className="flex items-center gap-2 rounded-xl border bg-background p-2 shadow-sm">
+    <Card className="flex items-center gap-2 p-2">
       {dataUrl ? <img src={dataUrl} alt="GoPay 加余额码" className="h-24 w-24 rounded bg-white p-1" /> : <div className="flex h-24 w-24 items-center justify-center rounded bg-muted text-xs">QR</div>}
       <div className="grid min-w-0 gap-1 text-left text-xs">
         <strong>扫码给 GoPay 加余额</strong>
@@ -89,7 +89,7 @@ function ManualTransferConfirm({ balance, disabled, pending, onConfirm }: {
           <WalletCards size={13} />{pending ? '确认中' : '我已转账，继续'}
         </Button>
       </div>
-    </div>
+    </Card>
   );
 }
 

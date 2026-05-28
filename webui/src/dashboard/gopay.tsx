@@ -1,6 +1,6 @@
 import { AlertTriangle, Clock, ShieldCheck } from 'lucide-react';
-import { compactCellError, formatUnix } from '@/dashboard/module-kit';
-import { formatJobTime } from '@/dashboard/modules/workflow/sdk';
+import { compactCellError, formatUnix } from '@byte-v-forge/common-ui';
+import { formatJobTime } from './job-utils';
 import { actionText } from './labels';
 import type { DisplayLabelMap, GoPayDashboardStateResponse, GoPayUserStatusResponse, Job } from './types';
 

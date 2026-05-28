@@ -29,10 +29,10 @@ func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input ProbePl
 		accessToken := strings.TrimSpace(input.GetAccessToken())
 		if account != nil {
 			if sessionToken == "" {
-				sessionToken = strings.TrimSpace(account.GetSessionToken())
+				sessionToken = s.cachedChatGPTSessionToken(ctx, account.GetAccountId())
 			}
 			if accessToken == "" {
-				accessToken = strings.TrimSpace(account.GetAccessToken())
+				accessToken = s.cachedChatGPTAccessToken(ctx, account.GetAccountId())
 			}
 		}
 		data := map[string]any{
@@ -40,56 +40,17 @@ func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input ProbePl
 			"session_token_present": sessionToken != "",
 			"access_token_present":  accessToken != "",
 		}
-		ref := accountRef(account)
-		if account != nil && shouldSkipPlusTrialProbe(ref) {
-			for key, value := range skippedPlusTrialProbeData(ref) {
-				data[key] = value
-			}
-			source := "account.plus_active"
-			if normalizeTier(ref.GetTier()) == "plus" {
-				source = "account.tier"
-			}
-			output.Success = true
-			output.Checked = true
-			output.PlusTrialEligible = false
-			output.PlusActive = true
-			output.PlanType = ref.GetTier()
-			output.Source = source
-			data["success"] = true
-			data["checked"] = true
-			data["plus_trial_eligible"] = false
-			data["plus_active"] = true
-			data["plan_type"] = ref.GetTier()
-			data["source"] = source
-			update := &pb.Account{
-				AccountId:         accountID,
-				PlusTrialEligible: boolPtr(false),
-				PlusActive:        boolPtr(true),
-			}
-			if normalizeTier(ref.GetTier()) != "" {
-				update.Tier = ref.GetTier()
-			}
-			if normalizeTier(ref.GetTier()) == "plus" || ref.GetPlusActive() {
-				update.Status = accountStatusActivated
-				update.ErrorMessage = ""
-			}
-			if updateErr := s.updateAccount(ctx, update); updateErr != nil {
-				data["account_update_error"] = updateErr.Error()
-				output.Data = protoData(data)
-				return data, updateErr
-			}
-			data["account_updated"] = true
-			output.Data = protoData(data)
-			return data, nil
-		}
 		if sessionToken == "" && accessToken == "" {
 			output.Data = protoData(data)
 			return data, fmt.Errorf("session_token or access_token is required")
 		}
 
-		resp, callErr := s.paymentClient.ProbePlusTrial(ctx, &pb.ProbePlusTrialPaymentRequest{
-			Credential: paymentCredential(sessionToken, accessToken),
-		})
+		credential, callErr := s.paymentCredential(ctx, accountID, sessionToken, accessToken)
+		if callErr != nil {
+			output.Data = protoData(data)
+			return data, callErr
+		}
+		resp, callErr := s.paymentClient.ProbePlusTrial(ctx, &pb.ProbePlusTrialPaymentRequest{Credential: credential})
 		data["payment_probe"] = plusTrialProbeData(resp)
 		if resp != nil {
 			output.Success = resp.GetSuccess()
@@ -176,8 +137,8 @@ func (s *Server) ProbeTierAtomicActivity(ctx context.Context, input ProbeTierAct
 	var output ProbeTierActivityOutput
 	step := s.activityStep(ctx, input.GetJobId(), stepProbeTier, false, true)
 	_, err = step.run(func() (any, error) {
-		sessionToken := strings.TrimSpace(account.GetSessionToken())
-		accessToken := strings.TrimSpace(account.GetAccessToken())
+		sessionToken := s.cachedChatGPTSessionToken(ctx, account.GetAccountId())
+		accessToken := s.cachedChatGPTAccessToken(ctx, account.GetAccountId())
 		data := map[string]any{
 			"account_id":            account.GetAccountId(),
 			"session_token_present": sessionToken != "",
@@ -187,9 +148,12 @@ func (s *Server) ProbeTierAtomicActivity(ctx context.Context, input ProbeTierAct
 			output.Data = protoData(data)
 			return data, fmt.Errorf("session_token or access_token is required")
 		}
-		resp, callErr := s.paymentClient.ProbeTier(ctx, &pb.ProbeTierPaymentRequest{
-			Credential: paymentCredential(sessionToken, accessToken),
-		})
+		credential, callErr := s.paymentCredential(ctx, account.GetAccountId(), sessionToken, accessToken)
+		if callErr != nil {
+			output.Data = protoData(data)
+			return data, callErr
+		}
+		resp, callErr := s.paymentClient.ProbeTier(ctx, &pb.ProbeTierPaymentRequest{Credential: credential})
 		data["tier_probe"] = tierProbeData(resp)
 		if resp != nil {
 			output.Success = resp.GetSuccess()

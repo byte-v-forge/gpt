@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ExternalLink, RotateCcw, Send } from 'lucide-react';
 import QRCode from 'qrcode';
-import { Button, Input, api, buttonHint } from '@/dashboard/module-kit';
-import { registerWorkflowJobActionRenderers } from '@/dashboard/modules/workflow/sdk';
-import type { WorkflowJobActionRendererProps } from '@/dashboard/modules/workflow/sdk';
+import { Button, Input, api, buttonHint } from '@byte-v-forge/common-ui';
+import { registerWorkflowJobActionRenderers, type WorkflowJobActionRendererProps } from './job-action-renderers';
 import { GoPayAddBalanceActions, hasGoPayAddBalanceActions } from './gopay-add-balance-actions';
 import { addBalanceMethodLabel, canConfirmManualGoPayPayment, goPayAddBalancePayload, manualGoPayPaymentView } from './gopay-utils';
 import type { ConcreteGoPayAddBalanceMethod } from './types';
@@ -55,7 +54,7 @@ function GptWorkflowActions(props: WorkflowJobActionRendererProps) {
   }
 
   async function selectAddBalance(jobId: string, method: ConcreteGoPayAddBalanceMethod) {
-    await post(method, `/api/jobs/${jobId}/add-balance/select`, { addBalance: goPayAddBalancePayload(method) }, `已选择加余额方式：${addBalanceMethodLabel(method)}`);
+    await post(method, `/api/gpt/jobs/${jobId}/add-balance/select`, { addBalance: goPayAddBalancePayload(method) }, `已选择加余额方式：${addBalanceMethodLabel(method)}`);
   }
 
   return (
@@ -67,18 +66,18 @@ function GptWorkflowActions(props: WorkflowJobActionRendererProps) {
       {waitingOTP && (
         <form className="gptWorkflowOtpForm" onSubmit={(event) => {
           event.preventDefault();
-          if (otp.trim()) void post('otp', `/api/jobs/${job.job_id}/otp`, { otp: otp.trim() }, 'OTP 已提交').then(() => setOtp(''));
+          if (otp.trim()) void post('otp', `/api/gpt/jobs/${job.job_id}/otp`, { otp: otp.trim() }, 'OTP 已提交').then(() => setOtp(''));
         }}>
           <Input className="gptWorkflowOtpInput" inputMode="numeric" autoComplete="one-time-code" placeholder="OTP" value={otp} onChange={(event) => setOtp(event.target.value)} />
           <Button type="submit" disabled={!!pending || !otp.trim()}><Send size={14} />{pending === 'otp' ? '提交中' : '提交 OTP'}</Button>
-          {canResendOTP(job) && <Button type="button" variant="outline" disabled={!!pending} onClick={() => void post('resend', `/api/jobs/${job.job_id}/otp/resend`, {}, 'OTP 重发已触发')}><RotateCcw size={14} />重发 OTP</Button>}
+          {canResendOTP(job) && <Button type="button" variant="outline" disabled={!!pending} onClick={() => void post('resend', `/api/gpt/jobs/${job.job_id}/otp/resend`, {}, 'OTP 重发已触发')}><RotateCcw size={14} />重发 OTP</Button>}
         </form>
       )}
       {canConfirmPayment && payment && (
-        <ManualQRISPaymentActions payment={payment} busy={pending === 'payment'} onConfirm={() => void post('payment', `/api/jobs/${job.job_id}/gopay-payment/confirm`, {}, '已确认支付，继续后续步骤')} />
+        <ManualQRISPaymentActions payment={payment} busy={pending === 'payment'} onConfirm={() => void post('payment', `/api/gpt/jobs/${job.job_id}/gopay-payment/confirm`, {}, '已确认支付，继续后续步骤')} />
       )}
       {canHandleAddBalance && (
-        <GoPayAddBalanceActions job={job} progress={progress} busy={!!pending} onSelect={selectAddBalance} onConfirm={(jobId) => post('add-balance-confirm', `/api/jobs/${jobId}/add-balance/confirm`, {}, '已确认加余额，继续后续步骤')} />
+        <GoPayAddBalanceActions job={job} progress={progress} busy={!!pending} onSelect={selectAddBalance} onConfirm={(jobId) => post('add-balance-confirm', `/api/gpt/jobs/${jobId}/add-balance/confirm`, {}, '已确认加余额，继续后续步骤')} />
       )}
     </div>
   );

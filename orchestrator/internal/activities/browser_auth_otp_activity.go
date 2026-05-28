@@ -11,15 +11,15 @@ import (
 
 func (s *Server) BrowserAuthResendOTPActivity(ctx context.Context, input BrowserAuthResendOTPInput) (BrowserAuthResendOTPOutput, error) {
 	output := BrowserAuthResendOTPOutput{
-		FlowId:            input.GetFlowId(),
+		BrowserSessionId:  input.GetBrowserSessionId(),
 		OtpTimeoutSeconds: s.registrationOtpTimeout(),
 	}
 	stepName, err := browserAuthOTPRequestStepName(input.GetMode())
 	if err != nil {
 		return output, err
 	}
-	if strings.TrimSpace(input.GetFlowId()) == "" {
-		return output, fmt.Errorf("browser flow_id is required")
+	if strings.TrimSpace(input.GetBrowserSessionId()) == "" {
+		return output, fmt.Errorf("browser_session_id is required")
 	}
 	step, err := s.startActivityStep(ctx, input.GetJobId(), stepName, false, true)
 	if err != nil {
@@ -27,15 +27,28 @@ func (s *Server) BrowserAuthResendOTPActivity(ctx context.Context, input Browser
 	}
 
 	data := map[string]any{
-		"account_id": input.GetAccountId(),
-		"flow_id":    input.GetFlowId(),
-		"mode":       input.GetMode(),
+		"account_id":         input.GetAccountId(),
+		"browser_session_id": input.GetBrowserSessionId(),
+		"mode":               input.GetMode(),
 	}
 	step.progress("resending email OTP", data)
 	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "resending email OTP", data)
 	defer stopHeartbeat()
 
-	resp, err := s.browserAuthResendOTP(ctx, input.GetMode(), input.GetFlowId())
+	account, err := s.getAccount(ctx, input.GetAccountId())
+	if err != nil {
+		output.Data = protoData(data)
+		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
+	}
+	otpKind, _, err := s.getJobParam(ctx, input.GetJobId(), browserAuthOTPKindParam)
+	if err != nil {
+		output.Data = protoData(data)
+		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
+	}
+	if otpKind != "" {
+		data["otp_kind"] = otpKind
+	}
+	resp, err := s.browserAuthResendOTP(ctx, input.GetMode(), input.GetJobId(), account, input.GetBrowserSessionId(), otpKind)
 	data["browser_resend"] = browserAuthResendData(resp)
 	if err != nil {
 		output.Data = protoData(data)
@@ -52,7 +65,7 @@ func (s *Server) BrowserAuthResendOTPActivity(ctx context.Context, input Browser
 		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 
-	output.FlowId = resp.GetFlowId()
+	output.BrowserSessionId = resp.GetBrowserSessionId()
 	output.Email = resp.GetEmail()
 	output.Success = true
 	output.OtpIssuedAfterUnix = resp.GetOtpIssuedAfterUnix()
@@ -108,7 +121,7 @@ func browserAuthResendData(resp *pb.BrowserAuthResendOTPOutput) map[string]any {
 		return nil
 	}
 	data := map[string]any{
-		"flow_id":                        resp.GetFlowId(),
+		"browser_session_id":             resp.GetBrowserSessionId(),
 		"email":                          resp.GetEmail(),
 		"success":                        resp.GetSuccess(),
 		"otp_issued_after_unix":          resp.GetOtpIssuedAfterUnix(),

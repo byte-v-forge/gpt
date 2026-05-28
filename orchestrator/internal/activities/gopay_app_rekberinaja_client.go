@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/httpx"
 	"io"
 	"net/http"
 	"strings"
@@ -78,7 +79,7 @@ func (c *rekberinajaAPIClient) doJSONOnce(ctx context.Context, method string, en
 	}
 	defer httpResp.Body.Close()
 
-	raw, err := io.ReadAll(io.LimitReader(httpResp.Body, 65536))
+	raw, err := httpx.ReadLimited(httpResp.Body, 65536)
 	if err != nil {
 		return rekberinajaAPIResponse{httpStatus: httpResp.StatusCode}, err
 	}

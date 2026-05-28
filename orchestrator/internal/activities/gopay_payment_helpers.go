@@ -18,10 +18,7 @@ func (s *Server) paymentActivityAccount(ctx context.Context, input *GoPayActivit
 	if sessionToken == "" && accessToken == "" {
 		return nil, fmt.Errorf("account_id, session_token, or access_token is required")
 	}
-	return &pb.Account{
-		SessionToken: sessionToken,
-		AccessToken:  accessToken,
-	}, nil
+	return &pb.Account{}, nil
 }
 
 func isStalePreparedPaymentFlow(resp *pb.StartGoPayResponse, err error) bool {

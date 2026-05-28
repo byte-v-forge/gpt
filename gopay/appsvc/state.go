@@ -1,7 +1,6 @@
 package appsvc
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -9,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/byte-v-forge/common-lib/jwtx"
 )
 
 type stateMap map[string]any
@@ -140,15 +141,6 @@ func deleteKeys(state stateMap, keys ...string) {
 	}
 }
 
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
-}
-
 func phoneCountryCode(cfg Config, explicit string) string {
 	value := strings.TrimSpace(explicit)
 	value = strings.TrimSpace(value)
@@ -180,25 +172,7 @@ func normalizePhoneWithConfig(cfg Config, phone string, countryCode string) stri
 }
 
 func jwtExpiresAt(token string) int64 {
-	token = strings.TrimSpace(strings.TrimPrefix(token, "Bearer "))
-	parts := strings.Split(token, ".")
-	if len(parts) < 2 {
-		return 0
-	}
-	raw := parts[1]
-	raw += strings.Repeat("=", (4-len(raw)%4)%4)
-	decoded, err := base64.URLEncoding.DecodeString(raw)
-	if err != nil {
-		decoded, err = base64.RawURLEncoding.DecodeString(parts[1])
-	}
-	if err != nil {
-		return 0
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(decoded, &payload); err != nil {
-		return 0
-	}
-	return anyInt(payload["exp"])
+	return jwtx.ExpiresAt(token)
 }
 
 func tokenUsable(state stateMap, key string, minTTL time.Duration) bool {

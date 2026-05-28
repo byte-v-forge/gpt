@@ -2,14 +2,14 @@ package jobevents
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"log"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/byte-v-forge/common-lib/eventbus"
+	"github.com/byte-v-forge/common-lib/hotstream"
+	"github.com/byte-v-forge/common-lib/protojsonx"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gorm.io/gorm"
 
@@ -17,38 +17,27 @@ import (
 	"orchestrator/pb"
 )
 
-const notifyChannel = "job_events"
+const (
+	GPTJobUpdatedEvent = "gpt.job.updated"
+	GPTJobResource     = "gpt.job"
+	GPTHotStreamSource = "gpt-orchestrator"
+)
 
 type Store struct {
-	db     *gorm.DB
-	dsn    string
-	broker *broker
-	cancel context.CancelFunc
+	db  *gorm.DB
+	hot hotstream.Publisher
 }
 
-type broker struct {
-	mu   sync.Mutex
-	subs map[chan *pb.JobEvent]struct{}
+func NewStore(database *gorm.DB, _ string) *Store {
+	return &Store{db: database}
 }
 
-func NewStore(database *gorm.DB, dsn string) *Store {
-	ctx, cancel := context.WithCancel(context.Background())
-	store := &Store{
-		db:     database,
-		dsn:    dsn,
-		broker: &broker{subs: map[chan *pb.JobEvent]struct{}{}},
-		cancel: cancel,
-	}
-	go store.listen(ctx)
-	return store
+func (s *Store) WithHotStream(publisher hotstream.Publisher) *Store {
+	s.hot = publisher
+	return s
 }
 
-func (s *Store) Close() error {
-	if s.cancel != nil {
-		s.cancel()
-	}
-	return nil
-}
+func (s *Store) Close() error { return nil }
 
 func (s *Store) PublishSnapshot(ctx context.Context, eventType string, snapshot *pb.JobSnapshot) (*pb.JobEvent, error) {
 	if s == nil || snapshot == nil || snapshot.GetJob() == nil {
@@ -63,10 +52,7 @@ func (s *Store) PublishSnapshot(ctx context.Context, eventType string, snapshot 
 		eventType = "job_snapshot"
 	}
 
-	row := &db.JobEvent{
-		JobID:     jobID,
-		EventType: eventType,
-	}
+	row := &db.JobEvent{JobID: jobID, EventType: eventType}
 	if err := s.db.WithContext(ctx).Create(row).Error; err != nil {
 		return nil, err
 	}
@@ -82,16 +68,8 @@ func (s *Store) PublishSnapshot(ctx context.Context, eventType string, snapshot 
 		return nil, err
 	}
 
-	event := &pb.JobEvent{
-		EventId:   row.EventID,
-		JobId:     jobID,
-		EventType: eventType,
-		Snapshot:  snapshot,
-	}
-	if err := s.notify(ctx, row.EventID); err != nil {
-		log.Printf("[orchestrator] notify job event failed event=%d job=%s: %v", row.EventID, jobID, err)
-	}
-	s.broker.publish(event)
+	event := &pb.JobEvent{EventId: row.EventID, JobId: jobID, EventType: eventType, Snapshot: snapshot}
+	s.publishHotStream(ctx, event)
 	return event, nil
 }
 
@@ -106,69 +84,33 @@ func (s *Store) Get(ctx context.Context, eventID int64) (*pb.JobEvent, error) {
 	return rowToProto(&row)
 }
 
-func (s *Store) Subscribe(ctx context.Context) (<-chan *pb.JobEvent, func()) {
-	ch := make(chan *pb.JobEvent, 32)
-	s.broker.subscribe(ch)
-	cancel := func() {
-		s.broker.unsubscribe(ch)
-	}
-	go func() {
-		<-ctx.Done()
-		cancel()
-	}()
-	return ch, cancel
-}
-
-func (s *Store) notify(ctx context.Context, eventID int64) error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	return s.db.WithContext(ctx).Exec("SELECT pg_notify(?, ?)", notifyChannel, strconv.FormatInt(eventID, 10)).Error
-}
-
-func (s *Store) listen(ctx context.Context) {
-	if s == nil || strings.TrimSpace(s.dsn) == "" {
+func (s *Store) publishHotStream(ctx context.Context, event *pb.JobEvent) {
+	if s == nil || s.hot == nil || event == nil {
 		return
 	}
-	for {
-		if err := ctx.Err(); err != nil {
-			return
-		}
-		if err := s.listenOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			log.Printf("[orchestrator] job event listener reconnecting: %v", err)
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(time.Second):
-			}
-		}
+	job := event.GetSnapshot().GetJob()
+	attrs := map[string]string{
+		"job_id":     event.GetJobId(),
+		"event_type": event.GetEventType(),
 	}
-}
-
-func (s *Store) listenOnce(ctx context.Context) error {
-	conn, err := pgx.Connect(ctx, s.dsn)
-	if err != nil {
-		return err
+	if job != nil {
+		attrs["status"] = job.GetStatus()
+		attrs["action"] = job.GetAction()
+		attrs["account_id"] = job.GetAccountId()
 	}
-	defer conn.Close(context.Background())
-	if _, err := conn.Exec(ctx, "LISTEN "+notifyChannel); err != nil {
-		return err
-	}
-	for {
-		notification, err := conn.WaitForNotification(ctx)
-		if err != nil {
-			return err
-		}
-		eventID, err := strconv.ParseInt(strings.TrimSpace(notification.Payload), 10, 64)
-		if err != nil || eventID <= 0 {
-			continue
-		}
-		event, err := s.Get(ctx, eventID)
-		if err != nil {
-			log.Printf("[orchestrator] load job event failed event=%d: %v", eventID, err)
-			continue
-		}
-		s.broker.publish(event)
+	hotEvent := hotstream.NewEvent(hotstream.EventConfig{
+		EventID:       eventbus.StableEventID("gpt-job-", event.GetJobId(), fmt.Sprintf("%d", event.GetEventId())),
+		EventType:     GPTJobUpdatedEvent,
+		SourceService: GPTHotStreamSource,
+		ResourceType:  GPTJobResource,
+		ResourceID:    event.GetJobId(),
+		Scope:         event.GetEventType(),
+		OccurredAt:    time.Now(),
+		CorrelationID: event.GetJobId(),
+		Attributes:    attrs,
+	})
+	if err := s.hot.Publish(context.WithoutCancel(ctx), hotEvent); err != nil {
+		log.Printf("[orchestrator] publish job hotstream failed job=%s: %v", event.GetJobId(), err)
 	}
 }
 
@@ -178,43 +120,12 @@ func rowToProto(row *db.JobEvent) (*pb.JobEvent, error) {
 	}
 	snapshot := &pb.JobSnapshot{}
 	if strings.TrimSpace(row.SnapshotJSON) != "" {
-		if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal([]byte(row.SnapshotJSON), snapshot); err != nil {
+		if err := protojsonx.Unmarshal([]byte(row.SnapshotJSON), snapshot); err != nil {
 			return nil, err
 		}
 	}
 	if snapshot.GetEventId() == 0 {
 		snapshot.EventId = row.EventID
 	}
-	return &pb.JobEvent{
-		EventId:   row.EventID,
-		JobId:     row.JobID,
-		EventType: row.EventType,
-		Snapshot:  snapshot,
-	}, nil
-}
-
-func (b *broker) subscribe(ch chan *pb.JobEvent) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.subs[ch] = struct{}{}
-}
-
-func (b *broker) unsubscribe(ch chan *pb.JobEvent) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if _, ok := b.subs[ch]; ok {
-		delete(b.subs, ch)
-		close(ch)
-	}
-}
-
-func (b *broker) publish(event *pb.JobEvent) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for ch := range b.subs {
-		select {
-		case ch <- event:
-		default:
-		}
-	}
+	return &pb.JobEvent{EventId: row.EventID, JobId: row.JobID, EventType: row.EventType, Snapshot: snapshot}, nil
 }

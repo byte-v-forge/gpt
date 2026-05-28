@@ -1,11 +1,6 @@
 package activities
 
-import (
-	"fmt"
-	"time"
-
-	"orchestrator/pb"
-)
+import "fmt"
 
 func (f *codexOAuthBrowserFlow) completeAuthorization() error {
 	callbackURL, err := f.browserFlow.completeCodexOAuthConsentAndCallback(f.server.browserAutomationClient, f.server.browserAuthConfig)
@@ -20,7 +15,11 @@ func (f *codexOAuthBrowserFlow) completeAuthorization() error {
 	if returnedState != f.state {
 		return f.fail(fmt.Errorf("codex oauth state mismatch"))
 	}
-	tokens, err := exchangeCodexOAuthToken(f.ctx, f.cfg, code, f.pkce.verifier)
+	accountProfile, err := f.server.accountFingerprint(f.ctx, f.account.GetAccountId())
+	if err != nil {
+		return f.fail(err)
+	}
+	tokens, err := exchangeCodexOAuthTokenWithProfile(f.ctx, f.cfg, code, f.pkce.verifier, codexOAuthProtocolProfileFromAccount(accountProfile, f.cfg))
 	if err != nil {
 		return f.fail(err)
 	}
@@ -33,7 +32,7 @@ func (f *codexOAuthBrowserFlow) completeAuthorization() error {
 }
 
 func (f *codexOAuthBrowserFlow) persistAuthorization() error {
-	if err := f.writeAccountAuthJSON(); err != nil {
+	if err := f.writeRuntimeAuthSecret(); err != nil {
 		return err
 	}
 	if f.markPhoneConfirmed {
@@ -41,18 +40,6 @@ func (f *codexOAuthBrowserFlow) persistAuthorization() error {
 			return err
 		}
 	}
-	return f.writeRuntimeAuthSecret()
-}
-
-func (f *codexOAuthBrowserFlow) writeAccountAuthJSON() error {
-	if err := f.server.updateAccount(f.ctx, &pb.Account{
-		AccountId:              f.account.GetAccountId(),
-		CodexAuthJson:          string(f.authJSON),
-		CodexAuthUpdatedAtUnix: time.Now().Unix(),
-	}); err != nil {
-		return f.fail(fmt.Errorf("save codex auth json to account db: %w", err))
-	}
-	f.data["account_auth_written"] = true
 	return nil
 }
 
@@ -64,12 +51,11 @@ func (f *codexOAuthBrowserFlow) writeAccountPhoneConfirmation() error {
 }
 
 func (f *codexOAuthBrowserFlow) writeRuntimeAuthSecret() error {
-	secretKey := codexOAuthAuthSecretPrefix + f.account.GetAccountId()
-	if err := f.server.saveRuntimeSecret(f.ctx, secretKey, string(f.authJSON)); err != nil {
+	if err := f.server.saveCodexAuthJSON(f.ctx, f.account.GetAccountId(), string(f.authJSON)); err != nil {
 		return f.fail(err)
 	}
-	f.secretKey = secretKey
-	f.data["auth_secret_key"] = secretKey
+	f.secretKey = codexOAuthAuthSecretKey(f.account.GetAccountId())
+	f.data["auth_secret_key"] = f.secretKey
 	f.data["auth_secret_written"] = true
 	return nil
 }

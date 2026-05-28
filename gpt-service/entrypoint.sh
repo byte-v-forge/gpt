@@ -29,14 +29,12 @@ gopay_app_addr=${GPT_GOPAY_APP_INTERNAL_ADDR:-127.0.0.1:${gopay_app_port}}
 (
   export LISTEN_ADDR="$account_listen_addr"
   export PG_DSN="$service_pg_dsn"
-  exec /app/bin/account-db
+  exec /app/bin/gpt-account
 ) &
 pids+=("$!")
 
 (
   export GOPAY_APP_PORT="$gopay_app_port"
-  export PG_DSN="$service_pg_dsn"
-  export GOPAY_APP_PG_DSN="${GOPAY_APP_PG_DSN:-$service_pg_dsn}"
   exec /app/bin/gopay-app
 ) &
 pids+=("$!")
@@ -52,4 +50,4 @@ export GPT_SERVICE_PG_DSN="$service_pg_dsn"
 export GPT_ACCOUNT_ADDR="$account_addr"
 export GPT_GOPAY_APP_ADDR="$gopay_app_addr"
 export GPT_GOPAY_PAYMENT_ADDR="$payment_addr"
-exec /app/bin/gpt-workflows
+exec /app/bin/gpt-orchestrator

@@ -1,7 +1,10 @@
 package accountmail
 
 import (
+	"regexp"
 	"strings"
+
+	mailboxv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/mailbox/v1"
 
 	"orchestrator/pb"
 )
@@ -15,71 +18,133 @@ type State struct {
 	Status       string
 	ErrorMessage string
 	PlusActive   bool
+	Tier         string
 }
 
-type OTP struct {
-	Code           string
-	Subject        string
-	ReceivedAtUnix int64
+type Message struct {
+	MailboxEmail string
+	FromAddress  string
+	Subject      string
+	BodyPreview  string
+	BodyText     string
+	HTMLBody     string
+	ReceivedAt   int64
+	Recipients   []string
 }
 
-func DetectState(account *pb.Account, messages []*pb.EmailInboxMessage) State {
+var (
+	verificationCodePattern = regexp.MustCompile(`(?i)(?:verification|security|login|one[- ]?time|otp|code|验证码|安全代码)[^0-9]{0,80}([0-9]{4,8})`)
+	standaloneCodePattern   = regexp.MustCompile(`(^|[^0-9])([0-9]{6})([^0-9]|$)`)
+)
+
+func IsOpenAIMessage(message *mailboxv1.EmailInboxMessage) bool {
+	if message == nil {
+		return false
+	}
+	if isOpenAIAddress(message.GetFromAddress()) {
+		return true
+	}
+	text := normalizeMailText(strings.Join([]string{
+		message.GetSubject(),
+		message.GetBodyPreview(),
+		message.GetBodyText(),
+		message.GetHtmlBody(),
+	}, "\n"))
+	return strings.Contains(text, "openai") || strings.Contains(text, "chatgpt")
+}
+
+func isOpenAIAddress(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if value == "" {
+		return false
+	}
+	if start := strings.LastIndex(value, "<"); start >= 0 {
+		if end := strings.LastIndex(value, ">"); end > start {
+			value = strings.TrimSpace(value[start+1 : end])
+		}
+	}
+	_, domain, ok := strings.Cut(value, "@")
+	if !ok {
+		domain = value
+	}
+	domain = strings.Trim(domain, " .>")
+	return domain == "openai.com" || strings.HasSuffix(domain, ".openai.com") || domain == "chatgpt.com" || strings.HasSuffix(domain, ".chatgpt.com")
+}
+
+func DetectState(account *pb.Account, messages []Message) State {
 	for _, message := range MessagesForAccount(account, messages) {
-		text := strings.ToLower(strings.Join([]string{
-			message.GetSubject(),
-			message.GetBodyPreview(),
-			message.GetBodyText(),
-			message.GetHtmlBody(),
-		}, "\n"))
 		switch {
-		case containsAny(text, "deactivated", "disabled", "account has been deactivated", "账号已停用", "账户已停用", "账号失效", "账户失效"):
+		case messageContainsPhrase(message, "Access Deactivated"):
 			return State{Status: StatusDeactivated, ErrorMessage: "mailbox event: account deactivated"}
-		case containsAny(text, "new plan", "chatgpt plus", "plus plan", "subscription", "subscribed", "your plan has changed", "plus 已激活"):
-			return State{Status: StatusActivated, PlusActive: true}
+		case messageContainsPhrase(message, "You've successfully subscribed to ChatGPT Plus"):
+			return State{Status: StatusActivated, PlusActive: true, Tier: "plus"}
+		case messageSubjectEquals(message, "New plan"):
+			return State{Status: StatusActivated, PlusActive: true, Tier: "plus"}
 		}
 	}
 	return State{}
 }
 
-func LatestMessageUnix(account *pb.Account, messages []*pb.EmailInboxMessage) int64 {
+func LatestMessageUnix(account *pb.Account, messages []Message) int64 {
 	var latest int64
 	for _, message := range MessagesForAccount(account, messages) {
-		if message.GetReceivedAtUnix() > latest {
-			latest = message.GetReceivedAtUnix()
+		if message.ReceivedAt > latest {
+			latest = message.ReceivedAt
 		}
 	}
 	return latest
 }
 
-func LatestOTP(account *pb.Account, messages []*pb.EmailInboxMessage) OTP {
-	var latest OTP
-	for _, message := range MessagesForAccount(account, messages) {
-		code := otpCode(message)
-		if code == "" || message.GetReceivedAtUnix() < latest.ReceivedAtUnix {
-			continue
-		}
-		latest = OTP{
-			Code:           code,
-			Subject:        message.GetSubject(),
-			ReceivedAtUnix: message.GetReceivedAtUnix(),
-		}
-	}
-	return latest
-}
-
-func InboxMessages(account *pb.Account, inbox *pb.FetchMailboxInboxesResponse) []*pb.EmailInboxMessage {
+func InboxMessages(account *pb.Account, inbox *mailboxv1.FetchMailboxInboxesResponse) []Message {
 	if inbox == nil {
 		return nil
 	}
-	out := []*pb.EmailInboxMessage{}
+	out := []Message{}
 	for _, result := range inbox.GetResults() {
-		out = append(out, result.GetMessages()...)
+		out = append(out, MessagesFromPublic(result.GetMessages())...)
 	}
 	return MessagesForAccount(account, out)
 }
 
-func MessagesForAccount(account *pb.Account, messages []*pb.EmailInboxMessage) []*pb.EmailInboxMessage {
-	out := []*pb.EmailInboxMessage{}
+func PublicMessagesForAccount(account *pb.Account, messages []*mailboxv1.EmailInboxMessage) []*mailboxv1.EmailInboxMessage {
+	out := []*mailboxv1.EmailInboxMessage{}
+	for _, message := range messages {
+		if message == nil {
+			continue
+		}
+		if MessageMatches(account, messageFromInbox(message)) {
+			out = append(out, message)
+		}
+	}
+	return out
+}
+
+func MessagesFromPublic(messages []*mailboxv1.EmailInboxMessage) []Message {
+	out := make([]Message, 0, len(messages))
+	for _, message := range messages {
+		if message == nil {
+			continue
+		}
+		out = append(out, messageFromInbox(message))
+	}
+	return out
+}
+
+func messageFromInbox(message *mailboxv1.EmailInboxMessage) Message {
+	return Message{
+		MailboxEmail: message.GetMailboxEmail(),
+		FromAddress:  message.GetFromAddress(),
+		Subject:      message.GetSubject(),
+		BodyPreview:  message.GetBodyPreview(),
+		BodyText:     message.GetBodyText(),
+		HTMLBody:     message.GetHtmlBody(),
+		ReceivedAt:   message.GetReceivedAtUnix(),
+		Recipients:   append([]string{}, message.GetRecipients()...),
+	}
+}
+
+func MessagesForAccount(account *pb.Account, messages []Message) []Message {
+	out := []Message{}
 	for _, message := range messages {
 		if MessageMatches(account, message) {
 			out = append(out, message)
@@ -88,17 +153,17 @@ func MessagesForAccount(account *pb.Account, messages []*pb.EmailInboxMessage) [
 	return out
 }
 
-func MessageMatches(account *pb.Account, message *pb.EmailInboxMessage) bool {
+func MessageMatches(account *pb.Account, message Message) bool {
 	accountEmail := NormalizeEmail(account.GetEmail())
-	if accountEmail == "" || message == nil {
+	if accountEmail == "" {
 		return false
 	}
-	for _, recipient := range message.GetRecipients() {
+	for _, recipient := range message.Recipients {
 		if NormalizeEmail(recipient) == accountEmail {
 			return true
 		}
 	}
-	return NormalizeEmail(message.GetMailboxEmail()) == accountEmail
+	return NormalizeEmail(message.MailboxEmail) == accountEmail
 }
 
 func PrimaryMailbox(account *pb.Account) string {
@@ -125,30 +190,86 @@ func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }
 
-func otpCode(message *pb.EmailInboxMessage) string {
+func EnrichMessage(message *mailboxv1.EmailInboxMessage) *mailboxv1.EmailInboxMessage {
+	if message == nil {
+		return nil
+	}
+	code, evidence := ExtractOTP(message)
+	if code == "" {
+		message.Signals = nil
+		message.PrimarySignal = nil
+		return message
+	}
+	signal := &mailboxv1.EmailSignal{
+		Kind:       mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP,
+		Code:       code,
+		Label:      "verification_code",
+		Profile:    "gpt",
+		Parser:     "gpt-account-mail",
+		Confidence: 70,
+		Evidence:   evidence,
+	}
+	message.Signals = []*mailboxv1.EmailSignal{signal}
+	message.PrimarySignal = signal
+	return message
+}
+
+func OTPCode(message *mailboxv1.EmailInboxMessage) string {
 	if message == nil {
 		return ""
 	}
-	if signal := message.GetPrimarySignal(); signal.GetKind() == pb.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP {
-		if code := strings.TrimSpace(signal.GetCode()); code != "" {
-			return code
-		}
+	if signal := message.GetPrimarySignal(); signal.GetKind() == mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP && signal.GetCode() != "" {
+		return NormalizeOTP(signal.GetCode())
 	}
 	for _, signal := range message.GetSignals() {
-		if signal.GetKind() == pb.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP {
-			if code := strings.TrimSpace(signal.GetCode()); code != "" {
-				return code
-			}
+		if signal.GetKind() == mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP && signal.GetCode() != "" {
+			return NormalizeOTP(signal.GetCode())
 		}
 	}
-	return ""
+	code, _ := ExtractOTP(message)
+	return code
 }
 
-func containsAny(value string, needles ...string) bool {
-	for _, needle := range needles {
-		if strings.Contains(value, strings.ToLower(needle)) {
-			return true
-		}
+func ExtractOTP(message *mailboxv1.EmailInboxMessage) (string, string) {
+	if message == nil {
+		return "", ""
 	}
-	return false
+	text := strings.Join([]string{
+		message.GetSubject(),
+		message.GetFromAddress(),
+		message.GetBodyPreview(),
+		message.GetBodyText(),
+		message.GetHtmlBody(),
+	}, "\n")
+	if match := verificationCodePattern.FindStringSubmatch(text); len(match) >= 2 {
+		return NormalizeOTP(match[1]), strings.TrimSpace(match[0])
+	}
+	if match := standaloneCodePattern.FindStringSubmatch(text); len(match) >= 3 {
+		return NormalizeOTP(match[2]), strings.TrimSpace(match[0])
+	}
+	return "", ""
+}
+
+func NormalizeOTP(value string) string {
+	replacer := strings.NewReplacer(" ", "", "\t", "", "\n", "", "\r", "", "-", "")
+	return strings.TrimSpace(replacer.Replace(value))
+}
+
+func messageContainsPhrase(message Message, phrase string) bool {
+	text := normalizeMailText(strings.Join([]string{
+		message.Subject,
+		message.BodyPreview,
+		message.BodyText,
+		message.HTMLBody,
+	}, "\n"))
+	return strings.Contains(text, normalizeMailText(phrase))
+}
+
+func messageSubjectEquals(message Message, subject string) bool {
+	return normalizeMailText(message.Subject) == normalizeMailText(subject)
+}
+
+func normalizeMailText(value string) string {
+	value = strings.NewReplacer("’", "'", "‘", "'", "`", "'", " ", " ").Replace(value)
+	return strings.ToLower(strings.Join(strings.Fields(value), " "))
 }

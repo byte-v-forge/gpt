@@ -2,18 +2,18 @@ package appsvc
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"fmt"
 	"net/http"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/byte-v-forge/common-lib/hashx"
+	"github.com/byte-v-forge/common-lib/httpjson"
+	"github.com/byte-v-forge/common-lib/randx"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"github.com/byte-v-forge/gpt/gopay/pb"
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 	gopayapp "github.com/byte-v-forge/gpt/gopay/protocol/app"
 )
 
@@ -26,11 +26,18 @@ type Server struct {
 }
 
 func NewServer(cfg Config) (*Server, error) {
-	store, err := NewStateStore(cfg.StateDSN, cfg.StateTable)
+	store, err := NewStateStore(context.Background(), cfg.StateRedisURL, cfg.StateKeyPrefix, cfg.StateTTL)
 	if err != nil {
 		return nil, err
 	}
 	return &Server{cfg: cfg, store: store}, nil
+}
+
+func (s *Server) Close() error {
+	if s == nil || s.store == nil {
+		return nil
+	}
+	return s.store.Close()
 }
 
 func (s *Server) GetGoPayState(ctx context.Context, req *pb.GetGoPayStateRequest) (*pb.GetGoPayStateResponse, error) {
@@ -50,7 +57,7 @@ func (s *Server) UpsertGoPayState(ctx context.Context, req *pb.UpsertGoPayStateR
 	if err != nil {
 		return &pb.UpsertGoPayStateResponse{Success: false, ErrorMessage: err.Error()}, nil
 	}
-	raw, err := s.store.Save(ctx, key, firstNonEmpty(req.GetStateJson(), "{}"))
+	raw, err := s.store.Save(ctx, key, stringx.FirstNonEmpty(req.GetStateJson(), "{}"))
 	if err != nil {
 		return &pb.UpsertGoPayStateResponse{Success: false, ErrorMessage: err.Error()}, nil
 	}
@@ -117,7 +124,7 @@ func (s *Server) newClient(ctx context.Context, token string, proxyURL string, d
 func (s *Server) clientForState(ctx context.Context, state stateMap) (*gopayapp.Client, error) {
 	refresh := s.ensureAccessToken(ctx, state, s.cfg.TokenRefreshMinTTL, false)
 	if !anyBool(refresh["success"]) && !tokenUsable(state, "token", 0) {
-		return nil, fmt.Errorf("%s", firstNonEmpty(anyString(refresh["error"]), "token refresh failed"))
+		return nil, fmt.Errorf("%s", stringx.FirstNonEmpty(anyString(refresh["error"]), "token refresh failed"))
 	}
 	device, err := s.ensureDevice(state)
 	if err != nil {
@@ -175,7 +182,7 @@ func (s *Server) rotateLoginAttemptIdentity(ctx context.Context, state stateMap)
 	if state == nil {
 		return nil
 	}
-	sessionData, err := s.createProxyRuntimeSession(ctx)
+	sessionData, err := s.createProxyRuntimeSession(ctx, state)
 	if err != nil {
 		return err
 	}
@@ -221,7 +228,7 @@ func (s *Server) nextCheckPhoneProxyState() stateMap {
 
 func (s *Server) generateDeviceProxyState(ctx context.Context) (stateMap, error) {
 	state := s.nextCheckPhoneProxyState()
-	sessionData, err := s.createProxyRuntimeSession(ctx)
+	sessionData, err := s.createProxyRuntimeSession(ctx, state)
 	if err != nil {
 		return state, err
 	}
@@ -242,8 +249,7 @@ func (s *Server) deviceProxyDiagnostics(state stateMap) map[string]any {
 	}
 	proxyURL := stateString(state, "_gopay_proxy")
 	if proxyURL != "" {
-		hash := sha256.Sum256([]byte(proxyURL))
-		data["proxy_hash"] = hex.EncodeToString(hash[:])[:12]
+		data["proxy_hash"] = hashx.ShortSHA256(proxyURL, 12)
 	}
 	if index := s.proxyIndex(proxyURL); index >= 0 {
 		data["proxy_slot"] = index + 1
@@ -274,7 +280,7 @@ func deviceFingerprintForState(state stateMap) string {
 	}
 	addHash := func(label, key string) {
 		if value := anyString(device[key]); value != "" {
-			out = append(out, label+"#"+shortHash(value))
+			out = append(out, label+"#"+hashx.ShortSHA256(value, 12))
 		}
 	}
 	addPlain("profile", "profile_id")
@@ -301,14 +307,9 @@ func deviceFingerprintForState(state stateMap) string {
 	addHash("imei", "x-imei")
 	addHash("ip", "x-ipaddress")
 	if parsed := deviceFromMap(device); parsed.AppID != "" {
-		out = append(out, "x_m1#"+shortHash(parsed.XM1()))
+		out = append(out, "x_m1#"+hashx.ShortSHA256(parsed.XM1(), 12))
 	}
 	return strings.Join(out, "/")
-}
-
-func shortHash(value string) string {
-	hash := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(hash[:])[:12]
 }
 
 func (s *Server) proxyIndex(value string) int {
@@ -339,10 +340,8 @@ func (s *Server) ensureDevice(state stateMap) (gopayapp.DeviceFingerprint, error
 	if err != nil {
 		return gopayapp.DeviceFingerprint{}, err
 	}
-	rawID := make([]byte, 8)
-	_, _ = rand.Read(rawID)
 	out := deviceToMap(device)
-	out["profile_id"] = hex.EncodeToString(rawID)
+	out["profile_id"] = randomProfileID()
 	out["profile_created_at"] = time.Now().Unix()
 	state["device"] = out
 	return device, nil
@@ -354,11 +353,17 @@ func (s *Server) newLogonDevice() (gopayapp.DeviceFingerprint, map[string]any, e
 		return gopayapp.DeviceFingerprint{}, nil, err
 	}
 	out := deviceToMap(device)
-	rawID := make([]byte, 8)
-	_, _ = rand.Read(rawID)
-	out["profile_id"] = hex.EncodeToString(rawID)
+	out["profile_id"] = randomProfileID()
 	out["profile_created_at"] = time.Now().Unix()
 	return device, out, nil
+}
+
+func randomProfileID() string {
+	value, err := randx.Hex(8)
+	if err != nil {
+		return fmt.Sprintf("%x", time.Now().UnixNano())
+	}
+	return value
 }
 
 func deviceNeedsBackfill(device gopayapp.DeviceFingerprint) bool {
@@ -374,7 +379,7 @@ func deviceNeedsBackfill(device gopayapp.DeviceFingerprint) bool {
 		device.M1SignatureTime == ""
 }
 
-func apiError(label string, resp *protocol.Response) string {
+func apiError(label string, resp *httpjson.Response) string {
 	if resp == nil {
 		return label + ": no response"
 	}
@@ -384,7 +389,7 @@ func apiError(label string, resp *protocol.Response) string {
 	return fmt.Sprintf("%s: status %d %s", label, resp.StatusCode, compactErrorDetail(resp.Payload))
 }
 
-func responseErrors(resp *protocol.Response) []any {
+func responseErrors(resp *httpjson.Response) []any {
 	if resp == nil {
 		return nil
 	}
@@ -396,14 +401,14 @@ func responseErrors(resp *protocol.Response) []any {
 	return nil
 }
 
-func responseText(resp *protocol.Response) string {
+func responseText(resp *httpjson.Response) string {
 	if resp == nil {
 		return ""
 	}
 	return string(resp.Body)
 }
 
-func isRateLimited(resp *protocol.Response) bool {
+func isRateLimited(resp *httpjson.Response) bool {
 	if resp == nil {
 		return false
 	}
@@ -419,7 +424,7 @@ func isRateLimited(resp *protocol.Response) bool {
 	return false
 }
 
-func loginMethodsInvalidUser(resp *protocol.Response) bool {
+func loginMethodsInvalidUser(resp *httpjson.Response) bool {
 	if resp == nil || resp.StatusCode != http.StatusUnauthorized {
 		return false
 	}

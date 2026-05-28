@@ -3,12 +3,13 @@ package appsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/httpjson"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 	gopayapp "github.com/byte-v-forge/gpt/gopay/protocol/app"
 )
 
@@ -86,8 +87,8 @@ func (s *Server) completeLogin(ctx context.Context, state stateMap, otp string) 
 	}
 	verificationID := stateString(state, "_login_verification_id")
 	otpToken := stateString(state, "_login_otp_token")
-	method := firstNonEmpty(stateString(state, "_login_verification_method"), "otp_wa")
-	flow := firstNonEmpty(stateString(state, "_login_flow"), "login_2fa")
+	method := stringx.FirstNonEmpty(stateString(state, "_login_verification_method"), "otp_wa")
+	flow := stringx.FirstNonEmpty(stateString(state, "_login_flow"), "login_2fa")
 	twoFAToken := stateString(state, "_login_2fa_token")
 	if verificationID == "" || otpToken == "" {
 		return fmt.Errorf("login otp state missing")
@@ -166,7 +167,7 @@ func (s *Server) completeLogin(ctx context.Context, state stateMap, otp string) 
 	return nil
 }
 
-func (s *Server) continueLogin2FA(ctx context.Context, client *gopayapp.Client, state stateMap, tokenResp *protocol.Response) error {
+func (s *Server) continueLogin2FA(ctx context.Context, client *gopayapp.Client, state stateMap, tokenResp *httpjson.Response) error {
 	twoFAToken := twoFATokenFrom(tokenResp.Data())
 	verificationID := verificationIDFrom(tokenResp.Data())
 	if twoFAToken == "" || verificationID == "" {
@@ -175,7 +176,7 @@ func (s *Server) continueLogin2FA(ctx context.Context, client *gopayapp.Client, 
 	otpMethods := methodsFrom(tokenResp.Data())
 	defaultMethod := stringForAnyKey(tokenResp.Data(), "default_method", "defaultMethod")
 	previousMethod := stateString(state, "_login_verification_method")
-	method := chooseOTPMethod(otpMethods, "", firstNonEmpty(defaultMethod, previousMethod, "otp_wa"))
+	method := chooseOTPMethod(otpMethods, "", stringx.FirstNonEmpty(defaultMethod, previousMethod, "otp_wa"))
 	if method == "" {
 		return fmt.Errorf("2fa otp method unavailable: %v", otpMethods)
 	}
@@ -331,7 +332,7 @@ func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, e
 	}
 	methods := methodsFrom(methodsData)
 	defaultMethod := stringForAnyKey(methodsData, "default_method", "defaultMethod")
-	method := chooseOTPMethod(methods, otpChannel, firstNonEmpty(defaultMethod, "otp_wa"))
+	method := chooseOTPMethod(methods, otpChannel, stringx.FirstNonEmpty(defaultMethod, "otp_wa"))
 	if method == "" {
 		return map[string]any{"success": false, "error": fmt.Sprintf("otp method unavailable: %v", methods), "response_shape": responseShape(methodsResp)}
 	}
@@ -382,10 +383,10 @@ func (s *Server) startSignup(ctx context.Context, state stateMap, phone, name, e
 
 func (s *Server) retrySignupOTP(ctx context.Context, state stateMap) map[string]any {
 	if stateString(state, "stage") != "signup_otp_pending" {
-		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for signup otp: %s", firstNonEmpty(stateString(state, "stage"), "idle"))}
+		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for signup otp: %s", stringx.FirstNonEmpty(stateString(state, "stage"), "idle"))}
 	}
 	otpToken := stateString(state, "_signup_otp_token")
-	method := firstNonEmpty(stateString(state, "_signup_verification_method"), "otp_sms")
+	method := stringx.FirstNonEmpty(stateString(state, "_signup_verification_method"), "otp_sms")
 	if otpToken == "" {
 		return map[string]any{"success": false, "error": "signup otp state missing"}
 	}
@@ -421,18 +422,18 @@ func (s *Server) retrySignupOTP(ctx context.Context, state stateMap) map[string]
 
 func (s *Server) completeSignup(ctx context.Context, state stateMap, otp string) map[string]any {
 	if stateString(state, "stage") != "signup_otp_pending" {
-		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for signup otp: %s", firstNonEmpty(stateString(state, "stage"), "idle"))}
+		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for signup otp: %s", stringx.FirstNonEmpty(stateString(state, "stage"), "idle"))}
 	}
 	otp = strings.TrimSpace(otp)
 	if otp == "" {
 		return map[string]any{"success": false, "error": "signup otp required"}
 	}
 	phone := stateString(state, "_signup_phone")
-	cc := firstNonEmpty(stateString(state, "_signup_country_code"), phoneCountryCode(s.cfg, ""))
+	cc := stringx.FirstNonEmpty(stateString(state, "_signup_country_code"), phoneCountryCode(s.cfg, ""))
 	name := stateString(state, "_signup_name")
 	email := stateString(state, "_signup_email")
 	verificationID := stateString(state, "_signup_verification_id")
-	method := firstNonEmpty(stateString(state, "_signup_verification_method"), "otp_sms")
+	method := stringx.FirstNonEmpty(stateString(state, "_signup_verification_method"), "otp_sms")
 	otpToken := stateString(state, "_signup_otp_token")
 	if phone == "" || verificationID == "" || otpToken == "" {
 		return map[string]any{"success": false, "error": "signup otp state missing"}

@@ -6,7 +6,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -50,7 +49,7 @@ process.stdin.on('end', async () => {
 });
 `
 
-func (c *codexOAuthProtocolHTTPClient) sentinelTokenQuickJS(ctx context.Context, deviceID, flow string) (string, error) {
+func (c *GptClient) sentinelTokenQuickJS(ctx context.Context, deviceID, flow string) (string, error) {
 	sdkFile, scriptFile, err := c.prepareSentinelQuickJSFiles(ctx)
 	if err != nil {
 		return "", err
@@ -104,7 +103,7 @@ func (c *codexOAuthProtocolHTTPClient) sentinelTokenQuickJS(ctx context.Context,
 	return string(payload), nil
 }
 
-func (c *codexOAuthProtocolHTTPClient) prepareSentinelQuickJSFiles(ctx context.Context) (string, string, error) {
+func (c *GptClient) prepareSentinelQuickJSFiles(ctx context.Context) (string, string, error) {
 	dir := filepath.Join(os.TempDir(), "byte-v-forge-openai-sentinel", codexOAuthSentinelVersion)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", "", err
@@ -126,74 +125,38 @@ func (c *codexOAuthProtocolHTTPClient) prepareSentinelQuickJSFiles(ctx context.C
 	return sdkFile, scriptFile, nil
 }
 
-func (c *codexOAuthProtocolHTTPClient) fetchSentinelSDK(ctx context.Context) ([]byte, error) {
-	req, err := fhttp.NewRequestWithContext(ctx, fhttp.MethodGet, codexOAuthSentinelSDKURL, nil)
+func (c *GptClient) fetchSentinelSDK(ctx context.Context) ([]byte, error) {
+	resp, err := c.request(ctx, fhttp.MethodGet, codexOAuthSentinelSDKURL, "https://auth.openai.com/", false, nil, map[string]string{
+		"Accept":         "*/*",
+		"Sec-Fetch-Dest": "script",
+		"Sec-Fetch-Mode": "no-cors",
+		"Sec-Fetch-Site": "same-site",
+	})
 	if err != nil {
 		return nil, err
 	}
-	req.Header = fhttp.Header{
-		"Accept":             {"*/*"},
-		"Referer":            {"https://auth.openai.com/"},
-		"User-Agent":         {codexOAuthProtocolUserAgent},
-		"sec-ch-ua":          {`"Google Chrome";v="146", "Chromium";v="146", "Not:A-Brand";v="99"`},
-		"sec-ch-ua-mobile":   {"?0"},
-		"sec-ch-ua-platform": {`"macOS"`},
-		"Sec-Fetch-Dest":     {"script"},
-		"Sec-Fetch-Mode":     {"no-cors"},
-		"Sec-Fetch-Site":     {"same-site"},
-	}
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != 200 || len(body) == 0 {
+	if resp.StatusCode != 200 || len(resp.Body) == 0 {
 		return nil, fmt.Errorf("download sentinel sdk failed: status %d", resp.StatusCode)
 	}
-	if c.state != nil {
-		c.state.applyCookieSnapshot(c.jar.GetAllCookies())
-	}
-	return body, nil
+	return resp.Body, nil
 }
 
-func (c *codexOAuthProtocolHTTPClient) fetchSentinelChallenge(ctx context.Context, deviceID, flow, requestP string) (map[string]any, error) {
+func (c *GptClient) fetchSentinelChallenge(ctx context.Context, deviceID, flow, requestP string) (map[string]any, error) {
 	body, err := codexOAuthJSONNoEscape(map[string]string{"p": requestP, "id": deviceID, "flow": flow})
 	if err != nil {
 		return nil, err
 	}
-	req, err := fhttp.NewRequestWithContext(ctx, fhttp.MethodPost, codexOAuthSentinelReqURL, bytes.NewReader(body))
+	resp, err := c.request(ctx, fhttp.MethodPost, codexOAuthSentinelReqURL, codexOAuthSentinelReferer, false, body, map[string]string{
+		"Accept":         "*/*",
+		"Content-Type":   "text/plain;charset=UTF-8",
+		"Sec-Fetch-Dest": "empty",
+		"Sec-Fetch-Mode": "cors",
+		"Sec-Fetch-Site": "same-origin",
+	})
 	if err != nil {
 		return nil, err
 	}
-	req.Header = fhttp.Header{
-		"Accept":             {"*/*"},
-		"Content-Type":       {"text/plain;charset=UTF-8"},
-		"Origin":             {"https://sentinel.openai.com"},
-		"Referer":            {codexOAuthSentinelReferer},
-		"User-Agent":         {codexOAuthProtocolUserAgent},
-		"sec-ch-ua":          {`"Google Chrome";v="146", "Chromium";v="146", "Not:A-Brand";v="99"`},
-		"sec-ch-ua-mobile":   {"?0"},
-		"sec-ch-ua-platform": {`"macOS"`},
-		"Sec-Fetch-Dest":     {"empty"},
-		"Sec-Fetch-Mode":     {"cors"},
-		"Sec-Fetch-Site":     {"same-origin"},
-	}
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return nil, err
-	}
-	if c.state != nil {
-		c.state.applyCookieSnapshot(c.jar.GetAllCookies())
-	}
+	respBody := resp.Body
 	if resp.StatusCode != 200 {
 		return nil, fmt.Errorf("sentinel quickjs challenge failed: status %d %s", resp.StatusCode, codexOAuthProtocolSafeText(string(respBody), 180))
 	}

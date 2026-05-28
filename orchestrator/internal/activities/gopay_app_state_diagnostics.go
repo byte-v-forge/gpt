@@ -1,10 +1,10 @@
 package activities
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/hashx"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"strconv"
 	"strings"
 )
@@ -22,7 +22,7 @@ func goPayAppStateDiagnostics(raw string) map[string]any {
 	}
 	proxy := stringFromAny(state["_gopay_proxy"])
 	if proxy != "" {
-		data["proxy_hash"] = shortStateHash(proxy)
+		data["proxy_hash"] = hashx.ShortSHA256(proxy, 12)
 	}
 	if sessionHash := stringFromAny(state["_proxy_runtime_session_hash"]); sessionHash != "" {
 		data["proxy_runtime_session_hash"] = sessionHash
@@ -57,7 +57,7 @@ func goPayAppDeviceFingerprint(device map[string]any) string {
 	}
 	addHash := func(label, key string) {
 		if value := stringFromAny(device[key]); value != "" {
-			out = append(out, label+"#"+shortStateHash(value))
+			out = append(out, label+"#"+hashx.ShortSHA256(value, 12))
 		}
 	}
 	addPlain("profile", "profile_id")
@@ -84,7 +84,7 @@ func goPayAppDeviceFingerprint(device map[string]any) string {
 	addHash("imei", "x-imei")
 	addHash("ip", "x-ipaddress")
 	if xM1 := goPayAppXM1(device); xM1 != "" {
-		out = append(out, "x_m1#"+shortStateHash(xM1))
+		out = append(out, "x_m1#"+hashx.ShortSHA256(xM1, 12))
 	}
 	return strings.Join(out, "/")
 }
@@ -98,7 +98,7 @@ func goPayAppDeviceProfile(device map[string]any) map[string]any {
 	}
 	putHash := func(outKey, key string) {
 		if value := stringFromAny(device[key]); value != "" {
-			profile[outKey] = shortStateHash(value)
+			profile[outKey] = hashx.ShortSHA256(value, 12)
 		}
 	}
 	putPlain("profile_id", "profile_id")
@@ -135,19 +135,19 @@ func goPayAppDeviceProfile(device map[string]any) map[string]any {
 	putPlain("installer_package", "installer_package")
 	putPlain("gms_version", "gms_version")
 	if xM1 := goPayAppXM1(device); xM1 != "" {
-		profile["x_m1_hash"] = shortStateHash(xM1)
+		profile["x_m1_hash"] = hashx.ShortSHA256(xM1, 12)
 	}
 	return profile
 }
 
 func goPayAppXM1(device map[string]any) string {
 	fields := []string{
-		"3:" + firstNonEmptyString(stringFromAny(device["m1_appsflyer_id"]), "0-0"),
-		"4:" + firstNonEmptyString(stringFromAny(device["m1_connection_id"]), "131072"),
+		"3:" + stringx.FirstNonEmpty(stringFromAny(device["m1_appsflyer_id"]), "0-0"),
+		"4:" + stringx.FirstNonEmpty(stringFromAny(device["m1_connection_id"]), "131072"),
 		"5:" + stringFromAny(device["x-phonemake"]) + "|3200|2",
-		"6:" + firstNonEmptyString(stringFromAny(device["m1_wifi_mac"]), "02:00:00:00:00:00"),
-		"7:" + firstNonEmptyString(stringFromAny(device["m1_wifi_ssid"]), "<unknown ssid>"),
-		"8:" + firstNonEmptyString(stringFromAny(device["m1_screen"]), "1080x2148"),
+		"6:" + stringx.FirstNonEmpty(stringFromAny(device["m1_wifi_mac"]), "02:00:00:00:00:00"),
+		"7:" + stringx.FirstNonEmpty(stringFromAny(device["m1_wifi_ssid"]), "<unknown ssid>"),
+		"8:" + stringx.FirstNonEmpty(stringFromAny(device["m1_screen"]), "1080x2148"),
 		"9:passive,network,fused,gps",
 		"10:1",
 		"11:" + stringFromAny(device["m1_widevine_id"]),
@@ -157,20 +157,6 @@ func goPayAppXM1(device map[string]any) string {
 		"16:" + stringFromAny(device["m1_device_uuid"]),
 	}
 	return strings.Join(fields, ",")
-}
-
-func shortStateHash(value string) string {
-	hash := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(hash[:])[:12]
-}
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }
 
 func mapFromAny(value any) map[string]any {

@@ -28,7 +28,7 @@ func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input C
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		client, err := newCodexOAuthProtocolHTTPClient(cfg, state)
+		client, err := s.newAccountGptClient(ctx, input.GetAccountId(), cfg, state)
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err
@@ -67,7 +67,7 @@ func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input C
 		if strings.TrimSpace(tokenCfg.ProtocolProxyURL) != "" {
 			tokenCfg.TokenProxyURL = tokenCfg.ProtocolProxyURL
 		}
-		tokens, err := exchangeCodexOAuthToken(ctx, tokenCfg, code, verifier)
+		tokens, err := exchangeCodexOAuthTokenWithProfile(ctx, tokenCfg, code, verifier, client.profile)
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err
@@ -96,7 +96,7 @@ func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input C
 	return output, err
 }
 
-func (s *Server) codexOAuthProtocolCallbackURL(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, data map[string]any) (string, error) {
+func (s *Server) codexOAuthProtocolCallbackURL(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any) (string, error) {
 	if state == nil {
 		return "", fmt.Errorf("codex oauth protocol state missing")
 	}

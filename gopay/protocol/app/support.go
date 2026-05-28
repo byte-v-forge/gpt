@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 
-	"github.com/byte-v-forge/gpt/gopay/protocol"
+	"github.com/byte-v-forge/common-lib/httpjson"
 )
 
 type supportCustomerInitiateBody struct {
@@ -14,7 +14,7 @@ type supportCustomerInitiateBody struct {
 	Data        string `json:"data"`
 }
 
-func (c *Client) InitiateSupportCustomer(ctx context.Context) (*protocol.Response, error) {
+func (c *Client) InitiateSupportCustomer(ctx context.Context) (*httpjson.Response, error) {
 	return c.Post(ctx, CustomerBaseURL+"/v1/support/customer/initiate", newSupportCustomerInitiateBody())
 }
 

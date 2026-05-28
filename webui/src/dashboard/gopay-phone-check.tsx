@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Phone, Search } from 'lucide-react';
-import { Badge, Button, Input, Label, api } from '@/dashboard/module-kit';
-import type { GoPayUserCheckPhoneResponse } from '@/proto/orchestrator_gopay_app';
+import { Badge, Button, DashboardField, Input, api } from '@byte-v-forge/common-ui';
+import type { GoPayUserCheckPhoneResponse } from '../proto/orchestrator_gopay_app';
 
 const USER_ID = 'local';
 
@@ -29,7 +29,7 @@ export function GoPayPhoneCheck({ defaultPhone, disabled, onDone }: Props) {
     }
     setBusy(true);
     try {
-      const resp = await api<GoPayUserCheckPhoneResponse>('/api/gopay/user/check-phone', {
+      const resp = await api<GoPayUserCheckPhoneResponse>('/api/gpt/gopay/user/check-phone', {
         method: 'POST',
         body: JSON.stringify({ user_id: USER_ID, country_code: countryCode, phone: target })
       });
@@ -47,8 +47,8 @@ export function GoPayPhoneCheck({ defaultPhone, disabled, onDone }: Props) {
   return (
     <div className="goPayStandaloneCheck">
       <div className="goPayCheckFields">
-        <GoPayCheckField label="区号" value={countryCode} onChange={setCountryCode} placeholder="+62" />
-        <GoPayCheckField label="手机号" value={phone} onChange={setPhone} placeholder="812..." />
+        <DashboardField className="goPayActionField" label="区号"><Input value={countryCode} placeholder="+62" onChange={(event) => setCountryCode(event.target.value)} /></DashboardField>
+        <DashboardField className="goPayActionField" label="手机号"><Input value={phone} placeholder="812..." onChange={(event) => setPhone(event.target.value)} /></DashboardField>
         <Button onClick={checkPhone} disabled={disabled || busy}><Search size={15} />检测是否注册</Button>
       </div>
       {summary && (
@@ -65,14 +65,6 @@ export function GoPayPhoneCheck({ defaultPhone, disabled, onDone }: Props) {
   );
 }
 
-function GoPayCheckField(props: { label: string; value: string; onChange: (value: string) => void; placeholder?: string }) {
-  return (
-    <div className="goPayActionField">
-      <Label>{props.label}</Label>
-      <Input value={props.value} placeholder={props.placeholder} onChange={(event) => props.onChange(event.target.value)} />
-    </div>
-  );
-}
 
 function phoneCheckToast(resp: GoPayUserCheckPhoneResponse) {
   if (resp.error_message) return `检测手机号: ${resp.error_message}`;

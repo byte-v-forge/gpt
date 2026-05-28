@@ -5,32 +5,25 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/byte-v-forge/common-lib/redisx"
 )
 
 type StateStore struct {
-	dsn   string
-	table string
-	ready bool
-	mu    sync.Mutex
+	clientClose func() error
+	values      *redisx.StringStore
 }
 
-func NewStateStore(dsn string, table string) (*StateStore, error) {
-	dsn = strings.TrimSpace(dsn)
-	if dsn == "" {
-		return nil, fmt.Errorf("PG_DSN or GOPAY_STATE_PG_DSN is required for gopay-app state persistence")
+func NewStateStore(ctx context.Context, redisURL string, keyPrefix string, ttl time.Duration) (*StateStore, error) {
+	client, err := redisx.NewRequiredClient(ctx, redisURL, "GOPAY_STATE_REDIS_URL is required for gopay-app runtime state")
+	if err != nil {
+		return nil, err
 	}
-	table = strings.TrimSpace(table)
-	if table == "" {
-		table = "gopay_app_states"
-	}
-	if !regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`).MatchString(table) {
-		return nil, fmt.Errorf("invalid GOPAY_STATE_TABLE: %s", table)
-	}
-	return &StateStore{dsn: dsn, table: table}, nil
+	return &StateStore{
+		clientClose: client.Close,
+		values:      redisx.NewStringStore(client, keyPrefix, ttl),
+	}, nil
 }
 
 func NormalizeStateKey(value string) (string, error) {
@@ -48,92 +41,44 @@ func NormalizeStateKey(value string) (string, error) {
 }
 
 func (s *StateStore) Load(ctx context.Context, key string) (string, error) {
-	if err := s.ensure(ctx); err != nil {
-		return "", err
+	if s == nil || s.values == nil {
+		return "", fmt.Errorf("gopay-app state store is not configured")
 	}
-	conn, err := pgx.Connect(ctx, s.dsn)
+	stateJSON, found, err := s.values.Load(ctx, key)
 	if err != nil {
 		return "", err
 	}
-	defer conn.Close(ctx)
-	var stateJSON string
-	err = conn.QueryRow(ctx, fmt.Sprintf("SELECT state_json::text FROM %s WHERE state_key=$1", s.table), key).Scan(&stateJSON)
-	if err == pgx.ErrNoRows {
-		return "{}", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(stateJSON) == "" {
+	if !found || strings.TrimSpace(stateJSON) == "" {
 		return "{}", nil
 	}
 	return stateJSON, nil
 }
 
 func (s *StateStore) Save(ctx context.Context, key string, raw string) (string, error) {
+	if s == nil || s.values == nil {
+		return "", fmt.Errorf("gopay-app state store is not configured")
+	}
 	state, err := parseState(raw)
 	if err != nil {
 		return "", err
 	}
 	normalized := stateJSON(state)
-	if err := s.ensure(ctx); err != nil {
-		return "", err
-	}
-	conn, err := pgx.Connect(ctx, s.dsn)
-	if err != nil {
-		return "", err
-	}
-	defer conn.Close(ctx)
-	now := time.Now().Unix()
-	_, err = conn.Exec(ctx, fmt.Sprintf(`
-INSERT INTO %s (state_key, state_json, created_at, updated_at)
-VALUES ($1, $2::jsonb, $3, $4)
-ON CONFLICT (state_key) DO UPDATE
-SET state_json=EXCLUDED.state_json,
-    updated_at=EXCLUDED.updated_at`, s.table), key, normalized, now, now)
-	if err != nil {
+	if err := s.values.Save(ctx, key, normalized); err != nil {
 		return "", err
 	}
 	return normalized, nil
 }
 
 func (s *StateStore) Delete(ctx context.Context, key string) error {
-	if err := s.ensure(ctx); err != nil {
-		return err
+	if s == nil || s.values == nil {
+		return fmt.Errorf("gopay-app state store is not configured")
 	}
-	conn, err := pgx.Connect(ctx, s.dsn)
-	if err != nil {
-		return err
-	}
-	defer conn.Close(ctx)
-	_, err = conn.Exec(ctx, fmt.Sprintf("DELETE FROM %s WHERE state_key=$1", s.table), key)
-	return err
+	return s.values.Delete(ctx, key)
 }
 
-func (s *StateStore) ensure(ctx context.Context) error {
-	if s.ready {
+func (s *StateStore) Close() error {
+	if s == nil || s.clientClose == nil {
 		return nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.ready {
-		return nil
-	}
-	conn, err := pgx.Connect(ctx, s.dsn)
-	if err != nil {
-		return err
-	}
-	defer conn.Close(ctx)
-	_, err = conn.Exec(ctx, fmt.Sprintf(`
-CREATE TABLE IF NOT EXISTS %s (
-  state_key TEXT PRIMARY KEY,
-  state_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at BIGINT NOT NULL,
-  updated_at BIGINT NOT NULL
-)`, s.table))
-	if err != nil {
-		return err
-	}
-	s.ready = true
-	return nil
+	return s.clientClose()
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/http"
 	"strings"
 	"time"
@@ -65,8 +66,8 @@ func (c *charger) prepareCheckout(ctx context.Context, checkoutSessionID, checko
 		if !strings.HasPrefix(csID, "cs_") {
 			return "", nil, fmt.Errorf("invalid checkout_session_id: %s", csID)
 		}
-		c.checkoutURL = firstNonEmpty(checkoutURL, "https://checkout.stripe.com/c/pay/"+csID)
-		c.processorEntity = firstNonEmpty(extractProcessorEntityFromURL(checkoutURL), c.processorEntity, "openai_llc")
+		c.checkoutURL = stringx.FirstNonEmpty(checkoutURL, "https://checkout.stripe.com/c/pay/"+csID)
+		c.processorEntity = stringx.FirstNonEmpty(extractProcessorEntityFromURL(checkoutURL), c.processorEntity, "openai_llc")
 		return csID, map[string]any{
 			"state":             "checkout",
 			"cs_id":             csID,
@@ -169,7 +170,7 @@ func (c *charger) midtransLoadTransaction(ctx context.Context, snapToken string)
 	if err := resp.require(http.StatusOK, "midtrans transaction"); err != nil {
 		return err
 	}
-	merchantID := firstNonEmpty(stringAt(resp.json, "merchant", "merchant_id"), stringAt(resp.json, "merchant", "id"))
+	merchantID := stringx.FirstNonEmpty(stringAt(resp.json, "merchant", "merchant_id"), stringAt(resp.json, "merchant", "id"))
 	if merchantID != "" {
 		c.midtransMerchant = merchantID
 	}

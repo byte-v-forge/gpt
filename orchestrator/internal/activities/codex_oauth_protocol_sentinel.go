@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"math/rand"
 	"strings"
 	"time"
@@ -28,7 +27,7 @@ type codexOAuthSentinelGenerator struct {
 	sid       string
 }
 
-func codexOAuthProtocolSentinelHeader(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, data map[string]any, flow string) map[string]string {
+func codexOAuthProtocolSentinelHeader(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any, flow string) map[string]string {
 	if client == nil || state == nil {
 		return nil
 	}
@@ -53,7 +52,7 @@ func codexOAuthProtocolSentinelHeader(ctx context.Context, client *codexOAuthPro
 	return map[string]string{"openai-sentinel-token": token}
 }
 
-func (c *codexOAuthProtocolHTTPClient) sentinelToken(ctx context.Context, flow string) (string, error) {
+func (c *GptClient) sentinelToken(ctx context.Context, flow string) (string, error) {
 	if strings.TrimSpace(flow) == "" {
 		flow = "authorize_continue"
 	}
@@ -70,8 +69,8 @@ func (c *codexOAuthProtocolHTTPClient) sentinelToken(ctx context.Context, flow s
 	return c.sentinelTokenPure(ctx, deviceID, flow)
 }
 
-func (c *codexOAuthProtocolHTTPClient) sentinelTokenPure(ctx context.Context, deviceID, flow string) (string, error) {
-	generator := newCodexOAuthSentinelGenerator(deviceID, codexOAuthProtocolUserAgent)
+func (c *GptClient) sentinelTokenPure(ctx context.Context, deviceID, flow string) (string, error) {
+	generator := newCodexOAuthSentinelGenerator(deviceID, c.userAgent())
 	body, err := codexOAuthJSONNoEscape(map[string]string{
 		"p":    generator.requirementsToken(),
 		"id":   deviceID,
@@ -80,35 +79,17 @@ func (c *codexOAuthProtocolHTTPClient) sentinelTokenPure(ctx context.Context, de
 	if err != nil {
 		return "", err
 	}
-	req, err := fhttp.NewRequestWithContext(ctx, fhttp.MethodPost, codexOAuthSentinelReqURL, bytes.NewReader(body))
+	resp, err := c.request(ctx, fhttp.MethodPost, codexOAuthSentinelReqURL, codexOAuthSentinelReferer, false, body, map[string]string{
+		"Accept":         "*/*",
+		"Content-Type":   "text/plain;charset=UTF-8",
+		"Sec-Fetch-Dest": "empty",
+		"Sec-Fetch-Mode": "cors",
+		"Sec-Fetch-Site": "same-origin",
+	})
 	if err != nil {
 		return "", err
 	}
-	req.Header = fhttp.Header{
-		"Accept":             {"*/*"},
-		"Content-Type":       {"text/plain;charset=UTF-8"},
-		"Origin":             {"https://sentinel.openai.com"},
-		"Referer":            {codexOAuthSentinelReferer},
-		"User-Agent":         {codexOAuthProtocolUserAgent},
-		"sec-ch-ua":          {`"Google Chrome";v="146", "Chromium";v="146", "Not:A-Brand";v="99"`},
-		"sec-ch-ua-mobile":   {"?0"},
-		"sec-ch-ua-platform": {`"macOS"`},
-		"Sec-Fetch-Dest":     {"empty"},
-		"Sec-Fetch-Mode":     {"cors"},
-		"Sec-Fetch-Site":     {"same-origin"},
-	}
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-	if c.state != nil {
-		c.state.applyCookieSnapshot(c.jar.GetAllCookies())
-	}
+	respBody := resp.Body
 	if resp.StatusCode != 200 {
 		return "", fmt.Errorf("sentinel failed: status %d %s", resp.StatusCode, codexOAuthProtocolSafeText(string(respBody), 180))
 	}

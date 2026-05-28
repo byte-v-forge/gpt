@@ -3,6 +3,7 @@ package appsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/http"
 	"strings"
 	"time"
@@ -15,9 +16,9 @@ func (s *Server) startSignupPIN(ctx context.Context, state stateMap, pin, otpCha
 	}
 	refresh := s.ensureAccessToken(ctx, state, s.cfg.TokenRefreshMinTTL, false)
 	if !anyBool(refresh["success"]) && !tokenUsable(state, "token", 0) {
-		return map[string]any{"success": false, "error": firstNonEmpty(anyString(refresh["error"]), "token refresh failed")}
+		return map[string]any{"success": false, "error": stringx.FirstNonEmpty(anyString(refresh["error"]), "token refresh failed")}
 	}
-	phone := firstNonEmpty(stateString(state, "_signup_phone"), stateString(state, "phone"))
+	phone := stringx.FirstNonEmpty(stateString(state, "_signup_phone"), stateString(state, "phone"))
 	if phone == "" {
 		return map[string]any{"success": false, "error": "signup phone missing"}
 	}
@@ -31,7 +32,7 @@ func (s *Server) startSignupPIN(ctx context.Context, state stateMap, pin, otpCha
 		pinSetup, _ = pinSetupFlagFromProfileData(profile.Data())
 	}
 	if pinSetup {
-		phone = firstNonEmpty(stringForAnyKey(profile.Data(), "phone", "number"), phone)
+		phone = stringx.FirstNonEmpty(stringForAnyKey(profile.Data(), "phone", "number"), phone)
 		state["phone"] = normalizePhone(phone, "")
 		state["stage"] = "ready"
 		updatePINSetupState(state, true)
@@ -108,10 +109,10 @@ func (s *Server) startSignupPIN(ctx context.Context, state stateMap, pin, otpCha
 
 func (s *Server) retrySignupPIN(ctx context.Context, state stateMap) map[string]any {
 	if stateString(state, "stage") != "signup_pin_otp_pending" {
-		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for signup pin otp: %s", firstNonEmpty(stateString(state, "stage"), "idle"))}
+		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for signup pin otp: %s", stringx.FirstNonEmpty(stateString(state, "stage"), "idle"))}
 	}
 	otpToken := stateString(state, "_signup_pin_otp_token")
-	method := firstNonEmpty(stateString(state, "_signup_pin_verification_method"), "otp_sms")
+	method := stringx.FirstNonEmpty(stateString(state, "_signup_pin_verification_method"), "otp_sms")
 	if otpToken == "" {
 		return map[string]any{"success": false, "error": "signup pin otp state missing"}
 	}
@@ -144,7 +145,7 @@ func (s *Server) retrySignupPIN(ctx context.Context, state stateMap) map[string]
 
 func (s *Server) completeSignupPIN(ctx context.Context, state stateMap, otp, pin string) map[string]any {
 	if stateString(state, "stage") != "signup_pin_otp_pending" {
-		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for signup pin otp: %s", firstNonEmpty(stateString(state, "stage"), "idle"))}
+		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for signup pin otp: %s", stringx.FirstNonEmpty(stateString(state, "stage"), "idle"))}
 	}
 	otp = strings.TrimSpace(otp)
 	pin = strings.TrimSpace(pin)
@@ -159,7 +160,7 @@ func (s *Server) completeSignupPIN(ctx context.Context, state stateMap, otp, pin
 		return map[string]any{"success": false, "error": err.Error()}
 	}
 	verificationID := stateString(state, "_signup_pin_verification_id")
-	method := firstNonEmpty(stateString(state, "_signup_pin_verification_method"), "otp_sms")
+	method := stringx.FirstNonEmpty(stateString(state, "_signup_pin_verification_method"), "otp_sms")
 	otpToken := stateString(state, "_signup_pin_otp_token")
 	if verificationID == "" || otpToken == "" {
 		return map[string]any{"success": false, "error": "signup pin otp state missing"}
@@ -194,7 +195,7 @@ func (s *Server) completeSignupPIN(ctx context.Context, state stateMap, otp, pin
 	if setupResp.StatusCode != http.StatusOK {
 		return map[string]any{"success": false, "error": apiError("pin setup failed", setupResp)}
 	}
-	phone := firstNonEmpty(stateString(state, "_signup_phone"), stateString(state, "phone"))
+	phone := stringx.FirstNonEmpty(stateString(state, "_signup_phone"), stateString(state, "phone"))
 	state["phone"] = phone
 	state["stage"] = "ready"
 	updatePINSetupState(state, true)

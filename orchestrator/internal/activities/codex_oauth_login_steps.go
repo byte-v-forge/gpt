@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
+	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
+	mailboxv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/mailbox/v1"
 	"orchestrator/pb"
 )
 
@@ -120,22 +121,25 @@ func (s *Server) waitCodexOAuthEmailOTP(ctx context.Context, _ string, email str
 	if wait <= 0 {
 		wait = defaultCodexOAuthPhoneWaitSeconds
 	}
-	if s.mailboxClient == nil {
-		return "", fmt.Errorf("mailbox client not configured")
+	if s.otpProjection == nil {
+		return "", fmt.Errorf("otp projection is not configured")
 	}
-	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(wait+5)*time.Second)
+	timeout := time.Duration(wait) * time.Second
+	if s.mailboxPollRequester != nil {
+		if err := s.mailboxPollRequester.RequestMailboxEmailPoll(ctx, email, mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_UNSPECIFIED, issuedAfter, timeout, "codex_oauth_email_otp_wait"); err != nil {
+			return "", err
+		}
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, timeout+5*time.Second)
 	defer cancel()
-	resp, err := s.mailboxClient.WaitForMailboxEmail(reqCtx, &pb.WaitForEmailRequest{
-		EmailAddress:    email,
-		TimeoutSeconds:  wait,
-		IssuedAfterUnix: issuedAfter,
-		SignalKind:      pb.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP,
-	})
+	message, code, found, err := s.otpProjection.WaitMailboxSignal(reqCtx, email, mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP, issuedAfter, timeout, defaultSMSPollInterval)
 	if err != nil {
 		return "", err
 	}
-	code := extractOTPFromEmailMessage(resp.GetMessage())
-	if !resp.GetFound() || code == "" {
+	if code == "" {
+		code = extractOTPFromEmailMessage(message)
+	}
+	if !found || code == "" {
 		return "", fmt.Errorf("codex oauth email otp not found")
 	}
 	return code, nil

@@ -1,4 +1,4 @@
-import { numberValue, objectValue, stringValue } from '@/dashboard/module-kit';
+import { numberValue, objectValue, stringValue } from '@byte-v-forge/common-ui';
 import { goPayPaymentChannelLabel, paymentChannelValue } from './gopay-utils';
 import { statusText } from './labels';
 import type { Account, Job } from './types';
@@ -15,7 +15,7 @@ export function canGoPayPayment(account: Account) {
   return !isInvalidGptAccount(account) &&
     !isUserAlreadyExistsAccount(account) &&
     !accountIsActivated(account) &&
-    (!!account.session_token || !!account.access_token);
+    hasRegisteredSession(account);
 }
 
 export function accountActivationChannel(account: Account, jobs: Job[]) {
@@ -97,7 +97,7 @@ function boolResult(value: unknown) {
 }
 
 export function canProbeAccount(account: Account) {
-  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && !!account.session_token;
+  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && hasRegisteredSession(account);
 }
 
 export function probeAccountHint(account: Account) {
@@ -107,7 +107,7 @@ export function probeAccountHint(account: Account) {
 }
 
 export function canRefreshAccessToken(account: Account) {
-  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && !!account.session_token && !account.access_token;
+  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && hasRegisteredSession(account);
 }
 
 export function canLoginSession(account: Account) {
@@ -115,15 +115,13 @@ export function canLoginSession(account: Account) {
 }
 
 export function loginActionLabel(account: Account) {
-  if (!account.session_token) return '登录获取 Session';
-  if (!account.access_token) return '登录刷新 Access Token';
+  void account;
   return '登录刷新 Token';
 }
 
 export function loginActionHint(account: Account) {
-  if (!account.session_token) return '通过账号密码登录并获取 Session Token';
-  if (!account.access_token) return '重新登录并刷新 Access Token';
-  return '重新登录并刷新 Session / Access Token';
+  void account;
+  return '通过账号密码登录并刷新 Redis 中的 Session / Access Token';
 }
 
 export function accountSignalText(account: Account) {
@@ -185,7 +183,7 @@ export function isUserAlreadyExistsAccount(account: Account) {
 }
 
 export function hasRegisteredSession(account: Account) {
-  return account.status === 'REGISTERED' || account.status === 'ACTIVATED' || !!account.session_token || !!account.access_token;
+  return account.status === 'REGISTERED' || account.status === 'ACTIVATED';
 }
 
 export function normalizeTier(tier: string) {

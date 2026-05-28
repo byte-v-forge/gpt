@@ -3,13 +3,14 @@ package appsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/jsonx"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 	gopayapp "github.com/byte-v-forge/gpt/gopay/protocol/app"
 )
 
@@ -51,11 +52,11 @@ func (s *Server) unlink(ctx context.Context, state stateMap) map[string]any {
 	unlinked := 0
 	var failed []string
 	for _, service := range services {
-		path := protocol.StringAt(service, "unlink_service_url")
+		path := jsonx.StringAt(service, "unlink_service_url")
 		if path == "" {
 			continue
 		}
-		name := firstNonEmpty(protocol.StringAt(service, "service_name"), protocol.StringAt(service, "name"), path)
+		name := stringx.FirstNonEmpty(jsonx.StringAt(service, "service_name"), jsonx.StringAt(service, "name"), path)
 		resp, err := client.Patch(ctx, customerBaseURL+path, nil)
 		if err == nil && (resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusAccepted || resp.StatusCode == http.StatusNoContent) {
 			unlinked++
@@ -77,7 +78,7 @@ func linkedServices(payload map[string]any) []map[string]any {
 	walk = func(value any) {
 		switch typed := value.(type) {
 		case map[string]any:
-			if protocol.StringAt(typed, "unlink_service_url") != "" {
+			if jsonx.StringAt(typed, "unlink_service_url") != "" {
 				out = append(out, typed)
 			}
 			for _, child := range typed {
@@ -124,8 +125,8 @@ func (s *Server) claimEnvelope(ctx context.Context, state stateMap, envelopeID, 
 		"success":                      success,
 		"error":                        errMessage,
 		"envelope_request_id":          resolved,
-		"response_envelope_request_id": protocol.StringAt(data, "envelope_request_id"),
-		"status":                       protocol.StringAt(data, "status"),
+		"response_envelope_request_id": jsonx.StringAt(data, "envelope_request_id"),
+		"status":                       jsonx.StringAt(data, "status"),
 		"http_status":                  resp.StatusCode,
 		"raw_json":                     safeJSON(raw),
 	}
@@ -140,7 +141,7 @@ func (s *Server) replayLinkPayment(ctx context.Context, state stateMap, paymentL
 		PaymentLink:    paymentLink,
 		PIN:            pin,
 		AmountValue:    amountValue,
-		AmountCurrency: firstNonEmpty(amountCurrency, "IDR"),
+		AmountCurrency: stringx.FirstNonEmpty(amountCurrency, "IDR"),
 		BodyLimit:      bodyLimit,
 	})
 }

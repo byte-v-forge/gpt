@@ -3,11 +3,12 @@ package activities
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"sort"
 	"strings"
 )
 
-func fetchCodexOAuthClientAuthSessionDump(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, data map[string]any, stage string) error {
+func fetchCodexOAuthClientAuthSessionDump(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any, stage string) error {
 	if client == nil || state == nil || data == nil || !client.cfg.ProtocolSessionDumpEnabled {
 		return nil
 	}
@@ -37,7 +38,7 @@ func applyCodexOAuthClientAuthSessionDump(payload map[string]any, state *codexOA
 		state.ClientID = clientID
 		data["client_auth_openai_client_id_present"] = true
 	}
-	if sessionID := strings.TrimSpace(firstNonEmptyAny(payload["session_id"], cas["session_id"])); sessionID != "" {
+	if sessionID := strings.TrimSpace(stringx.FirstNonEmptyAny(payload["session_id"], cas["session_id"])); sessionID != "" {
 		data["client_auth_session_id_present"] = true
 	}
 	if mode := strings.TrimSpace(stringAny(cas["email_verification_mode"])); mode != "" {
@@ -115,15 +116,6 @@ func stringAny(value any) string {
 		return ""
 	}
 	return strings.TrimSpace(fmt.Sprint(value))
-}
-
-func firstNonEmptyAny(values ...any) string {
-	for _, value := range values {
-		if text := stringAny(value); text != "" {
-			return text
-		}
-	}
-	return ""
 }
 
 func boolAny(value any) (bool, bool) {

@@ -34,7 +34,7 @@ func (s *Server) CodexOAuthStartProtocolActivity(ctx context.Context, input Code
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		client, err := newCodexOAuthProtocolHTTPClient(cfg, &state)
+		client, err := s.newAccountGptClient(ctx, input.GetAccountId(), cfg, &state)
 		if err != nil {
 			_ = s.deleteRuntimeSecret(context.Background(), state.PKCESecretKey)
 			data["error_message"] = err.Error()
@@ -76,7 +76,7 @@ func (s *Server) CodexOAuthStartProtocolActivity(ctx context.Context, input Code
 }
 
 func (s *Server) CodexOAuthDetectProtocolStageActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
-	return s.codexOAuthProtocolStageStep(ctx, input, stepCodexOAuthProtocolDetect, "detecting codex oauth protocol stage", func(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
+	return s.codexOAuthProtocolStageStep(ctx, input, stepCodexOAuthProtocolDetect, "detecting codex oauth protocol stage", func(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
 		stage := state.Stage
 		if stage == "" && state.LastURL != "" {
 			stage = codexOAuthProtocolStageFromURL(state.LastURL, "")
@@ -88,7 +88,7 @@ func (s *Server) CodexOAuthDetectProtocolStageActivity(ctx context.Context, inpu
 }
 
 func (s *Server) CodexOAuthSubmitProtocolEmailActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
-	return s.codexOAuthProtocolStageStep(ctx, input, stepCodexOAuthProtocolEmail, "submitting codex oauth protocol email", func(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
+	return s.codexOAuthProtocolStageStep(ctx, input, stepCodexOAuthProtocolEmail, "submitting codex oauth protocol email", func(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
 		sentinel := codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue")
 		resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/authorize/continue", "https://auth.openai.com/log-in", map[string]any{
 			"username":    map[string]any{"value": account.GetEmail(), "kind": "email"},
@@ -105,7 +105,7 @@ func (s *Server) CodexOAuthSubmitProtocolEmailActivity(ctx context.Context, inpu
 }
 
 func (s *Server) CodexOAuthSubmitProtocolPasswordActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
-	return s.codexOAuthProtocolStageStep(ctx, input, stepCodexOAuthProtocolPassword, "submitting codex oauth protocol password", func(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
+	return s.codexOAuthProtocolStageStep(ctx, input, stepCodexOAuthProtocolPassword, "submitting codex oauth protocol password", func(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
 		sentinel := codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue")
 		resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/password/verify", "https://auth.openai.com/log-in/password", map[string]any{"password": account.GetPassword()}, sentinel)
 		issuedAfter := codexOAuthProtocolResponseSentAtUnix(client, resp)
@@ -118,7 +118,7 @@ func (s *Server) CodexOAuthSubmitProtocolPasswordActivity(ctx context.Context, i
 	})
 }
 
-func codexOAuthProtocolResponseSentAtUnix(client *codexOAuthProtocolHTTPClient, resp *codexOAuthProtocolHTTPResponse) int64 {
+func codexOAuthProtocolResponseSentAtUnix(client *GptClient, resp *codexOAuthProtocolHTTPResponse) int64 {
 	if resp != nil && resp.SentAtUnixMs > 0 {
 		return unixSecondsFromMillis(resp.SentAtUnixMs)
 	}
@@ -130,7 +130,7 @@ func codexOAuthProtocolResponseSentAtUnix(client *codexOAuthProtocolHTTPClient, 
 
 func (s *Server) CodexOAuthSubmitProtocolEmailOTPActivity(ctx context.Context, input CodexOAuthSubmitEmailOTPInput) (CodexOAuthBrowserStageOutput, error) {
 	stepInput := CodexOAuthBrowserStepInput{JobId: input.GetJobId(), AccountId: input.GetAccountId(), Label: input.GetLabel(), Session: input.GetSession()}
-	return s.codexOAuthProtocolStageStep(ctx, stepInput, stepCodexOAuthProtocolEmailOTP, "submitting codex oauth protocol email otp", func(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
+	return s.codexOAuthProtocolStageStep(ctx, stepInput, stepCodexOAuthProtocolEmailOTP, "submitting codex oauth protocol email otp", func(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
 		otp, err := s.waitCodexOAuthEmailOTP(ctx, input.GetJobId(), account.GetEmail(), input.GetIssuedAfterUnix())
 		if err != nil {
 			return "", input.GetIssuedAfterUnix(), err
@@ -150,7 +150,7 @@ func (s *Server) CodexOAuthSubmitProtocolEmailOTPActivity(ctx context.Context, i
 	})
 }
 
-func (s *Server) codexOAuthProtocolStageStep(ctx context.Context, input CodexOAuthBrowserStepInput, stepName, heartbeat string, fn func(context.Context, *codexOAuthProtocolHTTPClient, *codexOAuthProtocolState, *pb.Account, map[string]any) (string, int64, error)) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) codexOAuthProtocolStageStep(ctx context.Context, input CodexOAuthBrowserStepInput, stepName, heartbeat string, fn func(context.Context, *GptClient, *codexOAuthProtocolState, *pb.Account, map[string]any) (string, int64, error)) (CodexOAuthBrowserStageOutput, error) {
 	cfg := s.codexOAuthConfig.withDefaults()
 	label := cfg.label(input.GetLabel())
 	output := CodexOAuthBrowserStageOutput{}
@@ -169,7 +169,7 @@ func (s *Server) codexOAuthProtocolStageStep(ctx context.Context, input CodexOAu
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		client, err := newCodexOAuthProtocolHTTPClient(cfg, state)
+		client, err := s.newAccountGptClient(ctx, input.GetAccountId(), cfg, state)
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err

@@ -2,13 +2,13 @@ package paymentsvc
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/byte-v-forge/common-lib/hashx"
 )
 
 type paymentProxyProbeResult struct {
@@ -74,7 +74,12 @@ func probePaymentProxy(ctx context.Context, proxyURL string, labels []string, fi
 		return probe, fmt.Errorf("payment proxy %s exit ip probe missing", strings.Join(labels, ","))
 	}
 
-	resp, err := session.request(probeCtx, http.MethodGet, "https://chatgpt.com/api/auth/csrf", requestOptions{
+	gptClient, err := newGptClientWithFingerprint(proxyURL, fingerprint)
+	if err != nil {
+		return probe, fmt.Errorf("payment proxy %s chatgpt client init failed: %w", strings.Join(labels, ","), err)
+	}
+	defer gptClient.close()
+	resp, err := gptClient.request(probeCtx, http.MethodGet, "https://chatgpt.com/api/auth/csrf", requestOptions{
 		headers: http.Header{
 			"Accept":  []string{"application/json"},
 			"Referer": []string{"https://chatgpt.com/"},
@@ -133,6 +138,5 @@ func parsePaymentCloudflareTrace(body string) paymentProxyProbeResult {
 }
 
 func paymentProxyHash(value string) string {
-	hash := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(hash[:])[:12]
+	return hashx.ShortSHA256(value, 12)
 }

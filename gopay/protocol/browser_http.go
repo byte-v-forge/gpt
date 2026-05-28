@@ -1,107 +1,35 @@
 package protocol
 
 import (
-	"bytes"
-	"crypto/rand"
-	"fmt"
-	"io"
-	"math/big"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
-	fhttp "github.com/bogdanfinn/fhttp"
-	tlsclient "github.com/bogdanfinn/tls-client"
-	"github.com/bogdanfinn/tls-client/profiles"
+	"github.com/byte-v-forge/common-lib/browserfingerprint"
+	"github.com/byte-v-forge/common-lib/browserhttp"
+	"github.com/byte-v-forge/common-lib/envx"
+	"github.com/byte-v-forge/common-lib/httpjson"
 )
 
-type browserHTTPClient struct {
-	client         tlsclient.HttpClient
-	cookieJar      fhttp.CookieJar
-	proxyRawURL    string
-	timeout        time.Duration
-	tlsProfileName string
+func NewBrowserHTTPClient(timeout time.Duration, proxyRawURL string, tlsProfileName ...string) (httpjson.Doer, error) {
+	return browserhttp.New(browserhttp.Config{
+		Timeout:                 timeout,
+		ProxyURL:                proxyRawURL,
+		TLSProfileName:          ResolveTLSProfileName(selectedTLSProfileName(tlsProfileName...)),
+		RandomTLSExtensionOrder: envx.Bool("GOPAY_TLS_RANDOM_EXTENSION_ORDER", false),
+		DisableHTTP3:            envx.Bool("GOPAY_TLS_DISABLE_HTTP3", true),
+		ForceHTTP1:              envx.Bool("GOPAY_TLS_FORCE_HTTP1", false),
+		HeaderOrder:             goPayHeaderOrder,
+	})
 }
 
-func NewBrowserHTTPClient(timeout time.Duration, proxyRawURL string, tlsProfileName ...string) (HTTPDoer, error) {
-	if timeout <= 0 {
-		timeout = 30 * time.Second
-	}
-	proxyRawURL = strings.TrimSpace(proxyRawURL)
-	profileName := ResolveTLSProfileName(firstNonEmpty(tlsProfileName...))
-	transport := &browserHTTPClient{
-		cookieJar:      tlsclient.NewCookieJar(),
-		proxyRawURL:    proxyRawURL,
-		timeout:        timeout,
-		tlsProfileName: profileName,
-	}
-	client, err := transport.newTLSClient()
-	if err != nil {
-		return nil, err
-	}
-	transport.client = client
-	return transport, nil
-}
-
-func (c *browserHTTPClient) Do(req *http.Request) (*http.Response, error) {
-	var body []byte
-	if req.Body != nil {
-		var err error
-		body, err = io.ReadAll(req.Body)
-		_ = req.Body.Close()
-		if err != nil {
-			return nil, err
+func selectedTLSProfileName(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
 		}
 	}
-	next, err := fhttp.NewRequestWithContext(req.Context(), req.Method, req.URL.String(), bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	next.Header = toFHTTPHeader(req.Header, req.Host)
-	if req.Host != "" {
-		next.Host = req.Host
-	}
-	resp, err := c.client.Do(next)
-	if err != nil {
-		return nil, err
-	}
-	status := resp.Status
-	if strings.TrimSpace(status) == "" {
-		status = fmt.Sprintf("%d %s", resp.StatusCode, http.StatusText(resp.StatusCode))
-	}
-	return &http.Response{
-		Status:        status,
-		StatusCode:    resp.StatusCode,
-		Header:        fromFHTTPHeader(resp.Header),
-		Body:          resp.Body,
-		ContentLength: resp.ContentLength,
-		Request:       req,
-	}, nil
-}
-
-func (c *browserHTTPClient) newTLSClient() (tlsclient.HttpClient, error) {
-	profileName := ResolveTLSProfileName(c.tlsProfileName)
-	c.tlsProfileName = profileName
-	profile, _ := lookupTLSProfile(profileName)
-	options := []tlsclient.HttpClientOption{
-		tlsclient.WithTimeoutSeconds(int(c.timeout.Seconds())),
-		tlsclient.WithClientProfile(profile),
-		tlsclient.WithCookieJar(c.cookieJar),
-	}
-	if envBoolDefault("GOPAY_TLS_RANDOM_EXTENSION_ORDER", false) {
-		options = append(options, tlsclient.WithRandomTLSExtensionOrder())
-	}
-	if envBoolDefault("GOPAY_TLS_DISABLE_HTTP3", true) {
-		options = append(options, tlsclient.WithDisableHttp3())
-	}
-	if envBoolDefault("GOPAY_TLS_FORCE_HTTP1", false) {
-		options = append(options, tlsclient.WithForceHttp1())
-	}
-	if c.proxyRawURL != "" {
-		options = append(options, tlsclient.WithProxyUrl(c.proxyRawURL))
-	}
-	return tlsclient.NewHttpClient(tlsclient.NewNoopLogger(), options...)
+	return ""
 }
 
 var defaultAndroidTLSProfileNames = []string{
@@ -116,108 +44,43 @@ var defaultAndroidTLSProfileNames = []string{
 }
 
 func SelectTLSProfileName() string {
-	if profileName := strings.TrimSpace(os.Getenv("GOPAY_TLS_PROFILE")); profileName != "" && !strings.EqualFold(profileName, "random") {
-		if canonical, ok := canonicalTLSProfileName(profileName); ok {
+	if profileName := envx.String("GOPAY_TLS_PROFILE"); profileName != "" && !strings.EqualFold(profileName, "random") {
+		if canonical := browserfingerprint.CanonicalTLSProfileName(profileName); canonical != "" {
 			return canonical
 		}
 	}
-	return randomTLSProfileName()
+	if profilesFromEnv := tlsProfilesFromEnv(); len(profilesFromEnv) > 0 {
+		return browserfingerprint.RandomTLSProfileName(profilesFromEnv)
+	}
+	return browserfingerprint.RandomTLSProfileName(defaultAndroidTLSProfileNames)
 }
 
 func ResolveTLSProfileName(profileName string) string {
 	profileName = strings.TrimSpace(profileName)
 	if profileName != "" && !strings.EqualFold(profileName, "random") {
-		if canonical, ok := canonicalTLSProfileName(profileName); ok {
+		if canonical := browserfingerprint.CanonicalTLSProfileName(profileName); canonical != "" {
 			return canonical
 		}
 	}
 	return SelectTLSProfileName()
 }
 
-func randomTLSProfileName() string {
-	if profilesFromEnv := tlsProfilesFromEnv(); len(profilesFromEnv) > 0 {
-		return profilesFromEnv[randomProfileIndex(len(profilesFromEnv))]
-	}
-	return defaultAndroidTLSProfileNames[randomProfileIndex(len(defaultAndroidTLSProfileNames))]
-}
-
 func tlsProfilesFromEnv() []string {
-	raw := strings.TrimSpace(os.Getenv("GOPAY_TLS_PROFILES"))
-	if raw == "" {
-		return nil
-	}
-	var out []string
-	for _, part := range strings.Split(raw, ",") {
-		name := strings.TrimSpace(part)
-		if name == "" {
-			continue
-		}
-		if canonical, ok := canonicalTLSProfileName(name); ok {
-			out = append(out, canonical)
-		}
-	}
-	return out
+	return browserfingerprint.CanonicalTLSProfileNames(envx.List("GOPAY_TLS_PROFILES"))
 }
 
-func lookupTLSProfile(name string) (profiles.ClientProfile, bool) {
-	canonical, ok := canonicalTLSProfileName(name)
-	if !ok {
-		return profiles.ClientProfile{}, false
+func goPayHeaderOrder(headers http.Header, host string) ([]string, []string) {
+	if !isGoPaySignedHeader(headers) {
+		return nil, nil
 	}
-	return profiles.MappedTLSClients[canonical], true
+	return gopaySignedHeaderOrder(headers, host), []string{":method", ":authority", ":scheme", ":path"}
 }
 
-func canonicalTLSProfileName(name string) (string, bool) {
-	for candidate := range profiles.MappedTLSClients {
-		if strings.EqualFold(candidate, name) {
-			return candidate, true
-		}
-	}
-	return "", false
-}
-
-func randomProfileIndex(size int) int {
-	if size <= 1 {
-		return 0
-	}
-	n, err := rand.Int(rand.Reader, big.NewInt(int64(size)))
-	if err != nil {
-		return int(time.Now().UnixNano() % int64(size))
-	}
-	return int(n.Int64())
-}
-
-func envBoolDefault(name string, fallback bool) bool {
-	value := strings.ToLower(strings.TrimSpace(os.Getenv(name)))
-	switch value {
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return fallback
-	}
-}
-
-func toFHTTPHeader(src http.Header, host string) fhttp.Header {
-	dst := make(fhttp.Header)
-	for key, values := range src {
-		for _, value := range values {
-			dst.Add(key, value)
-		}
-	}
-	if isGoPaySignedHeader(dst) {
-		dst[fhttp.HeaderOrderKey] = gopaySignedHeaderOrder(dst, host)
-		dst[fhttp.PHeaderOrderKey] = []string{":method", ":authority", ":scheme", ":path"}
-	}
-	return dst
-}
-
-func isGoPaySignedHeader(headers fhttp.Header) bool {
+func isGoPaySignedHeader(headers http.Header) bool {
 	return headerValue(headers, "x-e1") != "" && strings.EqualFold(headerValue(headers, "x-appid"), "com.gojek.gopay")
 }
 
-func headerValue(headers fhttp.Header, key string) string {
+func headerValue(headers http.Header, key string) string {
 	for existing, values := range headers {
 		if !strings.EqualFold(existing, key) {
 			continue
@@ -232,8 +95,11 @@ func headerValue(headers fhttp.Header, key string) string {
 	return ""
 }
 
-func gopaySignedHeaderOrder(headers fhttp.Header, host string) []string {
-	if strings.EqualFold(firstNonEmpty(host, headerValue(headers, "host")), "accounts.goto-products.com") {
+func gopaySignedHeaderOrder(headers http.Header, host string) []string {
+	if strings.TrimSpace(host) == "" {
+		host = headerValue(headers, "host")
+	}
+	if strings.EqualFold(host, "accounts.goto-products.com") {
 		return []string{
 			"accept-encoding",
 			"key",
@@ -303,23 +169,4 @@ func gopaySignedHeaderOrder(headers fhttp.Header, host string) []string {
 		"is-token-required",
 		"x-e1",
 	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value = strings.TrimSpace(value); value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func fromFHTTPHeader(src fhttp.Header) http.Header {
-	dst := make(http.Header)
-	for key, values := range src {
-		for _, value := range values {
-			dst.Add(key, value)
-		}
-	}
-	return dst
 }

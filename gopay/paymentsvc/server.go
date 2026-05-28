@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/byte-v-forge/common-lib/stringx"
 	"github.com/byte-v-forge/gpt/gopay/pb"
 	"github.com/google/uuid"
 )
@@ -76,20 +77,52 @@ func (s *flowStore) close() {
 type credential struct {
 	sessionToken string
 	accessToken  string
+	profile      requestProfile
+	hasProfile   bool
 }
 
 func requestCredential(value *pb.ChatGPTCredential) credential {
 	if value == nil {
 		return credential{}
 	}
+	profile, hasProfile := requestProfileFromProto(value.GetRequestProfile())
 	return credential{
 		sessionToken: strings.TrimSpace(value.GetSessionToken()),
 		accessToken:  strings.TrimSpace(value.GetAccessToken()),
+		profile:      profile,
+		hasProfile:   hasProfile,
 	}
 }
 
 func (c credential) empty() bool {
 	return c.sessionToken == "" && c.accessToken == ""
+}
+
+func (c credential) chatGPTProfile(fallback requestProfile) requestProfile {
+	if !c.hasProfile {
+		return fallback
+	}
+	return c.profile.withDefaults(fallback)
+}
+
+func requestProfileFromProto(value *pb.ChatGPTRequestProfile) (requestProfile, bool) {
+	if value == nil {
+		return requestProfile{}, false
+	}
+	profile := requestProfile{
+		Name:           "account",
+		ProxyURL:       strings.TrimSpace(value.GetProxyUrl()),
+		TLSProfile:     strings.TrimSpace(value.GetTlsProfile()),
+		UserAgent:      strings.TrimSpace(value.GetUserAgent()),
+		SecCHUA:        strings.TrimSpace(value.GetSecChUa()),
+		SecCHPlatform:  strings.TrimSpace(value.GetSecChUaPlatform()),
+		AcceptLanguage: strings.TrimSpace(value.GetAcceptLanguage()),
+		OAILanguage:    strings.TrimSpace(value.GetOaiLanguage()),
+		Locale:         strings.TrimSpace(value.GetLocale()),
+		DeviceID:       strings.TrimSpace(value.GetDeviceId()),
+		Platform:       strings.TrimSpace(value.GetPlatform()),
+	}
+	return profile, true
 }
 
 func errorText(err error) string {
@@ -120,9 +153,9 @@ func (s *Server) ProbeTier(ctx context.Context, req *pb.ProbeTierPaymentRequest)
 		Success:      result.ErrorMessage == "",
 		ErrorMessage: result.ErrorMessage,
 		Checked:      result.Checked,
-		Tier:         firstNonEmpty(result.Tier, result.PlanType),
+		Tier:         stringx.FirstNonEmpty(result.Tier, result.PlanType),
 		PlusActive:   result.PlusActive,
-		Source:       firstNonEmpty(result.Source, "auth_session"),
+		Source:       stringx.FirstNonEmpty(result.Source, "auth_session"),
 	}, nil
 }
 
@@ -457,7 +490,7 @@ func startResponse(flowID string, state map[string]any) *pb.StartGoPayResponse {
 		SnapToken:         stringAt(state, "snap_token"),
 		IssuedAfterUnix:   intAt(state, "issued_after_unix"),
 		CheckoutUrl:       stringAt(state, "checkout_url"),
-		CheckoutSessionId: firstNonEmpty(stringAt(state, "cs_id"), stringAt(state, "checkout_session_id")),
+		CheckoutSessionId: stringx.FirstNonEmpty(stringAt(state, "cs_id"), stringAt(state, "checkout_session_id")),
 		OtpRequired:       boolAt(state, "otp_required"),
 	}
 }
@@ -467,7 +500,7 @@ func paymentResponse(result map[string]any, awaitingManual bool) *pb.GoPayRespon
 	success := awaitingManual || state == "succeeded"
 	message := ""
 	if !success {
-		message = fmt.Sprintf("payment state=%s", firstNonEmpty(state, "unknown"))
+		message = fmt.Sprintf("payment state=%s", stringx.FirstNonEmpty(state, "unknown"))
 	}
 	return &pb.GoPayResponse{
 		Success:                    success,

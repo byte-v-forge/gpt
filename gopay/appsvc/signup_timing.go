@@ -2,13 +2,12 @@ package appsvc
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
-	"math/big"
+	"github.com/byte-v-forge/common-lib/httpjson"
+	"github.com/byte-v-forge/common-lib/randx"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/http"
 	"time"
-
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
 const (
@@ -71,7 +70,7 @@ func (s *Server) signupCooldownResult(state stateMap) map[string]any {
 		return nil
 	}
 	retryAfter := until - now
-	scope := firstNonEmpty(stateString(state, "_signup_rate_limit_scope"), "signup")
+	scope := stringx.FirstNonEmpty(stateString(state, "_signup_rate_limit_scope"), "signup")
 	state["last_error"] = "SIGNUP_RATE_LIMITED"
 	return map[string]any{
 		"success":              false,
@@ -83,7 +82,7 @@ func (s *Server) signupCooldownResult(state stateMap) map[string]any {
 	}
 }
 
-func (s *Server) signupRateLimitResult(state stateMap, scope string, phone string, countryCode string, label string, resp *protocol.Response) map[string]any {
+func (s *Server) signupRateLimitResult(state stateMap, scope string, phone string, countryCode string, label string, resp *httpjson.Response) map[string]any {
 	now := time.Now()
 	cooldown := s.signupRateLimitCooldown(resp)
 	until := now.Add(cooldown).Unix()
@@ -106,7 +105,7 @@ func (s *Server) signupRateLimitResult(state stateMap, scope string, phone strin
 	}
 }
 
-func (s *Server) signupRateLimitCooldown(resp *protocol.Response) time.Duration {
+func (s *Server) signupRateLimitCooldown(resp *httpjson.Response) time.Duration {
 	if retryAfter := retryTimerSeconds(resp); retryAfter > 0 {
 		return time.Duration(retryAfter) * time.Second
 	}
@@ -116,7 +115,7 @@ func (s *Server) signupRateLimitCooldown(resp *protocol.Response) time.Duration 
 	return 15 * time.Minute
 }
 
-func retryTimerSeconds(resp *protocol.Response) int64 {
+func retryTimerSeconds(resp *httpjson.Response) int64 {
 	if resp == nil {
 		return 0
 	}
@@ -138,7 +137,7 @@ func maxRetryTimerSeconds(value any) int64 {
 	}
 }
 
-func statusCode(resp *protocol.Response) int {
+func statusCode(resp *httpjson.Response) int {
 	if resp == nil {
 		return 0
 	}
@@ -149,11 +148,11 @@ func randomInt64(maxExclusive int64) int64 {
 	if maxExclusive <= 0 {
 		return 0
 	}
-	n, err := rand.Int(rand.Reader, big.NewInt(maxExclusive))
+	n, err := randx.Int(maxExclusive)
 	if err != nil {
 		return time.Now().UnixNano() % maxExclusive
 	}
-	return n.Int64()
+	return n
 }
 
 func rateLimitLabel(scope string) string {

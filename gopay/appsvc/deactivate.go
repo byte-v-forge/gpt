@@ -3,11 +3,10 @@ package appsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/httpjson"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
 func (s *Server) deactivateStart(ctx context.Context, state stateMap, pin string) map[string]any {
@@ -90,7 +89,7 @@ func (s *Server) deactivateComplete(ctx context.Context, state stateMap, otp str
 	return map[string]any{"success": true, "deactivated_at": deactivatedAt}
 }
 
-func deactivationCheckReady(resp *protocol.Response) bool {
+func deactivationCheckReady(resp *httpjson.Response) bool {
 	if resp == nil {
 		return false
 	}

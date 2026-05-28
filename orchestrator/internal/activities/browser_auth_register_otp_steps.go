@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
+	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
 	"orchestrator/pb"
 )
 
@@ -49,10 +49,10 @@ func (f *browserAuthFlow) resendEmailOTP(client browserautomationv1.BrowserAutom
 	}
 	if f.mode != browserAuthModeRegister {
 		return &pb.BrowserAuthResendOTPOutput{
-			FlowId:       f.flowID,
-			Email:        f.email,
-			Success:      false,
-			ErrorMessage: fmt.Sprintf("browser %s email OTP resend is not supported", f.mode),
+			BrowserSessionId: f.sessionID,
+			Email:            f.email,
+			Success:          false,
+			ErrorMessage:     fmt.Sprintf("browser %s email OTP resend is not supported", f.mode),
 		}, nil
 	}
 	f.setStatus(browserAuthStageOTPRequestClick, "resending email OTP")
@@ -63,14 +63,14 @@ func (f *browserAuthFlow) resendEmailOTP(client browserautomationv1.BrowserAutom
 	issuedAfter := unixSecondsFromMillis(startedAt)
 	f.markOTPRequestClickedAt(issuedAfter)
 	data := map[string]any{
-		"flow_id":                        f.flowID,
+		"browser_session_id":             f.sessionID,
 		"mode":                           f.mode,
 		"email":                          f.email,
 		"otp_issued_after_unix":          issuedAfter,
 		"otp_request_started_at_unix_ms": startedAt,
 	}
 	return &pb.BrowserAuthResendOTPOutput{
-		FlowId:                    f.flowID,
+		BrowserSessionId:          f.sessionID,
 		Email:                     f.email,
 		Success:                   true,
 		OtpIssuedAfterUnix:        issuedAfter,
@@ -110,7 +110,7 @@ func (f *browserAuthFlow) completeRegisterProfile(client browserautomationv1.Bro
 	startedAfter := time.Now().Add(-time.Second).UnixMilli()
 	results, err := f.execute(client, cfg, "register-complete-profile", []*browserautomationv1.BrowserCommand{
 		fillCommand("fill-full-name", browserAuthRegisterProfileNameSelector(), f.fullName, 10*time.Second, false),
-		fillCommand("fill-age", browserAuthRegisterAgeSelector(), browserAuthAgeFromBirthday(f.birthday), 10*time.Second, false),
+		fillCommand("fill-age", browserAuthRegisterAgeSelector(), f.age, 10*time.Second, false),
 		clickCommand("click-finish-creating-account", selectorGroup(5*time.Second, roleSelector("button", "Finish creating account", true)), 10*time.Second, false),
 		waitForNetworkCommandWithContinue("wait-create-account-request", "https://auth.openai.com/api/accounts/create_account", "POST", 200, 299, startedAfter, 90*time.Second, true),
 		waitTimeoutCommand("wait-after-create-account", 3*time.Second),

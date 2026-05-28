@@ -1,5 +1,5 @@
-import { numberValue, objectValue, stringValue } from '@/dashboard/module-kit';
-import { stepDetailData } from '@/dashboard/modules/workflow/sdk';
+import { numberValue, objectValue, stringValue } from '@byte-v-forge/common-ui';
+import { stepDetailData } from './job-utils';
 import type { ConcreteGoPayAddBalanceMethod, ConcreteGoPayPaymentChannel, Job, WorkflowProgress } from './types';
 
 type PaymentChannelDescriptor = {

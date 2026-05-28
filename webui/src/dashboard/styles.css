@@ -1,7 +1,6 @@
 .accountsList {
   grid-auto-rows: minmax(96px, auto);
 }
-
 .registrationSummary {
   margin: 12px 14px 0;
   border: 1px solid var(--border);
@@ -12,28 +11,23 @@
   gap: 10px;
   font-size: 13px;
 }
-
 .registrationSummary svg {
   flex: 0 0 auto;
 }
-
 .registrationSummary div {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
-
 .registrationSummary span {
   color: var(--muted-foreground);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .registrationSummary.good { background: var(--success-soft); color: var(--success); }
 .registrationSummary.mid { background: var(--warning-soft); color: var(--warning); }
 .registrationSummary.bad { background: var(--danger-soft); color: var(--danger); border-color: #f2c7c1; }
-
 .goPayStatusCard {
   margin: 12px 0;
   border: 1px solid var(--border-soft);
@@ -43,11 +37,9 @@
   gap: 10px;
   background: var(--surface-soft);
 }
-
 .goPayStatusCard.good { background: var(--success-soft); color: var(--success); border-color: #bfe7cc; }
 .goPayStatusCard.mid { background: var(--warning-soft); color: var(--warning); border-color: #f1dc9b; }
 .goPayStatusCard.bad { background: var(--danger-soft); color: var(--danger); border-color: #f2c7c1; }
-
 .goPayStatusHead,
 .goPayCurrentFlow {
   min-width: 0;
@@ -55,13 +47,11 @@
   align-items: center;
   gap: 10px;
 }
-
 .goPayStatusHead div {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
-
 .goPayStatusHead span,
 .goPayCurrentFlow em {
   min-width: 0;
@@ -70,13 +60,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .goPayCurrentFlow span {
   color: var(--muted-foreground);
   font-size: 12px;
   font-weight: 700;
 }
-
 .accountStatePill {
   min-width: 0;
   height: 25px;
@@ -91,24 +79,20 @@
   font-size: 12px;
   line-height: 1;
 }
-
 .accountStatePill em {
   color: var(--muted-foreground);
   font-style: normal;
   font-weight: 650;
 }
-
 .accountStatePill strong {
   color: inherit;
   font-weight: 750;
   white-space: nowrap;
 }
-
 .accountStatePill.good { color: var(--success); background: var(--success-soft); border-color: #bfe7cc; }
 .accountStatePill.mid { color: var(--warning); background: var(--warning-soft); border-color: #f1dc9b; }
 .accountStatePill.bad { color: var(--danger); background: var(--danger-soft); border-color: #f2c7c1; }
 .accountStatePill.neutral { color: #475569; background: #f8fafc; border-color: #e2e8f0; }
-
 .accountCardTags {
   min-width: 0;
   flex: 0 0 auto;
@@ -119,7 +103,6 @@
   gap: 5px;
   white-space: nowrap;
 }
-
 .accountCardEmail {
   min-width: 0;
   width: 100%;
@@ -128,11 +111,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-
 .accountSignalBadge.compact {
   margin: 0;
 }
-
 .accountMetaTag {
   max-width: 126px;
   height: 25px;
@@ -149,7 +130,6 @@
   white-space: nowrap;
   overflow: hidden;
 }
-
 .accountMetaTag em { color: var(--muted-foreground); font-style: normal; font-weight: 650; }
 .accountMetaTag strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .accountMetaTag.good { color: var(--success); background: var(--success-soft); border-color: #bfe7cc; }
@@ -160,3 +140,15 @@
 .accountChannelTag { color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
 .accountChannelTag.iconOnly { width: 43px; max-width: 43px; flex: 0 0 43px; }
 .accountPhoneTag.iconOnly { width: 25px; max-width: 25px; flex: 0 0 25px; }
+.accountDetails {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.accountDetailsTabs {
+  min-height: 0;
+}
+.accountDetailTabContent {
+  overflow: auto;
+  padding-top: 14px;
+}

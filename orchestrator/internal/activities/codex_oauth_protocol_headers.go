@@ -1,9 +1,9 @@
 package activities
 
 import (
-	"crypto/rand"
 	"fmt"
-	"math/big"
+
+	"github.com/byte-v-forge/common-lib/randx"
 )
 
 func codexOAuthProtocolDatadogHeaders() map[string]string {
@@ -22,18 +22,17 @@ func codexOAuthProtocolDatadogHeaders() map[string]string {
 }
 
 func codexOAuthProtocolRandomDecimalID() string {
-	max := new(big.Int).Lsh(big.NewInt(1), 63)
-	n, err := rand.Int(rand.Reader, max)
-	if err != nil || n.Sign() <= 0 {
+	n, err := randx.PositiveInt63()
+	if err != nil || n <= 0 {
 		return "1"
 	}
-	return n.String()
+	return fmt.Sprint(n)
 }
 
 func codexOAuthProtocolRandomHex(size int) string {
-	buf := make([]byte, size)
-	if _, err := rand.Read(buf); err != nil {
+	value, err := randx.Hex(size)
+	if err != nil {
 		return "0000000000000001"
 	}
-	return fmt.Sprintf("%x", buf)
+	return value
 }

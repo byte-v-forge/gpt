@@ -7,6 +7,23 @@ option go_package = "./;pb";
 message ChatGPTCredential {
   string session_token = 1;
   string access_token = 2;
+  ChatGPTRequestProfile request_profile = 3;
+}
+
+message ChatGPTRequestProfile {
+  string proxy_url = 1;
+  string tls_profile = 2;
+  string user_agent = 3;
+  string sec_ch_ua = 4;
+  string sec_ch_ua_platform = 5;
+  string accept_language = 6;
+  string oai_language = 7;
+  string locale = 8;
+  string device_id = 9;
+  string platform = 10;
+  reserved 11;
+  string proxy_ref = 12;
+  string timezone = 13;
 }
 
 message StartGoPayRequest {
@@ -110,6 +127,16 @@ message ProbeTierPaymentRequest {
   ChatGPTCredential credential = 1;
 }
 
+message FetchAccessTokenPaymentRequest {
+  ChatGPTCredential credential = 1;
+}
+
+message FetchAccessTokenPaymentResponse {
+  bool success = 1;
+  string error_message = 2;
+  string access_token = 3;
+}
+
 message ProbeTierPaymentResponse {
   bool success = 1;
   string error_message = 2;
@@ -170,6 +197,7 @@ service PaymentService {
   rpc StartPreparedGoPay(StartPreparedGoPayRequest) returns (StartGoPayResponse);
   rpc StartGoPay(StartGoPayRequest) returns (StartGoPayResponse);
   rpc CreateCheckoutLink(CreateCheckoutLinkRequest) returns (CreateCheckoutLinkResponse);
+  rpc FetchAccessToken(FetchAccessTokenPaymentRequest) returns (FetchAccessTokenPaymentResponse);
   rpc ProbePlusTrial(ProbePlusTrialPaymentRequest) returns (ProbePlusTrialPaymentResponse);
   rpc ProbeTier(ProbeTierPaymentRequest) returns (ProbeTierPaymentResponse);
   rpc CompleteGoPay(CompleteGoPayRequest) returns (GoPayResponse);

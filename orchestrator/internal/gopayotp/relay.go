@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/byte-v-forge/common-lib/timex"
 )
 
 const (
@@ -22,28 +24,33 @@ type Entry struct {
 	ExpiresAt  time.Time
 }
 
-type Relay struct {
+type Relay interface {
+	Put(purpose string, otp string, source string) (Entry, error)
+	Wait(ctx context.Context, purpose string, issuedAfterUnix int64, timeout time.Duration) (Entry, bool, error)
+}
+
+type MemoryRelay struct {
 	mu       sync.Mutex
 	items    map[string][]Entry
 	ttl      time.Duration
 	maxItems int
 }
 
-func NewRelay(ttl time.Duration, maxItems int) *Relay {
+func NewMemoryRelay(ttl time.Duration, maxItems int) *MemoryRelay {
 	if ttl <= 0 {
 		ttl = defaultTTL
 	}
 	if maxItems <= 0 {
 		maxItems = defaultMaxItems
 	}
-	return &Relay{
+	return &MemoryRelay{
 		items:    make(map[string][]Entry),
 		ttl:      ttl,
 		maxItems: maxItems,
 	}
 }
 
-func (r *Relay) Put(purpose string, otp string, source string) (Entry, error) {
+func (r *MemoryRelay) Put(purpose string, otp string, source string) (Entry, error) {
 	purpose = strings.TrimSpace(purpose)
 	if purpose == "" {
 		return Entry{}, fmt.Errorf("otp purpose is required")
@@ -69,7 +76,7 @@ func (r *Relay) Put(purpose string, otp string, source string) (Entry, error) {
 	return entry, nil
 }
 
-func (r *Relay) Wait(ctx context.Context, purpose string, issuedAfterUnix int64, timeout time.Duration) (Entry, bool, error) {
+func (r *MemoryRelay) Wait(ctx context.Context, purpose string, issuedAfterUnix int64, timeout time.Duration) (Entry, bool, error) {
 	purpose = strings.TrimSpace(purpose)
 	if purpose == "" {
 		return Entry{}, false, fmt.Errorf("otp purpose is required")
@@ -81,19 +88,15 @@ func (r *Relay) Wait(ctx context.Context, purpose string, issuedAfterUnix int64,
 	}
 	defer cancel()
 
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
 	for {
 		if entry, found := r.take(purpose, issuedAfterUnix); found {
 			return entry, true, nil
 		}
-		select {
-		case <-waitCtx.Done():
+		if err := timex.Sleep(waitCtx, pollInterval); err != nil {
 			if ctx.Err() != nil {
 				return Entry{}, false, ctx.Err()
 			}
 			return Entry{}, false, nil
-		case <-ticker.C:
 		}
 	}
 }
@@ -127,7 +130,7 @@ func NormalizeSource(value string) (string, error) {
 	return "", fmt.Errorf("source must be local or tg:<user_id>")
 }
 
-func (r *Relay) take(purpose string, issuedAfterUnix int64) (Entry, bool) {
+func (r *MemoryRelay) take(purpose string, issuedAfterUnix int64) (Entry, bool) {
 	now := time.Now().UTC()
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -147,7 +150,7 @@ func (r *Relay) take(purpose string, issuedAfterUnix int64) (Entry, bool) {
 	return Entry{}, false
 }
 
-func (r *Relay) pruneLocked(now time.Time) {
+func (r *MemoryRelay) pruneLocked(now time.Time) {
 	for purpose, queue := range r.items {
 		kept := queue[:0]
 		for _, entry := range queue {
@@ -163,7 +166,7 @@ func (r *Relay) pruneLocked(now time.Time) {
 	}
 }
 
-func (r *Relay) trimLocked() {
+func (r *MemoryRelay) trimLocked() {
 	total := 0
 	for _, queue := range r.items {
 		total += len(queue)

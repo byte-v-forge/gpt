@@ -15,10 +15,10 @@ type AccountEmailAllocator interface {
 }
 
 type accountDBEmailAllocator struct {
-	accountClient pb.AccountDatabaseServiceClient
+	accountClient pb.GPTAccountServiceClient
 }
 
-func defaultAccountEmailAllocator(allocator AccountEmailAllocator, accountClient pb.AccountDatabaseServiceClient) AccountEmailAllocator {
+func defaultAccountEmailAllocator(allocator AccountEmailAllocator, accountClient pb.GPTAccountServiceClient) AccountEmailAllocator {
 	if allocator != nil {
 		return allocator
 	}
@@ -28,7 +28,7 @@ func defaultAccountEmailAllocator(allocator AccountEmailAllocator, accountClient
 	return &accountDBEmailAllocator{accountClient: accountClient}
 }
 
-func NewAccountEmailAllocator(accountClient pb.AccountDatabaseServiceClient) AccountEmailAllocator {
+func NewAccountEmailAllocator(accountClient pb.GPTAccountServiceClient) AccountEmailAllocator {
 	return defaultAccountEmailAllocator(nil, accountClient)
 }
 
@@ -104,13 +104,13 @@ func (a *accountDBEmailAllocator) Allocate(ctx context.Context, accountID string
 
 func normalizeEmailStrategy(strategy pb.AccountEmailStrategy) pb.AccountEmailStrategy {
 	if strategy == pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_UNSPECIFIED {
-		return pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_OUTLOOK_ALIAS
+		return pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_POOLED_ALIAS
 	}
 	return strategy
 }
 
 func strategyAllowsAlias(strategy pb.AccountEmailStrategy) bool {
-	return normalizeEmailStrategy(strategy) == pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_OUTLOOK_ALIAS
+	return normalizeEmailStrategy(strategy) == pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_POOLED_ALIAS
 }
 
 func (a *accountDBEmailAllocator) listAllocations(ctx context.Context, status string, splittableOnly bool) ([]*pb.GPTEmailAllocation, error) {

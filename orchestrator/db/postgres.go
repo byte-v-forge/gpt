@@ -9,18 +9,24 @@ import (
 	"gorm.io/gorm"
 )
 
+const PlatformEventOutboxTable = "gpt_platform_event_outbox"
+
 type Job struct {
-	ID           string `gorm:"primaryKey"`
-	AccountID    string `gorm:"index"`
-	Action       string `gorm:"index"`
-	Status       string `gorm:"index"`
-	Recoverable  bool
-	Retryable    bool
-	LastStep     string
-	ErrorMessage string
-	ResultJSON   string
-	CreatedAt    int64 `gorm:"autoCreateTime"`
-	UpdatedAt    int64 `gorm:"autoUpdateTime"`
+	ID             string `gorm:"primaryKey"`
+	AccountID      string `gorm:"index"`
+	Action         string `gorm:"index"`
+	Status         string `gorm:"index"`
+	Recoverable    bool
+	Retryable      bool
+	LastStep       string
+	ErrorMessage   string
+	ResultJSON     string
+	ClaimOwner     string `gorm:"index"`
+	ClaimUntil     int64  `gorm:"index"`
+	AttemptCount   int32
+	CreatedAt      int64  `gorm:"autoCreateTime"`
+	UpdatedAt      int64  `gorm:"autoUpdateTime"`
+	N8NExecutionID string `gorm:"column:n8n_execution_id;index"`
 }
 
 type JobParam struct {
@@ -61,11 +67,11 @@ type GoPayUserProfile struct {
 	UpdatedAt int64  `gorm:"autoUpdateTime"`
 }
 
-type RuntimeSecret struct {
-	Key       string `gorm:"primaryKey;column:key"`
-	Value     string `gorm:"column:value"`
-	CreatedAt int64  `gorm:"autoCreateTime"`
-	UpdatedAt int64  `gorm:"autoUpdateTime"`
+type GPTRuntimeSetting struct {
+	SettingsKey string `gorm:"primaryKey;column:settings_key"`
+	ValueJSON   string `gorm:"column:value_json"`
+	CreatedAt   int64  `gorm:"autoCreateTime"`
+	UpdatedAt   int64  `gorm:"autoUpdateTime"`
 }
 
 type CodexOAuthPhoneLease struct {
@@ -88,6 +94,56 @@ type CodexOAuthPhoneLease struct {
 	UpdatedAt          int64  `gorm:"autoUpdateTime"`
 }
 
+type AccountProxyUsage struct {
+	ID             string  `gorm:"primaryKey;column:id"`
+	AccountID      string  `gorm:"column:account_id;index"`
+	JobID          string  `gorm:"column:job_id;index"`
+	N8NExecutionID string  `gorm:"column:n8n_execution_id;index"`
+	Purpose        string  `gorm:"column:purpose;index"`
+	ProxyURLHash   string  `gorm:"column:proxy_url_hash;index"`
+	ProxyProtocol  string  `gorm:"column:proxy_protocol"`
+	ProxyHost      string  `gorm:"column:proxy_host"`
+	ProxyPort      uint32  `gorm:"column:proxy_port"`
+	SessionIDHash  string  `gorm:"column:session_id_hash;index"`
+	ExitIP         string  `gorm:"column:exit_ip;index"`
+	CountryCode    string  `gorm:"column:country_code;index"`
+	Region         string  `gorm:"column:region"`
+	City           string  `gorm:"column:city"`
+	NetworkKind    string  `gorm:"column:network_kind;index"`
+	AnonymizerKind string  `gorm:"column:anonymizer_kind;index"`
+	FraudRiskLevel string  `gorm:"column:fraud_risk_level;index"`
+	FraudRiskScore float64 `gorm:"column:fraud_risk_score"`
+	EdgeRiskLevel  string  `gorm:"column:edge_risk_level;index"`
+	EdgeRiskScore  float64 `gorm:"column:edge_risk_score"`
+	AttemptIndex   uint32  `gorm:"column:attempt_index"`
+	Accepted       bool    `gorm:"column:accepted;index"`
+	ErrorMessage   string  `gorm:"column:error_message"`
+	RawJSON        string  `gorm:"column:raw_json"`
+	CreatedAt      int64   `gorm:"autoCreateTime"`
+}
+
+type AccountBrowserFingerprint struct {
+	AccountID              string `gorm:"primaryKey;column:account_id"`
+	BrowserProfileTemplate string `gorm:"column:browser_profile_template;index"`
+	BrowserFamily          string `gorm:"column:browser_family"`
+	BrowserMajorVersion    string `gorm:"column:browser_major_version"`
+	OSFamily               string `gorm:"column:os_family"`
+	TLSProfileFamily       string `gorm:"column:tls_profile_family;index"`
+	TLSFingerprintVariant  string `gorm:"column:tls_fingerprint_variant;index"`
+	Locale                 string `gorm:"column:locale"`
+	Timezone               string `gorm:"column:timezone"`
+	UserAgent              string `gorm:"column:user_agent"`
+	AcceptLanguage         string `gorm:"column:accept_language"`
+	Language               string `gorm:"column:language"`
+	DeviceID               string `gorm:"column:device_id"`
+	CreatedAt              int64  `gorm:"autoCreateTime"`
+	UpdatedAt              int64  `gorm:"autoUpdateTime"`
+}
+
+func (AccountProxyUsage) TableName() string {
+	return "account_proxy_usages"
+}
+
 func (JobEvent) TableName() string {
 	return "job_events"
 }
@@ -96,12 +152,16 @@ func (GoPayUserProfile) TableName() string {
 	return "gopay_user_profiles"
 }
 
-func (RuntimeSecret) TableName() string {
-	return "runtime_secrets"
+func (GPTRuntimeSetting) TableName() string {
+	return "gpt_runtime_settings"
 }
 
 func (CodexOAuthPhoneLease) TableName() string {
 	return "codex_oauth_phone_leases"
+}
+
+func (AccountBrowserFingerprint) TableName() string {
+	return "account_browser_fingerprints"
 }
 
 func DSN() string {
@@ -119,6 +179,24 @@ func InitDB() *gorm.DB {
 	if err != nil {
 		log.Fatalf("failed to connect to PostgreSQL database: %v", err)
 	}
-	db.AutoMigrate(&Job{}, &JobParam{}, &JobStep{}, &JobEvent{}, &GoPayUserProfile{}, &RuntimeSecret{}, &CodexOAuthPhoneLease{})
+	validateSchema(db)
 	return db
+}
+
+func validateSchema(db *gorm.DB) {
+	for _, table := range []string{
+		"jobs",
+		"job_params",
+		"job_steps",
+		"job_events",
+		"gopay_user_profiles",
+		"gpt_runtime_settings",
+		"codex_oauth_phone_leases",
+		"account_browser_fingerprints",
+		PlatformEventOutboxTable,
+	} {
+		if !db.Migrator().HasTable(table) {
+			log.Fatalf("database schema is not migrated: missing table %s", table)
+		}
+	}
 }

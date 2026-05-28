@@ -1,0 +1,83 @@
+.accountProxyHistoryPanel {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  max-height: calc(100dvh - 176px);
+  overflow: auto;
+  padding-right: 4px;
+}
+.proxyUsageCard {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 14px;
+}
+.proxyUsageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.proxyUsageTitle {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.proxyUsageTitle strong {
+  color: var(--foreground);
+  font-size: 13px;
+}
+.proxyUsageTitle span,
+.proxyUsageLine span,
+.proxyUsageGroup h4 {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.proxyUsageGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+.proxyUsageGroup {
+  min-width: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  padding: 10px;
+}
+.proxyUsageGroup h4 {
+  margin: 0 0 8px;
+  font-weight: 700;
+}
+.proxyUsageGroup > div {
+  display: grid;
+  gap: 6px;
+}
+.proxyUsageLine {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin: 0;
+}
+.proxyUsageLine strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 650;
+}
+.proxyUsageLine .monoCell {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+}
+.proxyUsageError {
+  margin: 0;
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  padding: 8px 10px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

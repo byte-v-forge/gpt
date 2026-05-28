@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { api, useQuery, useQueryClient } from '@/dashboard/module-kit';
-import { useJobEventCache } from '@/dashboard/modules/workflow/sdk';
+import { api, useQuery, useQueryClient } from '@byte-v-forge/common-ui';
+import { useJobEventCache } from './job-events';
 import type { GoPayDashboardStateResponse, Job, JobSnapshot } from './types';
 
 const GO_PAY_JOB_ACTIONS = new Set(['GOPAY_APP', 'GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE', 'GOPAY_WA_PAYMENT', 'GOPAY_PAYMENT_REBIND']);
@@ -18,10 +18,9 @@ export function useGoPayData() {
   const currentJob = runningJobs[0];
 
   useJobEventCache({
+    apiBase: '/api/gpt',
     lists: [{ queryKey: gopayQueryKeys.runningJobs, include: isRunningGoPaySnapshot, limit: 10 }],
-    onEvent: (event) => {
-      if (isGoPaySnapshot(event.snapshot)) void queryClient.invalidateQueries({ queryKey: gopayQueryKeys.state });
-    }
+    onEvent: () => { void queryClient.invalidateQueries({ queryKey: gopayQueryKeys.state }); }
   });
 
   return {
@@ -35,11 +34,11 @@ export function useGoPayData() {
 }
 
 function fetchGoPayState() {
-  return api<GoPayDashboardStateResponse>('/api/gopay/state?user_id=local');
+  return api<GoPayDashboardStateResponse>('/api/gpt/gopay/state?user_id=local');
 }
 
 function fetchRunningGoPayJobs() {
-  return api<JobSnapshot[]>('/api/jobs?limit=20&status=RUNNING');
+  return api<JobSnapshot[]>('/api/gpt/jobs?limit=20&status=RUNNING');
 }
 
 function snapshotsToJobs(snapshots: JobSnapshot[]) {

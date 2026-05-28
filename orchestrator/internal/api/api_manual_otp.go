@@ -6,7 +6,6 @@ import (
 	"gorm.io/gorm"
 	"log"
 	"orchestrator/db"
-	"orchestrator/internal/contracts"
 	"orchestrator/pb"
 	"strconv"
 	"strings"
@@ -50,37 +49,28 @@ func (s *Server) ResendOTP(ctx context.Context, req *pb.ResendOTPRequest) (*pb.R
 	if err != nil {
 		return &pb.ResendOTPResponse{Success: false, JobId: jobID, ErrorMessage: err.Error()}, nil
 	}
-	workflowID, required := manualOTPWorkflowID(job)
-	if !required || workflowID == "" {
-		return &pb.ResendOTPResponse{Success: false, JobId: jobID, ErrorMessage: "workflow id not found"}, nil
+	if job.Action != actionRegister && job.Action != actionRegisterAndActivate {
+		return &pb.ResendOTPResponse{Success: false, JobId: jobID, ErrorMessage: "otp resend is not supported for job action: " + job.Action}, nil
 	}
-	if err := s.temporal.SignalWorkflow(ctx, workflowID, "", otpResendSignalName, OTPResendSignal{Kind: otpKind}); err != nil {
+	if err := s.setJobParams(ctx, jobID, map[string]string{registrationOTPResendRequestedAtParam: strconv.FormatInt(time.Now().Unix(), 10)}); err != nil {
 		return &pb.ResendOTPResponse{Success: false, JobId: jobID, ErrorMessage: err.Error()}, nil
 	}
-	log.Printf("[orchestrator] %s otp resend requested job=%s source=manual", otpKind, jobID)
+	log.Printf("[orchestrator] %s otp resend requested job=%s source=job-param", otpKind, jobID)
 	return &pb.ResendOTPResponse{Success: true, JobId: jobID}, nil
 }
 
 func (s *Server) signalManualOTP(ctx context.Context, jobID, otpKind string) error {
+	if otpKind != "registration" {
+		return nil
+	}
 	job, err := s.getJob(ctx, jobID)
 	if err != nil {
 		return err
 	}
-	workflowID, required := manualOTPWorkflowID(job)
-	if !required {
-		return nil
+	if job.Action == actionRegisterProtocol && job.LastStep == stepRegisterAccountProtocolOTPWait {
+		return s.ResumeN8NRegisterProtocolManualOTP(ctx, nil, jobID)
 	}
-	if workflowID == "" {
-		return fmt.Errorf("workflow id not found for job action %s", job.Action)
-	}
-	return s.temporal.SignalWorkflow(ctx, workflowID, "", manualOTPSignalName, ManualOTPSignal{Kind: otpKind})
-}
-
-func manualOTPWorkflowID(job *db.Job) (string, bool) {
-	if job == nil {
-		return "", false
-	}
-	return contracts.ManualOTPWorkflowID(job.Action, job.ID)
+	return nil
 }
 
 func (s *Server) resolveManualOTPJob(ctx context.Context, jobID, accountID string) (string, string, string, string, error) {
@@ -108,7 +98,7 @@ func (s *Server) resolveManualOTPJob(ctx context.Context, jobID, accountID strin
 
 	var job db.Job
 	err := s.db.WithContext(ctx).
-		Where("account_id = ? AND action IN ? AND status = ?", accountID, []string{actionRegister, actionActivate, actionAutopay, actionGoPayApp, actionGoPayPayment, actionGoPayQRISPaymentActivate, actionGoPayWAPayment, actionGoPayPaymentRebind, actionRegisterAndActivate, actionLoginSession}, statusRunning).
+		Where("account_id = ? AND action IN ? AND status = ?", accountID, []string{actionRegister, actionRegisterProtocol, actionLoginSession, actionLoginSessionProtocol, actionActivate, actionAutopay, actionGoPayApp, actionGoPayPayment, actionGoPayQRISPaymentActivate, actionGoPayWAPayment, actionGoPayPaymentRebind, actionRegisterAndActivate}, statusRunning).
 		Order("updated_at DESC").
 		First(&job).Error
 	if err != nil {
@@ -143,7 +133,7 @@ func manualOTPParamsForJobSnapshot(job *db.Job) (string, string, string, error) 
 		return "", "", "", fmt.Errorf("job is required")
 	}
 	switch job.Action {
-	case actionRegister, actionLoginSession:
+	case actionRegister, actionRegisterProtocol, actionLoginSession, actionLoginSessionProtocol:
 		return registrationOTPParam, registrationOTPSubmittedAtParam, "registration", nil
 	case actionActivate, actionAutopay, actionGoPayApp, actionGoPayPayment, actionGoPayQRISPaymentActivate, actionGoPayWAPayment, actionGoPayPaymentRebind:
 		return paymentOTPParam, paymentOTPSubmittedAtParam, "payment", nil

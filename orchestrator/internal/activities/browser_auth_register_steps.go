@@ -3,7 +3,7 @@ package activities
 import (
 	"time"
 
-	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
+	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
 )
 
 func (f *browserAuthFlow) openRegisterEntry(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig) error {
@@ -105,29 +105,6 @@ func (f *browserAuthFlow) openRegisterPasswordEntry(client browserautomationv1.B
 		return "", browserAuthStepError(f.mode, "password_entry", "password_input_missing", state)
 	}
 	return "", browserAuthStepError(f.mode, "password_entry", "password_input_unknown", state)
-}
-
-func (f *browserAuthFlow) loginExistingAccountFromRegister(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig) error {
-	f.setStatus(browserAuthStageCredentialEntry, "logging in existing account")
-	state, otpIssuedAfter, err := f.submitLoginPassword(client, cfg)
-	if err != nil {
-		return err
-	}
-	if state == "otp_required" {
-		f.markOTPRequestClickedAt(unixSecondsFromMillis(otpIssuedAfter))
-		otp, err := f.waitForOTP()
-		if err != nil {
-			return err
-		}
-		f.setStatus(browserAuthStageOTPSubmit, "submitting existing account login OTP")
-		if _, err := f.submitLoginOTP(client, cfg, otp); err != nil {
-			return err
-		}
-	}
-	if err := f.waitForBrowserAuthSessionCookie(client, cfg); err != nil {
-		return err
-	}
-	return f.captureResult(client, cfg, true)
 }
 
 func (f *browserAuthFlow) submitRegisterPassword(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig) (int64, error) {

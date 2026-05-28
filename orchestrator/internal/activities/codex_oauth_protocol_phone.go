@@ -37,7 +37,7 @@ func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input C
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		client, err := newCodexOAuthProtocolHTTPClient(cfg, state)
+		client, err := s.newAccountGptClient(ctx, input.GetAccountId(), cfg, state)
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err
@@ -76,7 +76,7 @@ func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input C
 	return output, err
 }
 
-func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, input CodexOAuthAddPhoneBrowserInput, cfg CodexOAuthConfig, data map[string]any) (bool, error) {
+func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, input CodexOAuthAddPhoneBrowserInput, cfg CodexOAuthConfig, data map[string]any) (bool, error) {
 	phone := input.GetPhone()
 	phoneNumber := strings.TrimSpace(phone.GetPhoneE164())
 	if phoneNumber == "" {

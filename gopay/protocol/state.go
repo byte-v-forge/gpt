@@ -1,6 +1,10 @@
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/byte-v-forge/common-lib/jsonx"
+)
 
 type State map[string]any
 
@@ -22,7 +26,7 @@ func (s State) JSON() (string, error) {
 	if s == nil {
 		s = State{}
 	}
-	raw, err := CompactJSON(map[string]any(s))
+	raw, err := jsonx.Compact(map[string]any(s))
 	if err != nil {
 		return "", err
 	}
@@ -33,7 +37,7 @@ func (s State) String(key string) string {
 	if s == nil {
 		return ""
 	}
-	return StringAt(map[string]any(s), key)
+	return jsonx.StringAt(map[string]any(s), key)
 }
 
 func (s State) With(key string, value any) State {

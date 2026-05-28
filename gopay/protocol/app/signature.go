@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/md5"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/byte-v-forge/common-lib/randx"
 )
 
 const emptyBodyMD5 = "d41d8cd98f00b204e9800998ecf8427e"
@@ -103,7 +105,7 @@ func (s Signer) signLegacy(method string, rawURL string, token string, device De
 		device.Platform,
 	}
 	msg := strings.Join(parts, ";")
-	mac := hmac.New(sha256.New, []byte(firstNonEmpty(s.LegacyHMACKey, defaultGoPayLegacyDisplayEncoderKey)))
+	mac := hmac.New(sha256.New, []byte(stringx.FirstNonEmpty(s.LegacyHMACKey, defaultGoPayLegacyDisplayEncoderKey)))
 	_, _ = mac.Write([]byte(msg))
 	return Signature{
 		XE1:     hex.EncodeToString(mac.Sum(nil)) + ":" + field1 + ":D:" + timestamp,
@@ -118,15 +120,15 @@ func (s Signer) signV2(method string, rawURL string, token string, device Device
 	}
 	cipherHex, t3First16Hex := goPayV2Cipher(nonce)
 	realMsg := s.goPayV2RealMsg(method, rawURL, token, device, xM1, timestamp, bodyMD5, cipherHex, t3First16Hex)
-	shaHex := hmacSHA256Hex([]byte(firstNonEmpty(s.DisplayEncoderKey, defaultGoPayDisplayEncoderKey)), realMsg)
+	shaHex := hmacSHA256Hex([]byte(stringx.FirstNonEmpty(s.DisplayEncoderKey, defaultGoPayDisplayEncoderKey)), realMsg)
 	return Signature{
-		XE1:     shaHex + ":" + cipherHex + ":" + firstNonEmpty(s.DisplayEncoderID, defaultGoPayDisplayEncoderID) + ":" + timestamp,
+		XE1:     shaHex + ":" + cipherHex + ":" + stringx.FirstNonEmpty(s.DisplayEncoderID, defaultGoPayDisplayEncoderID) + ":" + timestamp,
 		BodyMD5: bodyMD5,
 	}, nil
 }
 
 func (s Signer) goPayV2RealMsg(method string, rawURL string, token string, device DeviceFingerprint, xM1 string, timestamp string, bodyMD5 string, cipherHex string, t3First16Hex string) []byte {
-	key := []byte(firstNonEmpty(s.DisplayEncoderKey, defaultGoPayDisplayEncoderKey))
+	key := []byte(stringx.FirstNonEmpty(s.DisplayEncoderKey, defaultGoPayDisplayEncoderKey))
 	msg := goPayV2SyntheticRealMsg(method, rawURL, token, device, xM1, timestamp, bodyMD5, cipherHex, t3First16Hex, key)
 	if path := strings.TrimSpace(s.SignedMsgTemplatePath); path != "" {
 		if templ, err := os.ReadFile(path); err == nil && len(templ) > 0 {
@@ -147,13 +149,13 @@ func goPayV2SyntheticRealMsg(method string, rawURL string, token string, device 
 	msg.Write(hmacInnerPad(key))
 	msg.WriteString(jwt)
 	msg.WriteByte(':')
-	msg.WriteString(firstNonEmpty(device.PhoneModel, device.PhoneMake+", SM-G780F"))
+	msg.WriteString(stringx.FirstNonEmpty(device.PhoneModel, device.PhoneMake+", SM-G780F"))
 	msg.WriteByte(':')
-	msg.WriteString(firstNonEmpty(xM1, device.XM1()))
+	msg.WriteString(stringx.FirstNonEmpty(xM1, device.XM1()))
 	msg.WriteByte(':')
 	msg.WriteString(device.AppVersion)
 	msg.WriteByte(':')
-	msg.WriteString(firstNonEmpty(bodyMD5, emptyBodyMD5))
+	msg.WriteString(stringx.FirstNonEmpty(bodyMD5, emptyBodyMD5))
 	msg.WriteByte(':')
 	msg.WriteString(device.UniqueID)
 	msg.WriteByte(':')
@@ -252,33 +254,24 @@ func signaturePath(rawURL string) string {
 }
 
 func randomAlnum(size int) (string, error) {
-	const alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-	raw := make([]byte, size)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	out := make([]byte, size)
-	for idx, value := range raw {
-		out[idx] = alphabet[int(value)%len(alphabet)]
-	}
-	return string(out), nil
+	return randx.String("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", size)
 }
 
 func randomField1() (string, error) {
-	first := make([]byte, 32)
-	middleA := make([]byte, 2)
-	middleB := make([]byte, 4)
-	second := make([]byte, 16)
-	if _, err := rand.Read(first); err != nil {
+	first, err := randx.Bytes(32)
+	if err != nil {
 		return "", err
 	}
-	if _, err := rand.Read(middleA); err != nil {
+	middleA, err := randx.Bytes(2)
+	if err != nil {
 		return "", err
 	}
-	if _, err := rand.Read(middleB); err != nil {
+	middleB, err := randx.Bytes(4)
+	if err != nil {
 		return "", err
 	}
-	if _, err := rand.Read(second); err != nil {
+	second, err := randx.Bytes(16)
+	if err != nil {
 		return "", err
 	}
 	middle := "2000000040000000" +

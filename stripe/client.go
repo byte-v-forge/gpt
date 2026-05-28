@@ -2,14 +2,16 @@ package stripe
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
-	"github.com/byte-v-forge/gpt/stripe/internal/protocol"
+	"github.com/byte-v-forge/common-lib/fingerprinthttp"
+	"github.com/byte-v-forge/common-lib/httpclient"
+	"github.com/byte-v-forge/common-lib/httpjson"
 )
 
 const (
-	ChatGPTBaseURL  = "https://chatgpt.com"
 	StripeBaseURL   = "https://api.stripe.com"
 	MidtransBaseURL = "https://app.midtrans.com"
 	GatewayBaseURL  = "https://gwa.gopayapi.com"
@@ -18,71 +20,62 @@ const (
 )
 
 type ClientSet struct {
-	ChatGPT  *protocol.Client
-	Stripe   *protocol.Client
-	Midtrans *protocol.Client
-	GoPayGWA *protocol.Client
+	Stripe   *httpjson.Client
+	Midtrans *httpjson.Client
+	GoPayGWA *httpjson.Client
 }
 
 type ClientSetConfig struct {
 	HTTPClient *http.Client
 	ProxyURL   string
 	Timeout    time.Duration
-	Retry      protocol.RetryPolicy
-	Logger     protocol.Logger
+	Retry      httpjson.RetryPolicy
+	Logger     httpjson.Logger
 }
 
 func NewClientSet(cfg ClientSetConfig) (*ClientSet, error) {
 	httpClient := cfg.HTTPClient
 	if httpClient == nil {
 		var err error
-		httpClient, err = protocol.NewHTTPClient(cfg.Timeout, cfg.ProxyURL)
+		httpClient, err = httpclient.NewWithSchemes(cfg.Timeout, cfg.ProxyURL, httpclient.HTTPProxySchemes...)
 		if err != nil {
 			return nil, err
 		}
 	}
-	opts := []protocol.Option{
-		protocol.WithHTTPClient(httpClient),
-		protocol.WithRetry(cfg.Retry),
-		protocol.WithLogger(cfg.Logger),
+	opts := []httpjson.Option{
+		httpjson.WithHTTPClient(httpClient),
+		httpjson.WithRetry(cfg.Retry),
+		httpjson.WithLogger(cfg.Logger),
 	}
-	chatgpt, err := protocol.NewClient(ChatGPTBaseURL, opts...)
+	stripe, err := httpjson.NewClient(StripeBaseURL, opts...)
 	if err != nil {
 		return nil, err
 	}
-	stripe, err := protocol.NewClient(StripeBaseURL, opts...)
+	midtrans, err := httpjson.NewClient(MidtransBaseURL, opts...)
 	if err != nil {
 		return nil, err
 	}
-	midtrans, err := protocol.NewClient(MidtransBaseURL, opts...)
+	gwa, err := httpjson.NewClient(GatewayBaseURL, opts...)
 	if err != nil {
 		return nil, err
 	}
-	gwa, err := protocol.NewClient(GatewayBaseURL, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return &ClientSet{ChatGPT: chatgpt, Stripe: stripe, Midtrans: midtrans, GoPayGWA: gwa}, nil
+	return &ClientSet{Stripe: stripe, Midtrans: midtrans, GoPayGWA: gwa}, nil
 }
 
-func ProbeTierFromAccessToken(ctx context.Context, client *protocol.Client, accessToken string) (map[string]any, error) {
+func ProbeTierFromAccessToken(ctx context.Context, client *GptClient, accessToken string) (map[string]any, error) {
 	headers := http.Header{
 		"Authorization": []string{"Bearer " + accessToken},
 		"Accept":        []string{"application/json"},
-		"User-Agent":    []string{"codex-cli"},
 	}
 	if accountID := AccessTokenAccountID(accessToken); accountID != "" {
 		headers.Set("ChatGPT-Account-Id", accountID)
 	}
-	resp, err := client.Do(ctx, protocol.Request{
-		Method:       http.MethodGet,
-		Path:         "/backend-api/wham/usage",
-		Headers:      headers,
-		Operation:    "chatgpt-wham-usage",
-		ExpectStatus: []int{http.StatusOK},
-	})
+	resp, err := client.Request(ctx, http.MethodGet, ChatGPTBaseURL+"/backend-api/wham/usage", fingerprinthttp.RequestOptions{Headers: headers})
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any(resp.Payload), nil
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("chatgpt wham usage returned status %d: %s", resp.StatusCode, resp.Excerpt(300))
+	}
+	return resp.JSON, nil
 }

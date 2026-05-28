@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
 	"github.com/google/uuid"
 	"orchestrator/pb"
 )
@@ -20,7 +21,7 @@ type browserAuthFlow struct {
 	email      string
 	password   string
 	fullName   string
-	birthday   string
+	age        string
 	sessionID  string
 	stage      string
 	message    string
@@ -28,6 +29,7 @@ type browserAuthFlow struct {
 	updatedAt  int64
 	otpAction  int64
 	otpWait    int64
+	otpKind    string
 	taskSeq    int64
 	otpNeed    bool
 	done       bool
@@ -35,11 +37,8 @@ type browserAuthFlow struct {
 	errMessage string
 	result     *pb.RegisterResponse
 
-	ctx      context.Context
-	cancel   context.CancelFunc
-	otpCh    chan string
-	doneCh   chan struct{}
-	doneOnce sync.Once
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 type browserAuthSession struct {
@@ -48,33 +47,37 @@ type browserAuthSession struct {
 }
 
 func newBrowserAuthFlow(mode, jobID string, account *pb.Account) *browserAuthFlow {
+	return newBrowserAuthFlowWithContext(context.Background(), mode, jobID, account)
+}
+
+func newBrowserAuthFlowWithContext(ctx context.Context, mode, jobID string, account *pb.Account) *browserAuthFlow {
 	now := time.Now().Unix()
-	ctx, cancel := context.WithCancel(context.Background())
-	fullName := strings.TrimSpace(strings.Join([]string{account.GetFirstName(), account.GetLastName()}, " "))
-	if fullName == "" {
-		fullName = browserAuthDefaultRegistrationName
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	birthday := strings.TrimSpace(account.GetDob())
-	if birthday == "" {
-		birthday = browserAuthDefaultBirthday
-	}
+	flowCtx, cancel := context.WithCancel(ctx)
 	return &browserAuthFlow{
 		flowID:    uuid.NewString(),
 		mode:      strings.TrimSpace(mode),
 		jobID:     strings.TrimSpace(jobID),
 		email:     strings.TrimSpace(account.GetEmail()),
 		password:  account.GetPassword(),
-		fullName:  fullName,
-		birthday:  birthday,
+		fullName:  browserAuthRandomDisplayName(),
+		age:       browserAuthRandomAge(),
 		stage:     browserAuthStageQueued,
 		message:   "browser auth queued",
 		startedAt: now,
 		updatedAt: now,
-		ctx:       ctx,
+		ctx:       flowCtx,
 		cancel:    cancel,
-		otpCh:     make(chan string, 1),
-		doneCh:    make(chan struct{}),
 	}
+}
+
+func newBrowserAuthSessionFlow(ctx context.Context, mode, jobID string, account *pb.Account, sessionID string) *browserAuthFlow {
+	flow := newBrowserAuthFlowWithContext(ctx, mode, jobID, account)
+	flow.flowID = strings.TrimSpace(sessionID)
+	flow.sessionID = strings.TrimSpace(sessionID)
+	return flow
 }
 
 func (f *browserAuthFlow) setTaskScope(scope string) {
@@ -89,60 +92,75 @@ func (f *browserAuthFlow) getTaskScope() string {
 	return f.taskScope
 }
 
-func (s *Server) browserAuthStart(ctx context.Context, mode, jobID string, account *pb.Account) (*pb.StartRegisterResponse, error) {
+func (s *Server) browserAuthStart(ctx context.Context, mode, jobID string, account *pb.Account) (*pb.StartRegisterResponse, string, error) {
+	if s.browserAutomationClient == nil {
+		return nil, "", fmt.Errorf("browser automation client is not configured")
+	}
+	if account == nil {
+		return nil, "", fmt.Errorf("account is required")
+	}
+	flow := newBrowserAuthFlowWithContext(ctx, mode, jobID, account)
+	cfg, err := s.browserAuthConfigForAccount(ctx, account)
+	if err != nil {
+		return nil, "", err
+	}
+	if err := flow.runUntilCheckpoint(s.browserAutomationClient, cfg); err != nil {
+		flow.stopSession(s.browserAutomationClient)
+		return flow.startResponse(), flow.getOTPKind(), err
+	}
+	if flow.isDone() {
+		flow.stopSession(s.browserAutomationClient)
+	}
+	return flow.startResponse(), flow.getOTPKind(), nil
+}
+
+func (s *Server) browserAuthComplete(ctx context.Context, mode, jobID string, account *pb.Account, flowID, otp, otpKind string) (*pb.RegisterResponse, error) {
 	if s.browserAutomationClient == nil {
 		return nil, fmt.Errorf("browser automation client is not configured")
 	}
 	if account == nil {
 		return nil, fmt.Errorf("account is required")
 	}
-	flow := newBrowserAuthFlow(mode, jobID, account)
-	s.browserAuthFlows.add(flow)
-	go flow.run(s.browserAutomationClient, s.browserAuthConfig)
-	return flow.startResponse(), nil
+	flow := newBrowserAuthSessionFlow(ctx, mode, jobID, account, flowID)
+	flow.setTaskScope("complete")
+	defer flow.stopSession(s.browserAutomationClient)
+	if err := flow.completeFromCheckpoint(s.browserAutomationClient, s.browserAuthConfig, otp, otpKind); err != nil {
+		flow.fail(err)
+		return flow.registerResponse(), err
+	}
+	return flow.registerResponse(), nil
 }
 
-func (s *Server) browserAuthComplete(ctx context.Context, mode, flowID, otp string) (*pb.RegisterResponse, error) {
-	flow := s.browserAuthFlows.get(flowID)
-	if flow == nil {
-		return &pb.RegisterResponse{Success: false, ErrorMessage: fmt.Sprintf("browser %s flow not found", mode)}, nil
-	}
-	resp, err := flow.complete(ctx, otp)
-	if err == nil {
-		s.browserAuthFlows.remove(flowID)
-	}
-	return resp, err
-}
-
-func (s *Server) browserAuthResendOTP(ctx context.Context, mode, flowID string) (*pb.BrowserAuthResendOTPOutput, error) {
+func (s *Server) browserAuthResendOTP(ctx context.Context, mode, jobID string, account *pb.Account, flowID, otpKind string) (*pb.BrowserAuthResendOTPOutput, error) {
 	if s.browserAutomationClient == nil {
 		return nil, fmt.Errorf("browser automation client is not configured")
 	}
-	flow := s.browserAuthFlows.get(flowID)
-	if flow == nil {
+	if account == nil {
+		return nil, fmt.Errorf("account is required")
+	}
+	if otpKind == browserAuthOTPKindLoginEmail {
 		return &pb.BrowserAuthResendOTPOutput{
-			FlowId:       flowID,
-			Success:      false,
-			ErrorMessage: fmt.Sprintf("browser %s flow not found", mode),
+			BrowserSessionId: flowID,
+			Email:            account.GetEmail(),
+			Success:          false,
+			ErrorMessage:     fmt.Sprintf("browser %s login email OTP resend is not supported", mode),
 		}, nil
 	}
+	flow := newBrowserAuthSessionFlow(ctx, mode, jobID, account, flowID)
+	flow.setTaskScope(fmt.Sprintf("resend-%d", time.Now().UnixMilli()))
 	return flow.resendEmailOTP(s.browserAutomationClient, s.browserAuthConfig)
 }
 
-func (s *Server) browserAuthStatus(ctx context.Context, flowID string) (*pb.BrowserFlowStatusResponse, error) {
-	flow := s.browserAuthFlows.get(flowID)
-	if flow == nil {
-		return &pb.BrowserFlowStatusResponse{Found: false, FlowId: flowID, ErrorMessage: "browser flow not found"}, nil
-	}
-	return flow.statusResponse(), nil
-}
-
 func (s *Server) browserAuthCancel(ctx context.Context, mode, flowID string) (*pb.CancelRegisterResponse, error) {
-	flow := s.browserAuthFlows.get(flowID)
-	if flow == nil {
+	if s.browserAutomationClient == nil || strings.TrimSpace(flowID) == "" {
 		return &pb.CancelRegisterResponse{Success: true}, nil
 	}
-	flow.cancelFlow(fmt.Sprintf("browser %s cancelled", mode))
-	s.browserAuthFlows.remove(flowID)
+	_, err := s.browserAutomationClient.StopBrowserSession(ctx, &browserautomationv1.StopBrowserSessionRequest{
+		SessionId: strings.TrimSpace(flowID),
+		Reason:    fmt.Sprintf("browser %s cancelled", mode),
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &pb.CancelRegisterResponse{Success: true}, nil
 }

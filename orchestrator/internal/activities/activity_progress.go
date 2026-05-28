@@ -3,8 +3,6 @@ package activities
 import (
 	"context"
 	"time"
-
-	"go.temporal.io/sdk/activity"
 )
 
 const activityHeartbeatInterval = 5 * time.Second
@@ -18,13 +16,6 @@ type ActivityProgress struct {
 }
 
 func recordActivityProgress(ctx context.Context, jobID, step, message string, fields map[string]any) {
-	activity.RecordHeartbeat(ctx, ActivityProgress{
-		JobID:   jobID,
-		Step:    step,
-		Message: message,
-		Fields:  fields,
-		AtUnix:  time.Now().Unix(),
-	})
 }
 
 func recordActivityProgressEvery(ctx context.Context, last *time.Time, jobID, step, message string, fields map[string]any) {

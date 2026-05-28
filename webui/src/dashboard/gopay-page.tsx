@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { ToastMessage, api, useToastMessage } from '@/dashboard/module-kit';
+import { ToastMessage, api, useToastMessage } from '@byte-v-forge/common-ui';
 import { useGoPayData } from './gopay-data';
 import { GoPayLabView } from './view';
 
@@ -19,7 +19,7 @@ export function GoPayLabPage() {
   }
 
   async function cancelWorkflow(jobId: string) {
-    const resp = await api<{ success?: boolean; error_message?: string }>(`/api/jobs/${jobId}/cancel`, { method: 'POST', body: JSON.stringify({ reason: 'manual workflow cancel' }) });
+    const resp = await api<{ success?: boolean; error_message?: string }>(`/api/gpt/jobs/${jobId}/cancel`, { method: 'POST', body: JSON.stringify({ reason: 'manual workflow cancel' }) });
     toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || '流程已取消');
     await data.refreshJobs();
   }

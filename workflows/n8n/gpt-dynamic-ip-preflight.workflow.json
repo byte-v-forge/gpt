@@ -1,0 +1,854 @@
+{
+  "id": "gpt-dynamic-ip-preflight",
+  "name": "Byte V Forge / GPT Dynamic IP Preflight",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "fd8bcb7b-4aba-5716-a003-ce9cb1121e4d",
+      "name": "When Executed by Register Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/register-protocol/proxy-settings' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $json.job_id, account_id: $json.account_id, n8n_execution_id: $json.n8n_execution_id } }}",
+        "options": {}
+      },
+      "id": "a3f7c9e4-a163-5e38-aa99-178fc22ccd02",
+      "name": "Get GPT Proxy Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        260,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const settings = $input.first().json;\nconst input = $('When Executed by Register Workflow').first().json;\nconst maxAttempts = Math.max(1, Math.min(100, Number(settings.max_proxy_attempts || 10)));\nconst lineAttemptLimit = Math.ceil(maxAttempts / 2);\nconst items = [];\nfor (let attempt = 1; attempt <= maxAttempts; attempt++) {\n  const preferLineProxy = attempt <= lineAttemptLimit;\n  const gatewayAttempt = preferLineProxy ? attempt : attempt - lineAttemptLimit;\n  const request = JSON.parse(JSON.stringify(settings.lease_request || {}));\n  request.policy = request.policy || {};\n  request.policy.labels = {\n    ...(request.policy.labels || {}),\n    attempt: String(gatewayAttempt),\n    workflow_attempt: String(attempt),\n    max_proxy_attempts: String(maxAttempts),\n  };\n  request.chain_policy = {\n    ...(request.chain_policy || {}),\n    country_code: settings.country_code || request?.policy?.labels?.country_code || request?.policy?.region || '',\n    region: settings.region || request?.policy?.labels?.region || request?.policy?.region || '',\n    purpose: settings.purpose || request.purpose || 'REGISTER_PROTOCOL',\n    max_attempts: maxAttempts,\n    allow_direct_dynamic_gateway: true,\n    prefer_line_proxy: preferLineProxy,\n  };\n  items.push({ json: {\n    ...input,\n    settings,\n    attempt,\n    gateway_attempt: gatewayAttempt,\n    prefer_line_proxy: preferLineProxy,\n    max_proxy_attempts: maxAttempts,\n    preflight_enabled: !!settings.preflight_enabled,\n    cf_canary_enabled: !!settings.cf_canary_enabled,\n    require_residential: !!settings.require_residential,\n    min_ip_purity_score: Number(settings.min_ip_purity_score || 0),\n    lease_request: request,\n  }});\n}\nreturn items;\n"
+      },
+      "id": "3ea83a76-576a-50e7-895e-cc3b2d6c7adb",
+      "name": "Build Proxy Attempt Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "d67bcb1f-1fd3-59fd-86d7-debabce6714d",
+      "name": "Loop Proxy Attempts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/acquire' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.lease_request }}",
+        "options": {}
+      },
+      "id": "2a98c427-c2d1-5939-bb86-a073d1e19f5e",
+      "name": "Acquire Dynamic Lease",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1080,
+        -40
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const attempt = $('Loop Proxy Attempts').first().json;\nconst leaseResponse = $input.first().json;\nfunction endpoint(leaseResponse) {\n  const session = leaseResponse?.lease?.session || {};\n  return leaseResponse?.egress || leaseResponse?.lease?.egress || session.egress || {};\n}\nfunction endpointUrl(egress) {\n  if (!egress?.host || !egress?.port) return '';\n  const protocol = egress.protocol === 'PROXY_PROTOCOL_SOCKS5' ? 'socks5' : 'http';\n  return `${protocol}://${egress.host}:${egress.port}`;\n}\nconst session = leaseResponse?.lease?.session || {};\nconst egress = endpoint(leaseResponse);\nreturn [{ json: {\n  ...attempt,\n  lease_response: leaseResponse,\n  proxy_url: endpointUrl(egress),\n  check_request: {\n    pool_id: 'default',\n    provider_id: session.provider_id || egress.provider_id || '',\n    listener_id: egress.id || '',\n  },\n}}];\n"
+      },
+      "id": "6c6408f1-1dd0-5584-b48a-51db10257f7d",
+      "name": "Build Proxy Check Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/proxy_exit_geo' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.check_request }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "8665d0ef-7937-5f0d-bdeb-133a5ba89fbf",
+      "name": "Get Proxy Exit Geo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1640,
+        -40
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Build Proxy Check Request').first().json;\nconst response = $input.first().json;\nconst body = httpBody(response);\nconst geo = body?.proxy_exit_geo || {};\nconst ok = httpOK(response) && !!geo.ip;\nconst errorMessage = ok ? '' : (body?.message || body?.error || response.statusMessage || 'proxy exit geo failed');\nconst data = build(base, { proxy_exit_geo: geo }, {}, {}, false, errorMessage);\nreturn [{ json: { ...base, geo_response: { proxy_exit_geo: geo }, success: ok, error_message: errorMessage, data: data.data } }];\nfunction httpBody(response) { return response && Object.prototype.hasOwnProperty.call(response, 'body') ? response.body : response; }\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\n\nfunction build(base, geoResponse, fraudResponse, edgeResponse, accepted, errorMessage) {\n  const lease = base.lease_response?.lease || {};\n  const session = lease.session || {};\n  const egress = base.lease_response?.egress || lease.egress || session.egress || {};\n  const exit = geoResponse?.proxy_exit_geo || {};\n  const fraud = fraudResponse?.check || {};\n  const edge = edgeResponse?.check || {};\n  const riskScore = Number(fraud.risk_score || 0);\n  return {\n    job_id: base.job_id,\n    account_id: base.account_id,\n    n8n_execution_id: base.n8n_execution_id,\n    success: accepted,\n    proxy_url: base.proxy_url,\n    error_message: errorMessage || '',\n    data: {\n      purpose: base.settings?.purpose || base.lease_request?.purpose || 'REGISTER_PROTOCOL',\n      attempt: base.attempt,\n      max_proxy_attempts: base.max_proxy_attempts,\n      accepted,\n      error_message: errorMessage || '',\n      preflight_enabled: !!base.preflight_enabled,\n      cf_canary_enabled: !!base.cf_canary_enabled,\n      proxy_session_hash: stableHash(session.session_id),\n      proxy_protocol: egress.protocol || '',\n      proxy_host: egress.host || '',\n      proxy_port: egress.port || 0,\n      exit_ip: exit.ip || edge.ip || fraud.ip || '',\n      country_code: exit.country_code || fraud.country_code || base.settings?.country_code || '',\n      region: exit.region || fraud.region || base.settings?.region || '',\n      city: exit.city || fraud.city || '',\n      network_kind: fraud.network_kind || '',\n      anonymizer_kind: fraud.anonymizer_kind || '',\n      fraud_risk_level: fraud.risk_level || '',\n      fraud_risk_score: riskScore,\n      ip_purity_score: fraud.risk_level ? Math.max(0, Math.min(100, 100 - riskScore)) : 0,\n      fraud_risk_signals: fraud.risk_signals || [],\n      edge_risk_level: edge.risk_level || '',\n      edge_risk_score: Number(edge.risk_score || 0),\n      edge_risk_signals: edge.risk_signals || [],\n      proxy_runtime_lease: {\n        lease_id: lease.lease_id || '',\n        provider_account_id: lease.provider_account_id || '',\n        provider_id: session.provider_id || '',\n        expires_at: lease.expires_at || session.expires_at || '',\n      },\n      chain_plan: base.lease_response?.chain_plan || lease.chain_plan || {},\n      chain: chainSummary(base.lease_response?.chain_plan || lease.chain_plan || {}),\n    },\n  };\n}\nfunction stableHash(value) {\n  let hash = 2166136261;\n  for (const ch of String(value || '')) { hash ^= ch.charCodeAt(0); hash = Math.imul(hash, 16777619); }\n  return (hash >>> 0).toString(16).padStart(8, '0');\n}\nfunction chainSummary(plan) {\n  return {\n    chain_id: plan.chain_id || '',\n    line_source_id: plan.line?.source_id || '',\n    line_node_id: plan.line?.node_id || '',\n    line_display_name: plan.line?.display_name || '',\n    dynamic_provider_account_id: plan.dynamic_gateway?.provider_account_id || '',\n    dynamic_provider_id: plan.dynamic_gateway?.provider_id || '',\n    dynamic_gateway_id: plan.dynamic_gateway?.gateway_id || '',\n    dynamic_gateway_name: plan.dynamic_gateway?.display_name || '',\n  };\n}\n"
+      },
+      "id": "81233b87-aff3-5c6e-bc3c-12a4bc3971ce",
+      "name": "Evaluate Proxy Exit Geo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1920,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4c734bfd",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "08c1d8ad-a093-5e33-a7a7-282261783ac6",
+      "name": "Proxy Exit Geo OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2200,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a0a7180",
+              "leftValue": "={{ $json.preflight_enabled }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "1ebd958b-e4f9-52ca-8832-808635b6b8e6",
+      "name": "Preflight Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2480,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Build Proxy Check Request').first().json;\nconst geo = $('Evaluate Proxy Exit Geo').first().json.geo_response || {};\nconst out = build(base, geo, {}, {}, true, '');\nout.data.preflight_enabled = false;\nout.data.cf_canary_enabled = false;\nreturn [{ json: out }];\n\nfunction build(base, geoResponse, fraudResponse, edgeResponse, accepted, errorMessage) {\n  const lease = base.lease_response?.lease || {};\n  const session = lease.session || {};\n  const egress = base.lease_response?.egress || lease.egress || session.egress || {};\n  const exit = geoResponse?.proxy_exit_geo || {};\n  const fraud = fraudResponse?.check || {};\n  const edge = edgeResponse?.check || {};\n  const riskScore = Number(fraud.risk_score || 0);\n  return {\n    job_id: base.job_id,\n    account_id: base.account_id,\n    n8n_execution_id: base.n8n_execution_id,\n    success: accepted,\n    proxy_url: base.proxy_url,\n    error_message: errorMessage || '',\n    data: {\n      purpose: base.settings?.purpose || base.lease_request?.purpose || 'REGISTER_PROTOCOL',\n      attempt: base.attempt,\n      max_proxy_attempts: base.max_proxy_attempts,\n      accepted,\n      error_message: errorMessage || '',\n      preflight_enabled: !!base.preflight_enabled,\n      cf_canary_enabled: !!base.cf_canary_enabled,\n      proxy_session_hash: stableHash(session.session_id),\n      proxy_protocol: egress.protocol || '',\n      proxy_host: egress.host || '',\n      proxy_port: egress.port || 0,\n      exit_ip: exit.ip || edge.ip || fraud.ip || '',\n      country_code: exit.country_code || fraud.country_code || base.settings?.country_code || '',\n      region: exit.region || fraud.region || base.settings?.region || '',\n      city: exit.city || fraud.city || '',\n      network_kind: fraud.network_kind || '',\n      anonymizer_kind: fraud.anonymizer_kind || '',\n      fraud_risk_level: fraud.risk_level || '',\n      fraud_risk_score: riskScore,\n      ip_purity_score: fraud.risk_level ? Math.max(0, Math.min(100, 100 - riskScore)) : 0,\n      fraud_risk_signals: fraud.risk_signals || [],\n      edge_risk_level: edge.risk_level || '',\n      edge_risk_score: Number(edge.risk_score || 0),\n      edge_risk_signals: edge.risk_signals || [],\n      proxy_runtime_lease: {\n        lease_id: lease.lease_id || '',\n        provider_account_id: lease.provider_account_id || '',\n        provider_id: session.provider_id || '',\n        expires_at: lease.expires_at || session.expires_at || '',\n      },\n      chain_plan: base.lease_response?.chain_plan || lease.chain_plan || {},\n      chain: chainSummary(base.lease_response?.chain_plan || lease.chain_plan || {}),\n    },\n  };\n}\nfunction stableHash(value) {\n  let hash = 2166136261;\n  for (const ch of String(value || '')) { hash ^= ch.charCodeAt(0); hash = Math.imul(hash, 16777619); }\n  return (hash >>> 0).toString(16).padStart(8, '0');\n}\nfunction chainSummary(plan) {\n  return {\n    chain_id: plan.chain_id || '',\n    line_source_id: plan.line?.source_id || '',\n    line_node_id: plan.line?.node_id || '',\n    line_display_name: plan.line?.display_name || '',\n    dynamic_provider_account_id: plan.dynamic_gateway?.provider_account_id || '',\n    dynamic_provider_id: plan.dynamic_gateway?.provider_id || '',\n    dynamic_gateway_id: plan.dynamic_gateway?.gateway_id || '',\n    dynamic_gateway_name: plan.dynamic_gateway?.display_name || '',\n  };\n}\n"
+      },
+      "id": "10e8f117-c03f-515a-bb02-3bdc27439693",
+      "name": "Build No Preflight Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2760,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/ip_fraud_check' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Build Proxy Check Request').first().json.check_request }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "81ccc85f-572a-5aad-af8f-ef4ae98be805",
+      "name": "IP Fraud Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2760,
+        -80
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = $('Build Proxy Check Request').first().json;\nconst geo = $('Evaluate Proxy Exit Geo').first().json.geo_response || {};\nconst response = $input.first().json;\nconst fraudResponse = httpBody(response);\nconst fraud = fraudResponse?.check || {};\nconst transportError = httpOK(response) ? '' : (fraudResponse?.message || fraudResponse?.error || response.statusMessage || 'IP fraud check failed');\nconst errorMessage = transportError || fraudRejectReason(base, fraud);\nconst out = build(base, geo, fraudResponse, {}, !errorMessage, errorMessage);\nreturn [{ json: { ...out, check_request: base.check_request, cf_canary_enabled: base.cf_canary_enabled, fraud_accepted: !errorMessage } }];\nfunction httpBody(response) { return response && Object.prototype.hasOwnProperty.call(response, 'body') ? response.body : response; }\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\nfunction fraudRejectReason(base, fraud) {\n  const level = fraud.risk_level || '';\n  if (['PROXY_IP_FRAUD_RISK_LEVEL_UNSUPPORTED', 'PROXY_IP_FRAUD_RISK_LEVEL_UNKNOWN', 'PROXY_IP_FRAUD_RISK_LEVEL_UNSPECIFIED', ''].includes(level)) return 'IP fraud check unavailable';\n  if (['PROXY_IP_FRAUD_RISK_LEVEL_HIGH', 'PROXY_IP_FRAUD_RISK_LEVEL_CRITICAL'].includes(level)) return `IP fraud risk rejected: ${level}`;\n  const riskScore = Number(fraud.risk_score || 0);\n  const purityScore = Math.max(0, Math.min(100, 100 - riskScore));\n  if (Number(base.min_ip_purity_score || 0) > 0 && purityScore < Number(base.min_ip_purity_score)) return `IP purity rejected: ${purityScore}`;\n  if (base.require_residential && fraud.network_kind && !['PROXY_IP_NETWORK_KIND_RESIDENTIAL', 'PROXY_IP_NETWORK_KIND_ISP'].includes(fraud.network_kind)) return `proxy network is not residential-compatible: ${fraud.network_kind}`;\n  if (['PROXY_IP_ANONYMIZER_KIND_PROXY', 'PROXY_IP_ANONYMIZER_KIND_VPN', 'PROXY_IP_ANONYMIZER_KIND_TOR', 'PROXY_IP_ANONYMIZER_KIND_CRAWLER'].includes(fraud.anonymizer_kind || '')) return `proxy anonymizer rejected: ${fraud.anonymizer_kind}`;\n  return '';\n}\n\nfunction build(base, geoResponse, fraudResponse, edgeResponse, accepted, errorMessage) {\n  const lease = base.lease_response?.lease || {};\n  const session = lease.session || {};\n  const egress = base.lease_response?.egress || lease.egress || session.egress || {};\n  const exit = geoResponse?.proxy_exit_geo || {};\n  const fraud = fraudResponse?.check || {};\n  const edge = edgeResponse?.check || {};\n  const riskScore = Number(fraud.risk_score || 0);\n  return {\n    job_id: base.job_id,\n    account_id: base.account_id,\n    n8n_execution_id: base.n8n_execution_id,\n    success: accepted,\n    proxy_url: base.proxy_url,\n    error_message: errorMessage || '',\n    data: {\n      purpose: base.settings?.purpose || base.lease_request?.purpose || 'REGISTER_PROTOCOL',\n      attempt: base.attempt,\n      max_proxy_attempts: base.max_proxy_attempts,\n      accepted,\n      error_message: errorMessage || '',\n      preflight_enabled: !!base.preflight_enabled,\n      cf_canary_enabled: !!base.cf_canary_enabled,\n      proxy_session_hash: stableHash(session.session_id),\n      proxy_protocol: egress.protocol || '',\n      proxy_host: egress.host || '',\n      proxy_port: egress.port || 0,\n      exit_ip: exit.ip || edge.ip || fraud.ip || '',\n      country_code: exit.country_code || fraud.country_code || base.settings?.country_code || '',\n      region: exit.region || fraud.region || base.settings?.region || '',\n      city: exit.city || fraud.city || '',\n      network_kind: fraud.network_kind || '',\n      anonymizer_kind: fraud.anonymizer_kind || '',\n      fraud_risk_level: fraud.risk_level || '',\n      fraud_risk_score: riskScore,\n      ip_purity_score: fraud.risk_level ? Math.max(0, Math.min(100, 100 - riskScore)) : 0,\n      fraud_risk_signals: fraud.risk_signals || [],\n      edge_risk_level: edge.risk_level || '',\n      edge_risk_score: Number(edge.risk_score || 0),\n      edge_risk_signals: edge.risk_signals || [],\n      proxy_runtime_lease: {\n        lease_id: lease.lease_id || '',\n        provider_account_id: lease.provider_account_id || '',\n        provider_id: session.provider_id || '',\n        expires_at: lease.expires_at || session.expires_at || '',\n      },\n      chain_plan: base.lease_response?.chain_plan || lease.chain_plan || {},\n      chain: chainSummary(base.lease_response?.chain_plan || lease.chain_plan || {}),\n    },\n  };\n}\nfunction stableHash(value) {\n  let hash = 2166136261;\n  for (const ch of String(value || '')) { hash ^= ch.charCodeAt(0); hash = Math.imul(hash, 16777619); }\n  return (hash >>> 0).toString(16).padStart(8, '0');\n}\nfunction chainSummary(plan) {\n  return {\n    chain_id: plan.chain_id || '',\n    line_source_id: plan.line?.source_id || '',\n    line_node_id: plan.line?.node_id || '',\n    line_display_name: plan.line?.display_name || '',\n    dynamic_provider_account_id: plan.dynamic_gateway?.provider_account_id || '',\n    dynamic_provider_id: plan.dynamic_gateway?.provider_id || '',\n    dynamic_gateway_id: plan.dynamic_gateway?.gateway_id || '',\n    dynamic_gateway_name: plan.dynamic_gateway?.display_name || '',\n  };\n}\n"
+      },
+      "id": "84683a17-eefc-50b9-aba2-4a2d7c5c5e0f",
+      "name": "Evaluate IP Fraud",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3040,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "48c87912",
+              "leftValue": "={{ $json.fraud_accepted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c785bd04-67ca-5e03-90a3-6deebdd06770",
+      "name": "IP Fraud Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3320,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "90c56b1c",
+              "leftValue": "={{ $json.cf_canary_enabled }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d7c8e6f5-90b0-58a7-a98d-40d1347a8375",
+      "name": "CF Canary Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3600,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const previous = $input.first().json;\nconst data = { ...(previous.data || {}) };\ndata.cf_canary_enabled = false;\ndata.edge_risk_level = 'PROXY_EDGE_ACCESS_RISK_LEVEL_LOW';\ndata.edge_risk_score = 0;\ndata.edge_risk_signals = [];\nreturn [{ json: { ...previous, success: true, error_message: '', data } }];\n"
+      },
+      "id": "288abbf3-8146-5fb2-8350-9e2e3aa1ff91",
+      "name": "Skip CF Canary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3880,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/check_cf_access_risk' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { ...$json.check_request, expected_country_code: $json.settings?.country_code || $json.data?.country_code || '' } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "78972fec-dcf0-5459-a464-a20f091abc4a",
+      "name": "CF Canary Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3880,
+        -160
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 3000
+    },
+    {
+      "parameters": {
+        "jsCode": "const previous = $('Evaluate IP Fraud').first().json;\nconst response = $input.first().json;\nconst edgeResponse = httpBody(response);\nconst edge = edgeResponse?.check || {};\nconst transportError = httpOK(response) ? '' : (edgeResponse?.message || edgeResponse?.error || response.statusMessage || 'CF canary check failed');\nconst errorMessage = transportError || edgeRejectReason(edge);\nconst data = { ...(previous.data || {}) };\ndata.cf_canary_enabled = true;\ndata.edge_risk_level = edge.risk_level || '';\ndata.edge_risk_score = Number(edge.risk_score || 0);\ndata.edge_risk_signals = edge.risk_signals || [];\ndata.error_message = errorMessage || '';\nif (edge.ip_fraud_check) {\n  const fraud = edge.ip_fraud_check;\n  data.network_kind = fraud.network_kind || data.network_kind || '';\n  data.anonymizer_kind = fraud.anonymizer_kind || data.anonymizer_kind || '';\n  data.fraud_risk_level = fraud.risk_level || data.fraud_risk_level || '';\n  data.fraud_risk_score = Number(fraud.risk_score || data.fraud_risk_score || 0);\n  data.ip_purity_score = Math.max(0, Math.min(100, 100 - data.fraud_risk_score));\n  data.fraud_risk_signals = fraud.risk_signals || data.fraud_risk_signals || [];\n}\nreturn [{ json: { ...previous, success: !errorMessage, error_message: errorMessage || '', data } }];\nfunction httpBody(response) { return response && Object.prototype.hasOwnProperty.call(response, 'body') ? response.body : response; }\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\nfunction edgeRejectReason(edge) {\n  const level = edge.risk_level || '';\n  if (level === 'PROXY_EDGE_ACCESS_RISK_LEVEL_LOW') return '';\n  if (!level) return 'CF canary unavailable';\n  return `CF canary rejected: ${level}`;\n}\n"
+      },
+      "id": "0d09fbbb-6032-55c5-bf10-18d6b977b868",
+      "name": "Evaluate CF Canary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4160,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "50d9670c",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3f076023-c06a-59be-a29c-68e45d6031c0",
+      "name": "CF Canary Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4440,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Evaluate Proxy Exit Geo').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "dc2197a4-57d8-5fcc-932f-3e0eb32a406e",
+      "name": "Release Lease After Geo Reject",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2480,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Evaluate Proxy Exit Geo').first().json }];\n"
+      },
+      "id": "1168a265-8d84-5fdd-be16-0bece2363ed2",
+      "name": "Continue After Geo Reject",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2760,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Evaluate IP Fraud').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "6ef095ba-37f2-510e-bd6e-f3029c8f9afd",
+      "name": "Release Lease After IP Fraud Reject",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3600,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Evaluate IP Fraud').first().json }];\n"
+      },
+      "id": "414b84ed-28d1-5273-bd38-a0ad9a952e6e",
+      "name": "Continue After IP Fraud Reject",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3880,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Evaluate CF Canary').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "f8d878ca-aae3-5c06-b319-0d3f072fa034",
+      "name": "Release Lease After CF Reject",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4720,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: $('Evaluate CF Canary').first().json }];\n"
+      },
+      "id": "b2f0bcf4-f544-5d6a-9f67-8a1e66102838",
+      "name": "Continue After CF Reject",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5000,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const settings = $('Get GPT Proxy Settings').first().json;\nconst attempts = Math.max(1, Math.min(100, Number(settings.max_proxy_attempts || 10)));\nconst processed = $input.all().map((item) => item.json || {});\nconst last = [...processed].reverse().find((item) => item.error_message || item.data?.error_message) || {};\nconst errorMessage = last.error_message || last.data?.error_message || `no acceptable proxy in ${attempts} attempts`;\nreturn [{ json: {\n  job_id: settings.job_id,\n  account_id: settings.account_id,\n  n8n_execution_id: settings.n8n_execution_id,\n  success: false,\n  error_message: errorMessage,\n  data: last.data || {\n    purpose: settings.purpose || 'REGISTER_PROTOCOL',\n    accepted: false,\n    max_proxy_attempts: attempts,\n    error_message: errorMessage,\n    reason: 'proxy_preflight_attempts_exhausted',\n  },\n}}];\n"
+      },
+      "id": "c49148b8-236a-51f4-b921-d68d4b5db619",
+      "name": "Build Final Proxy Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "When Executed by Register Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get GPT Proxy Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get GPT Proxy Settings": {
+      "main": [
+        [
+          {
+            "node": "Build Proxy Attempt Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Proxy Attempt Items": {
+      "main": [
+        [
+          {
+            "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Proxy Attempts": {
+      "main": [
+        [
+          {
+            "node": "Build Final Proxy Failure",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Acquire Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acquire Dynamic Lease": {
+      "main": [
+        [
+          {
+            "node": "Build Proxy Check Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Proxy Check Request": {
+      "main": [
+        [
+          {
+            "node": "Get Proxy Exit Geo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Proxy Exit Geo": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Proxy Exit Geo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Proxy Exit Geo": {
+      "main": [
+        [
+          {
+            "node": "Proxy Exit Geo OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proxy Exit Geo OK?": {
+      "main": [
+        [
+          {
+            "node": "Preflight Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lease After Geo Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lease After Geo Reject": {
+      "main": [
+        [
+          {
+            "node": "Continue After Geo Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue After Geo Reject": {
+      "main": [
+        [
+          {
+            "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preflight Enabled?": {
+      "main": [
+        [
+          {
+            "node": "IP Fraud Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build No Preflight Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IP Fraud Check": {
+      "main": [
+        [
+          {
+            "node": "Evaluate IP Fraud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate IP Fraud": {
+      "main": [
+        [
+          {
+            "node": "IP Fraud Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IP Fraud Accepted?": {
+      "main": [
+        [
+          {
+            "node": "CF Canary Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lease After IP Fraud Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lease After IP Fraud Reject": {
+      "main": [
+        [
+          {
+            "node": "Continue After IP Fraud Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue After IP Fraud Reject": {
+      "main": [
+        [
+          {
+            "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CF Canary Enabled?": {
+      "main": [
+        [
+          {
+            "node": "CF Canary Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip CF Canary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CF Canary Check": {
+      "main": [
+        [
+          {
+            "node": "Evaluate CF Canary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate CF Canary": {
+      "main": [
+        [
+          {
+            "node": "CF Canary Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CF Canary Accepted?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Release Lease After CF Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lease After CF Reject": {
+      "main": [
+        [
+          {
+            "node": "Continue After CF Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue After CF Reject": {
+      "main": [
+        [
+          {
+            "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "versionId": "a34cdf96-f5bf-5bdb-9dbe-8c2da15c1169",
+  "meta": null,
+  "pinData": null,
+  "tags": []
+}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
+	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
 )
 
 func (f *browserAuthFlow) completePostOTP(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig) error {
@@ -19,11 +19,7 @@ func (f *browserAuthFlow) completePostOTP(client browserautomationv1.BrowserAuto
 			return nil
 		}
 		last = f.browserAuthPageState(client, cfg, "post-otp-state")
-		if browserAuthPageHasAny(last, "age") {
-			_ = f.tryBrowserAuthAgeProfile(client, cfg)
-		} else {
-			_ = f.tryBrowserAuthBirthdayProfile(client, cfg)
-		}
+		_ = f.tryBrowserAuthAgeProfile(client, cfg)
 		_ = f.tryBrowserAuthPostOTPContinue(client, cfg)
 		if f.hasBrowserAuthSessionCookie(client, cfg) {
 			return nil
@@ -74,40 +70,13 @@ func (f *browserAuthFlow) waitForBrowserAuthSessionCookie(client browserautomati
 func (f *browserAuthFlow) tryBrowserAuthAgeProfile(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig) bool {
 	results, err := f.execute(client, cfg, "complete-registration-profile", []*browserautomationv1.BrowserCommand{
 		fillGroupCommand("fill-profile-name", browserAuthProfileNameSelector(), f.fullName, 2*time.Second, true),
-		fillGroupCommand("fill-profile-age", browserAuthAgeSelector(), browserAuthAgeFromBirthday(f.birthday), 2*time.Second, true),
+		fillGroupCommand("fill-profile-age", browserAuthAgeSelector(), f.age, 2*time.Second, true),
 		clickCommand("submit-profile", browserAuthPostOTPContinueSelector(), 3*time.Second, true),
 		waitTimeoutCommand("wait-profile-submit", 1500*time.Millisecond),
 	})
 	return err == nil && browserAuthAnyCommandSucceeded(results,
 		"fill-profile-name",
 		"fill-profile-age",
-		"submit-profile",
-	)
-}
-
-func (f *browserAuthFlow) tryBrowserAuthBirthdayProfile(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig) bool {
-	birthday := browserAuthBirthdayPartsFrom(f.birthday)
-	results, err := f.execute(client, cfg, "complete-registration-profile", []*browserautomationv1.BrowserCommand{
-		fillGroupCommand("fill-profile-name", browserAuthProfileNameSelector(), f.fullName, 2*time.Second, true),
-		fillGroupCommand("fill-profile-birthday", browserAuthBirthdaySelector(), birthday.US, 2*time.Second, true),
-		fillGroupCommand("fill-profile-month", browserAuthMonthInputSelector(), birthday.Month, time.Second, true),
-		fillGroupCommand("fill-profile-day", browserAuthDayInputSelector(), birthday.Day, time.Second, true),
-		fillGroupCommand("fill-profile-year", browserAuthYearInputSelector(), birthday.Year, time.Second, true),
-		selectOptionGroupCommand("select-profile-month", browserAuthMonthSelectSelector(), []string{birthday.Month, birthday.MonthPadded}, []string{birthday.MonthName, birthday.MonthShort}, nil, time.Second, true),
-		selectOptionGroupCommand("select-profile-day", browserAuthDaySelectSelector(), []string{birthday.Day, birthday.DayPadded}, nil, nil, time.Second, true),
-		selectOptionGroupCommand("select-profile-year", browserAuthYearSelectSelector(), []string{birthday.Year}, nil, nil, time.Second, true),
-		clickCommand("submit-profile", browserAuthPostOTPContinueSelector(), 3*time.Second, true),
-		waitTimeoutCommand("wait-profile-submit", 1500*time.Millisecond),
-	})
-	return err == nil && browserAuthAnyCommandSucceeded(results,
-		"fill-profile-name",
-		"fill-profile-birthday",
-		"fill-profile-month",
-		"fill-profile-day",
-		"fill-profile-year",
-		"select-profile-month",
-		"select-profile-day",
-		"select-profile-year",
 		"submit-profile",
 	)
 }

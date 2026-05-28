@@ -23,93 +23,9 @@ const (
 )
 
 const (
-	TaskQueueDefault = "byte-v-forge-gpt-service"
-
-	CreateJobActivityName                        = "CreateJobActivity"
-	StartJobStepActivityName                     = "StartJobStepActivity"
-	CompleteJobStepActivityName                  = "CompleteJobStepActivity"
-	EnsureAccountActivityName                    = "EnsureAccountActivity"
-	ResolveAccountActivityName                   = "ResolveAccountFromJobActivity"
-	BrowserAuthStartActivityName                 = "BrowserAuthStartActivity"
-	BrowserAuthWaitActivityName                  = "BrowserAuthWaitActivity"
-	BrowserAuthResendOTPActivityName             = "BrowserAuthResendOTPActivity"
-	BrowserAuthCompleteActivityName              = "BrowserAuthCompleteActivity"
-	BrowserAuthCancelActivityName                = "BrowserAuthCancelActivity"
-	ProtocolAuthStartActivityName                = "ProtocolAuthStartActivity"
-	ProtocolUseProxyActivityName                 = "ProtocolUseProxyActivity"
-	ProtocolAuthWaitActivityName                 = "ProtocolAuthWaitActivity"
-	ProtocolAuthCompleteActivityName             = "ProtocolAuthCompleteActivity"
-	ProtocolAuthCancelActivityName               = "ProtocolAuthCancelActivity"
-	CodexOAuthAcquirePhoneActivityName           = "CodexOAuthAcquirePhoneActivity"
-	CodexOAuthStartProtocolActivityName          = "CodexOAuthStartProtocolActivity"
-	CodexOAuthDetectProtocolStageActivityName    = "CodexOAuthDetectProtocolStageActivity"
-	CodexOAuthSubmitProtocolEmailActivityName    = "CodexOAuthSubmitProtocolEmailActivity"
-	CodexOAuthSubmitProtocolPasswordActivityName = "CodexOAuthSubmitProtocolPasswordActivity"
-	CodexOAuthSubmitProtocolEmailOTPActivityName = "CodexOAuthSubmitProtocolEmailOTPActivity"
-	CodexOAuthAddPhoneProtocolActivityName       = "CodexOAuthAddPhoneProtocolActivity"
-	CodexOAuthCompleteProtocolActivityName       = "CodexOAuthCompleteProtocolActivity"
-	CodexOAuthStopProtocolActivityName           = "CodexOAuthStopProtocolActivity"
-	CodexOAuthStartBrowserActivityName           = "CodexOAuthStartBrowserActivity"
-	CodexOAuthDetectBrowserStageActivityName     = "CodexOAuthDetectBrowserStageActivity"
-	CodexOAuthSubmitEmailActivityName            = "CodexOAuthSubmitEmailActivity"
-	CodexOAuthSubmitPasswordActivityName         = "CodexOAuthSubmitPasswordActivity"
-	CodexOAuthSubmitEmailOTPActivityName         = "CodexOAuthSubmitEmailOTPActivity"
-	CodexOAuthAddPhoneBrowserActivityName        = "CodexOAuthAddPhoneBrowserActivity"
-	CodexOAuthCompleteBrowserActivityName        = "CodexOAuthCompleteBrowserActivity"
-	CodexOAuthStopBrowserActivityName            = "CodexOAuthStopBrowserActivity"
-	CodexOAuthReleasePhoneActivityName           = "CodexOAuthReleasePhoneActivity"
-	WaitOTPActivityName                          = "OTPWaitActivity"
-	FetchManualOTPActivityName                   = "FetchManualOTPActivity"
-	EnsureLogonActivityName                      = "EnsureLogonActivity"
-	GoPayPaymentPrepareActivityName              = "GoPayPaymentPrepareActivity"
-	GoPayPaymentPrepareCheckoutActivityName      = "GoPayPaymentPrepareCheckoutActivity"
-	GoPayPaymentPrepareRefreshActivityName       = "GoPayPaymentPrepareRefreshActivity"
-	GoPayPaymentPrepareLinkActivityName          = "GoPayPaymentPrepareLinkActivity"
-	GoPayPaymentStartActivityName                = "GoPayPaymentStartActivity"
-	GoPayPaymentOTPResendActivityName            = "GoPayPaymentOTPResendActivity"
-	GoPayPaymentCompleteActivityName             = "GoPayPaymentCompleteActivity"
-	GoPayPaymentManualConfirmActivityName        = "GoPayPaymentManualConfirmActivity"
-	GoPayPaymentCancelActivityName               = "GoPayPaymentCancelActivity"
-	GoPayResolveWAPhoneActivityName              = "GoPayResolveWAPhoneActivity"
-	GoPayAppLoadStateActivityName                = "GoPayAppLoadStateActivity"
-	GoPayAppSaveStateActivityName                = "GoPayAppSaveStateActivity"
-	GoPayAppDeleteStateActivityName              = "GoPayAppDeleteStateActivity"
-	GoPayPaymentRebindSourceActivityName         = "GoPayPaymentRebindSourceActivity"
-	GoPayAppOTPStartActivityName                 = "GoPayAppOTPStartActivity"
-	GoPayAppOTPCompleteActivityName              = "GoPayAppOTPCompleteActivity"
-	GoPayAppOTPRetryActivityName                 = "GoPayAppOTPRetryActivity"
-	GoPayAppStatusActivityName                   = "GoPayAppStatusActivity"
-	GoPayAppCreatePinStartActivityName           = "GoPayAppCreatePinStartActivity"
-	GoPayAppCreatePinRetryActivityName           = "GoPayAppCreatePinRetryActivity"
-	GoPayAppCreatePinCompleteActivityName        = "GoPayAppCreatePinCompleteActivity"
-	GoPayAppAcquireSignupPhoneActivityName       = "GoPayAppAcquireSignupPhoneActivity"
-	GoPayAppGenerateDeviceProxyActivityName      = "GoPayAppGenerateDeviceProxyActivity"
-	GoPayAppCheckSignupPhoneActivityName         = "GoPayAppCheckSignupPhoneActivity"
-	GoPayAppDiscardSignupPhoneActivityName       = "GoPayAppDiscardSignupPhoneActivity"
-	GoPayAppAddBalanceActivityName               = "GoPayAppAddBalanceActivity"
-	GoPayAppBalanceCheckActivityName             = "GoPayAppBalanceCheckActivity"
-	GoPayAppChangePhoneGetNumberActivityName     = "GoPayAppChangePhoneGetNumberActivity"
-	GoPayAppChangePhoneStartActivityName         = "GoPayAppChangePhoneStartActivity"
-	GoPayAppChangePhoneRetryActivityName         = "GoPayAppChangePhoneRetryActivity"
-	GoPayAppSMSCancelBeforeRotationActivityName  = "GoPayAppSMSCancelBeforeRotationActivity"
-	GoPayAppSMSFinishActivityName                = "GoPayAppSMSFinishActivity"
-	GoPayAppChangePhoneCompleteActivityName      = "GoPayAppChangePhoneCompleteActivity"
-	GoPayAppDeactivateStartActivityName          = "GoPayAppDeactivateStartActivity"
-	GoPayAppDeactivateCompleteActivityName       = "GoPayAppDeactivateCompleteActivity"
-	GoPayAppSMSRequestAdditionalCodeActivityName = "GoPayAppSMSRequestAdditionalCodeActivity"
-	ProbePlusTrialActivityName                   = "ProbePlusTrialAtomicActivity"
-	ProbeTierActivityName                        = "ProbeTierAtomicActivity"
-	PersistRegisteredActivityName                = "PersistRegisteredActivity"
-	PersistActivatedActivityName                 = "PersistActivatedActivity"
-	MarkJobFailedActivityName                    = "MarkJobFailedActivity"
-	MarkJobSucceededActivityName                 = "MarkJobSucceededActivity"
-
-	ManualOTPSignalName                = "manual_otp_available"
-	OTPResendSignalName                = "otp_resend_requested"
-	ManualAddBalanceSignalName         = "manual_add_balance_confirmed"
-	GoPayAddBalanceSelectionSignalName = "gopay_add_balance_selected"
-	ManualGoPayPaymentSignalName       = "manual_gopay_payment_confirmed"
-	WorkflowProgressQueryName          = "progress"
+	ManualAddBalanceConfirmationParam   = "manual_add_balance_confirmed"
+	GoPayAddBalanceSelectionParam       = "gopay_add_balance_selected"
+	ManualGoPayPaymentConfirmationParam = "manual_gopay_payment_confirmed"
 )
 
 func WorkflowID(action string, jobID string) (string, bool) {
@@ -152,15 +68,6 @@ func WorkflowID(action string, jobID string) (string, bool) {
 		return "codex-oauth-batch-add-phone-" + jobID, true
 	case ActionRegisterAndActivate:
 		return "register-activate-" + jobID, true
-	default:
-		return "", false
-	}
-}
-
-func ManualOTPWorkflowID(action string, jobID string) (string, bool) {
-	switch strings.TrimSpace(action) {
-	case ActionRegister, ActionRegisterProtocol, ActionActivate, ActionAutopay, ActionGoPayApp, ActionGoPayPayment, ActionGoPayQRISPaymentActivate, ActionGoPayWAPayment, ActionGoPayPaymentRebind, ActionRegisterAndActivate, ActionLoginSession, ActionLoginSessionProtocol:
-		return WorkflowID(action, jobID)
 	default:
 		return "", false
 	}

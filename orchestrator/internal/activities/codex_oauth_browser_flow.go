@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/randx"
 	"strings"
 
 	"orchestrator/pb"
@@ -52,7 +53,7 @@ func (s *Server) newCodexOAuthBrowserStartFlow(ctx context.Context, account *pb.
 	if err != nil {
 		return nil, err
 	}
-	state, err := randomURLToken(32)
+	state, err := randx.Base64URL(32)
 	if err != nil {
 		return nil, err
 	}

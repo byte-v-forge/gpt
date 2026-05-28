@@ -3,13 +3,15 @@ package appsvc
 import (
 	"errors"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/httpjson"
+	"github.com/byte-v-forge/common-lib/jsonx"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"io"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/byte-v-forge/gpt/gopay/otpchannel"
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
 func stringSlice(value any) []string {
@@ -41,7 +43,7 @@ func methodsFrom(value any) []string {
 	}
 	if obj, ok := jsonObject(value); ok {
 		for key, item := range obj {
-			if normalizeJSONKey(key) == "methods" {
+			if jsonx.NormalizeKey(key) == "methods" {
 				if methods := stringSlice(item); len(methods) > 0 {
 					return methods
 				}
@@ -73,19 +75,19 @@ func verificationIDFrom(value any) string {
 }
 
 func challengeIDFrom(value any) string {
-	return firstNonEmpty(
-		protocol.StringAt(value, "challenge_id"),
-		protocol.StringAt(value, "challenge", "action", "value", "challenge_id"),
-		protocol.StringAt(value, "challenge", "value", "challenge_id"),
+	return stringx.FirstNonEmpty(
+		jsonx.StringAt(value, "challenge_id"),
+		jsonx.StringAt(value, "challenge", "action", "value", "challenge_id"),
+		jsonx.StringAt(value, "challenge", "value", "challenge_id"),
 		stringForAnyKey(value, "challenge_id", "challengeId"),
 	)
 }
 
 func clientIDFrom(value any) string {
-	return firstNonEmpty(
-		protocol.StringAt(value, "client_id"),
-		protocol.StringAt(value, "challenge", "action", "value", "client_id"),
-		protocol.StringAt(value, "challenge", "value", "client_id"),
+	return stringx.FirstNonEmpty(
+		jsonx.StringAt(value, "client_id"),
+		jsonx.StringAt(value, "challenge", "action", "value", "client_id"),
+		jsonx.StringAt(value, "challenge", "value", "client_id"),
 		stringForAnyKey(value, "client_id", "clientId"),
 	)
 }
@@ -109,13 +111,13 @@ func twoFATokenFrom(value any) string {
 func intForAnyKey(value any, keys ...string) int64 {
 	wanted := map[string]struct{}{}
 	for _, key := range keys {
-		wanted[normalizeJSONKey(key)] = struct{}{}
+		wanted[jsonx.NormalizeKey(key)] = struct{}{}
 	}
 	var walk func(any) int64
 	walk = func(current any) int64 {
 		if obj, ok := jsonObject(current); ok {
 			for key, item := range obj {
-				if _, ok := wanted[normalizeJSONKey(key)]; ok {
+				if _, ok := wanted[jsonx.NormalizeKey(key)]; ok {
 					if parsed := anyInt(item); parsed != 0 {
 						return parsed
 					}
@@ -143,13 +145,13 @@ func intForAnyKey(value any, keys ...string) int64 {
 func boolForAnyKey(value any, keys ...string) bool {
 	wanted := map[string]struct{}{}
 	for _, key := range keys {
-		wanted[normalizeJSONKey(key)] = struct{}{}
+		wanted[jsonx.NormalizeKey(key)] = struct{}{}
 	}
 	var walk func(any) bool
 	walk = func(current any) bool {
 		if obj, ok := jsonObject(current); ok {
 			for key, item := range obj {
-				if _, ok := wanted[normalizeJSONKey(key)]; ok {
+				if _, ok := wanted[jsonx.NormalizeKey(key)]; ok {
 					return anyBool(item)
 				}
 			}
@@ -174,13 +176,13 @@ func boolForAnyKey(value any, keys ...string) bool {
 func stringForAnyKey(value any, keys ...string) string {
 	wanted := map[string]struct{}{}
 	for _, key := range keys {
-		wanted[normalizeJSONKey(key)] = struct{}{}
+		wanted[jsonx.NormalizeKey(key)] = struct{}{}
 	}
 	var walk func(any) string
 	walk = func(current any) string {
 		if obj, ok := jsonObject(current); ok {
 			for key, item := range obj {
-				if _, ok := wanted[normalizeJSONKey(key)]; ok {
+				if _, ok := wanted[jsonx.NormalizeKey(key)]; ok {
 					if text := anyString(item); text != "" {
 						return text
 					}
@@ -210,18 +212,11 @@ func jsonObject(value any) (map[string]any, bool) {
 	switch typed := value.(type) {
 	case map[string]any:
 		return typed, typed != nil
-	case protocol.JSONMap:
+	case jsonx.Map:
 		return map[string]any(typed), typed != nil
 	default:
 		return nil, false
 	}
-}
-
-func normalizeJSONKey(value string) string {
-	value = strings.ToLower(strings.TrimSpace(value))
-	value = strings.ReplaceAll(value, "_", "")
-	value = strings.ReplaceAll(value, "-", "")
-	return value
 }
 
 func verificationScopedID(value any) string {
@@ -229,7 +224,7 @@ func verificationScopedID(value any) string {
 	walk = func(current any, inVerificationScope bool) string {
 		if obj, ok := jsonObject(current); ok {
 			for key, item := range obj {
-				normalized := normalizeJSONKey(key)
+				normalized := jsonx.NormalizeKey(key)
 				nextScope := inVerificationScope || strings.Contains(normalized, "verification")
 				if nextScope && normalized == "id" {
 					if text := anyString(item); text != "" {
@@ -255,7 +250,7 @@ func verificationScopedID(value any) string {
 	return walk(value, false)
 }
 
-func responseShape(resp *protocol.Response) map[string]any {
+func responseShape(resp *httpjson.Response) map[string]any {
 	if resp == nil {
 		return map[string]any{"status": 0}
 	}
@@ -331,7 +326,7 @@ func chooseOTPMethod(methods []string, preferred, defaultMethod string) string {
 		}
 		return ""
 	}
-	defaultMethod = firstNonEmpty(otpMethodFromChannel(defaultMethod), otpchannel.DefaultProviderMethod())
+	defaultMethod = stringx.FirstNonEmpty(otpMethodFromChannel(defaultMethod), otpchannel.DefaultProviderMethod())
 	fallbacks := otpchannel.ProviderMethodFallbacks(defaultMethod)
 	for _, method := range fallbacks {
 		if method != "" && (len(methods) == 0 || contains(methods, method)) {
@@ -350,10 +345,10 @@ func firstAccountID(value any) string {
 	if !ok {
 		return ""
 	}
-	return firstNonEmpty(
-		protocol.StringAt(first, "account_id"),
-		protocol.StringAt(first, "accountId"),
-		protocol.StringAt(first, "id"),
+	return stringx.FirstNonEmpty(
+		jsonx.StringAt(first, "account_id"),
+		jsonx.StringAt(first, "accountId"),
+		jsonx.StringAt(first, "id"),
 	)
 }
 
@@ -428,7 +423,7 @@ func (s *Server) persistLoginOTP(state stateMap, phone, countryCode, verificatio
 	state["_login_phone"] = phone
 	state["_login_country_code"] = countryCode
 	state["_login_verification_id"] = verificationID
-	state["_login_flow"] = firstNonEmpty(flow, "login_2fa")
+	state["_login_flow"] = stringx.FirstNonEmpty(flow, "login_2fa")
 	state["_login_verification_method"] = method
 	state["_login_otp_token"] = otpToken
 	state["_login_2fa_token"] = twoFAToken
@@ -548,7 +543,7 @@ func walletBalance(value any) (int64, string) {
 		if amount < 0 {
 			amount = parseBalanceAmount(balance["display_value"])
 		}
-		return amount, firstNonEmpty(anyString(balance["currency"]), anyString(obj["currency"]))
+		return amount, stringx.FirstNonEmpty(anyString(balance["currency"]), anyString(obj["currency"]))
 	}
 	return -1, ""
 }

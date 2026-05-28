@@ -14,7 +14,6 @@ const (
 	defaultCodexOAuthPhoneProfileKey         = "openai-th"
 	defaultCodexOAuthPhoneCountryISO2        = "TH"
 	defaultCodexOAuthPhoneCountryCallingCode = "66"
-	defaultCodexOAuthPhoneMaxPriceUSD        = "0.068"
 	defaultCodexOAuthPhoneMaxReuseCount      = 3
 	defaultCodexOAuthPhoneWaitSeconds        = 120
 	defaultCodexOAuthPhoneMinReuseRemaining  = 180
@@ -37,7 +36,6 @@ type CodexOAuthConfig struct {
 	PhoneMaxReuseCount            int
 	PhoneCountryISO2              string
 	PhoneCountryCallingCode       string
-	PhoneMaxPriceUSD              string
 	PhoneWaitSeconds              int32
 	PhoneMinReuseRemainingSeconds int32
 }
@@ -85,9 +83,6 @@ func (c CodexOAuthConfig) withDefaults() CodexOAuthConfig {
 		c.PhoneCountryCallingCode = defaultCodexOAuthPhoneCountryCallingCode
 	}
 	c.PhoneCountryCallingCode = strings.TrimPrefix(strings.TrimSpace(c.PhoneCountryCallingCode), "+")
-	if strings.TrimSpace(c.PhoneMaxPriceUSD) == "" {
-		c.PhoneMaxPriceUSD = defaultCodexOAuthPhoneMaxPriceUSD
-	}
 	if c.PhoneWaitSeconds <= 0 {
 		c.PhoneWaitSeconds = defaultCodexOAuthPhoneWaitSeconds
 	}

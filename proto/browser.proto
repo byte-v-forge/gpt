@@ -19,7 +19,7 @@ message RegisterResponse {
 message StartRegisterResponse {
   bool success = 1;
   string error_message = 2;
-  string flow_id = 3;
+  string browser_session_id = 3;
   bool otp_required = 4;
   RegisterResponse result = 5;
   int64 otp_issued_after_unix = 6;
@@ -32,22 +32,4 @@ message StartRegisterResponse {
 message CancelRegisterResponse {
   bool success = 1;
   string error_message = 2;
-}
-
-message BrowserFlowStatusResponse {
-  bool found = 1;
-  string flow_id = 2;
-  string mode = 3;
-  string stage = 4;
-  string status_message = 5;
-  bool otp_required = 6;
-  bool done = 7;
-  bool success = 8;
-  string error_message = 9;
-  int64 started_at_unix = 10;
-  int64 updated_at_unix = 11;
-  int64 otp_issued_after_unix = 12;
-  RegisterResponse result = 13;
-  int64 otp_wait_started_at_unix = 14;
-  int64 otp_request_action_started_at_unix = 15;
 }

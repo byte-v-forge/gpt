@@ -3,14 +3,17 @@ package jobprojection
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"strings"
 	"time"
 
+	"github.com/byte-v-forge/common-lib/dbclaim"
+	"github.com/byte-v-forge/common-lib/gormx"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 
 	"orchestrator/db"
 	"orchestrator/internal/contracts"
@@ -19,12 +22,36 @@ import (
 )
 
 type Store struct {
-	db        *gorm.DB
-	publisher EventPublisher
+	db               *gorm.DB
+	publisher        EventPublisher
+	actionDispatcher ActionDispatcher
 }
 
 type EventPublisher interface {
 	PublishSnapshot(ctx context.Context, eventType string, snapshot *pb.JobSnapshot) (*pb.JobEvent, error)
+}
+
+type ActionDispatcher interface {
+	EnqueueJobAction(ctx context.Context, tx *gorm.DB, jobID string, action string, accountID string, reason string) error
+}
+
+const (
+	defaultClaimLeaseSeconds int32 = 300
+	maxClaimLeaseSeconds     int32 = 1800
+	actionRunLeaseSeconds    int32 = 2 * 60 * 60
+)
+
+var (
+	ErrJobNotClaimed     = errors.New("job is not claimed")
+	ErrJobAlreadyRunning = errors.New("job is already running")
+	ErrJobStaleClaim     = errors.New("job claim is stale")
+	ErrJobUnsupported    = errors.New("job action is not supported")
+)
+
+type Claim struct {
+	Job          *db.Job
+	Params       map[string]string
+	AttemptCount int32
 }
 
 type StepFailure struct {
@@ -55,11 +82,24 @@ func (s *Store) WithPublisher(publisher EventPublisher) *Store {
 	return s
 }
 
+func (s *Store) WithActionDispatcher(dispatcher ActionDispatcher) *Store {
+	s.actionDispatcher = dispatcher
+	return s
+}
+
 func (s *Store) Create(ctx context.Context, accountID, action string, params map[string]string) (*db.Job, error) {
 	return s.CreateWithID(ctx, uuid.NewString(), accountID, action, params)
 }
 
 func (s *Store) CreateWithID(ctx context.Context, jobID, accountID, action string, params map[string]string) (*db.Job, error) {
+	return s.createWithID(ctx, jobID, accountID, action, params, true)
+}
+
+func (s *Store) CreateWithIDWithoutDispatch(ctx context.Context, jobID, accountID, action string, params map[string]string) (*db.Job, error) {
+	return s.createWithID(ctx, jobID, accountID, action, params, false)
+}
+
+func (s *Store) createWithID(ctx context.Context, jobID, accountID, action string, params map[string]string, dispatch bool) (*db.Job, error) {
 	job := &db.Job{
 		ID:        jobID,
 		AccountID: accountID,
@@ -68,13 +108,19 @@ func (s *Store) CreateWithID(ctx context.Context, jobID, accountID, action strin
 	}
 
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(job).Error; err != nil {
+		if err := tx.Clauses(gormx.OnConflictDoNothing()).Create(job).Error; err != nil {
 			return err
 		}
 		if err := upsertParams(ctx, tx, jobID, params); err != nil {
 			return err
 		}
-		return tx.First(job, "id = ?", jobID).Error
+		if err := tx.First(job, "id = ?", jobID).Error; err != nil {
+			return err
+		}
+		if !dispatch || s.actionDispatcher == nil {
+			return nil
+		}
+		return s.actionDispatcher.EnqueueJobAction(ctx, tx, job.ID, job.Action, job.AccountID, "job_created")
 	})
 	if err != nil {
 		return nil, err
@@ -87,6 +133,41 @@ func (s *Store) SetParams(ctx context.Context, jobID string, params map[string]s
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		return upsertParams(ctx, tx, jobID, params)
 	})
+}
+
+func (s *Store) SetAccountID(ctx context.Context, jobID string, accountID string) error {
+	jobID = strings.TrimSpace(jobID)
+	accountID = strings.TrimSpace(accountID)
+	if jobID == "" || accountID == "" {
+		return nil
+	}
+	if err := s.db.WithContext(ctx).Model(&db.Job{}).Where("id = ?", jobID).Update("account_id", accountID).Error; err != nil {
+		return err
+	}
+	s.publish(ctx, "job_account_resolved", jobID)
+	return nil
+}
+
+func (s *Store) BindN8NExecution(ctx context.Context, jobID string, executionID string) error {
+	jobID = strings.TrimSpace(jobID)
+	executionID = strings.TrimSpace(executionID)
+	if jobID == "" || executionID == "" {
+		return nil
+	}
+	result := s.db.WithContext(ctx).Model(&db.Job{}).
+		Where("id = ? AND n8n_execution_id <> ?", jobID, executionID).
+		Update("n8n_execution_id", executionID)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return nil
+	}
+	if err := upsertParams(ctx, s.db.WithContext(ctx), jobID, map[string]string{"n8n_execution_id": executionID}); err != nil {
+		return err
+	}
+	s.publish(ctx, "job_engine_execution_bound", jobID)
+	return nil
 }
 
 func (s *Store) GetParam(ctx context.Context, jobID, key string) (string, bool, error) {
@@ -106,6 +187,177 @@ func (s *Store) GetParam(ctx context.Context, jobID, key string) (string, bool, 
 
 func (s *Store) DeleteParam(ctx context.Context, jobID, key string) error {
 	return s.db.WithContext(ctx).Delete(&db.JobParam{}, "job_id = ? AND key = ?", jobID, key).Error
+}
+
+func (s *Store) Params(ctx context.Context, jobID string) (map[string]string, error) {
+	var rows []db.JobParam
+	if err := s.db.WithContext(ctx).Where("job_id = ?", strings.TrimSpace(jobID)).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	params := make(map[string]string, len(rows))
+	for i := range rows {
+		params[rows[i].Key] = rows[i].Value
+	}
+	return params, nil
+}
+
+func (s *Store) ClaimJob(ctx context.Context, jobID string, workerID string, leaseSeconds int32, actions []string, staleSteps []string) (*Claim, bool, error) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return nil, false, fmt.Errorf("job_id is required")
+	}
+	workerID = strings.TrimSpace(workerID)
+	if workerID == "" {
+		workerID = "gpt-job-action-worker"
+	}
+	leaseSeconds = dbclaim.NormalizeLeaseSeconds(leaseSeconds, defaultClaimLeaseSeconds, maxClaimLeaseSeconds)
+	actions = normalizeActions(actions)
+	if len(actions) == 0 {
+		return nil, false, ErrJobUnsupported
+	}
+	staleSteps = normalizeSteps(staleSteps)
+	if len(staleSteps) == 0 {
+		staleSteps = []string{"claimed"}
+	}
+	staleStepSet := map[string]struct{}{}
+	for _, step := range staleSteps {
+		staleStepSet[step] = struct{}{}
+	}
+	now := time.Now().Unix()
+	claimUntil := dbclaim.Until(now, leaseSeconds)
+
+	var job db.Job
+	terminal := false
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(dbclaim.ForUpdate()).First(&job, "id = ?", jobID).Error; err != nil {
+			return err
+		}
+		if !actionAllowed(job.Action, actions) {
+			return ErrJobUnsupported
+		}
+		switch strings.TrimSpace(job.Status) {
+		case jobstatus.Succeeded, jobstatus.Canceled, jobstatus.FailedFinal, jobstatus.FailedRecoverable, jobstatus.FailedRetryable:
+			terminal = true
+			return nil
+		case jobstatus.Created:
+		case jobstatus.Running:
+			if job.ClaimUntil > now {
+				return ErrJobAlreadyRunning
+			}
+			if _, ok := staleStepSet[strings.TrimSpace(job.LastStep)]; !ok {
+				return ErrJobAlreadyRunning
+			}
+		default:
+			return ErrJobNotClaimed
+		}
+		if err := tx.Model(&db.Job{}).Where("id = ?", job.ID).Updates(
+			dbclaim.ClaimUpdates(jobstatus.Running, "claimed", "", workerID, claimUntil),
+		).Error; err != nil {
+			return err
+		}
+		return tx.First(&job, "id = ?", job.ID).Error
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	params, err := s.Params(ctx, job.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	if !terminal {
+		s.publish(ctx, "job_claimed", job.ID)
+	}
+	return &Claim{Job: &job, Params: params, AttemptCount: job.AttemptCount}, terminal, nil
+}
+
+func (s *Store) StartClaimedRun(ctx context.Context, jobID string, idempotencyKey string) (*db.Job, bool, error) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return nil, false, fmt.Errorf("job_id is required")
+	}
+	now := time.Now().Unix()
+	runLeaseUntil := dbclaim.Until(now, actionRunLeaseSeconds)
+	var job db.Job
+	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Clauses(dbclaim.ForUpdate()).First(&job, "id = ?", jobID).Error; err != nil {
+			return err
+		}
+		switch strings.TrimSpace(job.Status) {
+		case jobstatus.Succeeded, jobstatus.Canceled, jobstatus.FailedFinal, jobstatus.FailedRecoverable, jobstatus.FailedRetryable:
+			return nil
+		case jobstatus.Running:
+			expected := IdempotencyKey(job.ID, job.AttemptCount)
+			if strings.TrimSpace(idempotencyKey) != expected {
+				return ErrJobStaleClaim
+			}
+			if strings.TrimSpace(job.LastStep) != "claimed" {
+				return ErrJobAlreadyRunning
+			}
+		default:
+			return ErrJobNotClaimed
+		}
+		if err := tx.Model(&db.Job{}).Where("id = ?", job.ID).Updates(dbclaim.ExtendUpdates(runLeaseUntil)).Error; err != nil {
+			return err
+		}
+		return tx.First(&job, "id = ?", job.ID).Error
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	terminal := job.Status == jobstatus.Succeeded ||
+		job.Status == jobstatus.Canceled ||
+		job.Status == jobstatus.FailedFinal ||
+		job.Status == jobstatus.FailedRecoverable ||
+		job.Status == jobstatus.FailedRetryable
+	return &job, terminal, nil
+}
+
+func IdempotencyKey(jobID string, attemptCount int32) string {
+	return strings.TrimSpace(jobID) + "-" + fmt.Sprintf("%d", attemptCount)
+}
+
+func normalizeActions(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.ToUpper(strings.TrimSpace(value))
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func normalizeSteps(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]struct{}{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}
+
+func actionAllowed(action string, actions []string) bool {
+	action = strings.ToUpper(strings.TrimSpace(action))
+	for _, candidate := range actions {
+		if action == candidate {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) Update(ctx context.Context, jobID, statusValue, errorMessage string, result any) {
@@ -288,18 +540,15 @@ func (s *Store) StartStep(ctx context.Context, jobID, stepName string, recoverab
 	}
 
 	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "job_id"}, {Name: "step_name"}},
-			DoUpdates: clause.Assignments(map[string]any{
-				"status":        jobstatus.Running,
-				"recoverable":   recoverable,
-				"retryable":     retryable,
-				"error_message": "",
-				"result_json":   "",
-				"started_at":    startedAt,
-				"completed_at":  int64(0),
-			}),
-		}).Create(&start).Error; err != nil {
+		if err := tx.Clauses(gormx.OnConflictUpdateAssignments([]string{"job_id", "step_name"}, map[string]any{
+			"status":        jobstatus.Running,
+			"recoverable":   recoverable,
+			"retryable":     retryable,
+			"error_message": "",
+			"result_json":   "",
+			"started_at":    startedAt,
+			"completed_at":  int64(0),
+		})).Create(&start).Error; err != nil {
 			return err
 		}
 		return tx.Model(&db.Job{}).Where("id = ?", jobID).Updates(map[string]any{
@@ -392,10 +641,7 @@ func (s *Store) MarkStepFailed(ctx context.Context, input StepFailure) error {
 			updates["result_json"] = resultJSON
 		}
 	}
-	if err := s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "job_id"}, {Name: "step_name"}},
-		DoUpdates: clause.Assignments(updates),
-	}).Create(&step).Error; err != nil {
+	if err := s.db.WithContext(ctx).Clauses(gormx.OnConflictUpdateAssignments([]string{"job_id", "step_name"}, updates)).Create(&step).Error; err != nil {
 		return err
 	}
 	s.publish(ctx, "step_failed", input.JobID)
@@ -407,18 +653,19 @@ func ToProto(job *db.Job, steps []db.JobStep) *pb.Job {
 		return nil
 	}
 	out := &pb.Job{
-		JobId:        job.ID,
-		AccountId:    job.AccountID,
-		Action:       job.Action,
-		Status:       job.Status,
-		Recoverable:  job.Recoverable,
-		Retryable:    job.Retryable,
-		LastStep:     job.LastStep,
-		ErrorMessage: job.ErrorMessage,
-		Result:       structFromJSON(job.ResultJSON),
-		CreatedAt:    job.CreatedAt,
-		UpdatedAt:    job.UpdatedAt,
-		Steps:        make([]*pb.JobStep, 0, len(steps)),
+		JobId:          job.ID,
+		AccountId:      job.AccountID,
+		Action:         job.Action,
+		Status:         job.Status,
+		Recoverable:    job.Recoverable,
+		Retryable:      job.Retryable,
+		LastStep:       job.LastStep,
+		ErrorMessage:   job.ErrorMessage,
+		Result:         structFromJSON(job.ResultJSON),
+		CreatedAt:      job.CreatedAt,
+		UpdatedAt:      job.UpdatedAt,
+		Steps:          make([]*pb.JobStep, 0, len(steps)),
+		N8NExecutionId: job.N8NExecutionID,
 	}
 	for i := range steps {
 		out.Steps = append(out.Steps, &pb.JobStep{
@@ -555,8 +802,5 @@ func upsertParams(ctx context.Context, tx *gorm.DB, jobID string, params map[str
 		return nil
 	}
 
-	return tx.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "job_id"}, {Name: "key"}},
-		DoUpdates: clause.AssignmentColumns([]string{"value", "updated_at"}),
-	}).Create(&rows).Error
+	return tx.WithContext(ctx).Clauses(gormx.OnConflictUpdateColumns([]string{"job_id", "key"}, []string{"value", "updated_at"})).Create(&rows).Error
 }

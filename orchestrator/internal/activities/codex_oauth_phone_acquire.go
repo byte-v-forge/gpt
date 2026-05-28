@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	smsv1 "github.com/byte-v-forge/sms/gen/go/byte/v/forge/contracts/sms/v1"
+	smsv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/sms/v1"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"orchestrator/db"
@@ -66,7 +66,7 @@ func (s *Server) acquireReusableCodexPhone(ctx context.Context, jobID, accountID
 		return nil, err
 	}
 	row := db.CodexOAuthPhoneLease{
-		ActivationID:       activation.GetActivationId(),
+		ActivationID:       activation.GetOrderId(),
 		PhoneE164:          activation.GetPhoneNumber().GetE164Number(),
 		PhoneNational:      activation.GetPhoneNumber().GetNationalNumber(),
 		CountryISO2:        activation.GetPhoneNumber().GetCountryIso2(),
@@ -92,35 +92,24 @@ func (s *Server) acquireReusableCodexPhone(ctx context.Context, jobID, accountID
 	return codexOAuthPhoneLeaseFromRow(row, false), nil
 }
 
-func (s *Server) acquireCodexSMSActivation(ctx context.Context, jobID, accountID, label string, reuseLimit int32, cfg CodexOAuthConfig) (*smsv1.SmsActivation, error) {
-	if s.smsClient == nil {
+func (s *Server) acquireCodexSMSActivation(ctx context.Context, jobID, accountID, label string, reuseLimit int32, cfg CodexOAuthConfig) (*smsv1.SmsOrder, error) {
+	if s.smsClient == nil || s.smsCatalogClient == nil {
 		return nil, fmt.Errorf("sms client not configured")
+	}
+	query := smsOfferQuery{
+		ApplicationKey:     "openai",
+		CountryISO2:        cfg.PhoneCountryISO2,
+		CountryCallingCode: cfg.PhoneCountryCallingCode,
+	}
+	offer, err := s.selectSMSOffer(ctx, query)
+	if err != nil {
+		return nil, err
 	}
 	request := &smsv1.AcquireNumberRequest{
 		RequestId:     "codex-oauth-" + strings.TrimSpace(jobID),
-		ProfileKey:    strings.TrimSpace(cfg.PhoneProfileKey),
+		AcquireParams: offer.GetAcquireParams(),
 		LeaseDuration: durationOrNil(defaultSMSLeaseDuration),
-		Target: &smsv1.SmsTarget{
-			ApplicationKey:     "openai",
-			CountryIso2:        cfg.PhoneCountryISO2,
-			CountryCallingCode: cfg.PhoneCountryCallingCode,
-			MaxPrice: &smsv1.DecimalMoney{
-				CurrencyCode:  "USD",
-				AmountDecimal: cfg.PhoneMaxPriceUSD,
-			},
-		},
-		Labels: map[string]string{
-			"domain":          "gpt",
-			"workflow":        "codex_oauth",
-			"action":          actionCodexOAuthAddPhone,
-			"job_id":          jobID,
-			"account_id":      accountID,
-			"label":           label,
-			"profile_key":     cfg.PhoneProfileKey,
-			"max_reuse_count": fmt.Sprintf("%d", reuseLimit),
-		},
 	}
-	normalizeAcquireNumberRequest(request)
 	resp, err := s.smsClient.AcquireNumber(ctx, request)
 	if err != nil {
 		return nil, fmt.Errorf("AcquireNumber: %w", err)
@@ -131,8 +120,8 @@ func (s *Server) acquireCodexSMSActivation(ctx context.Context, jobID, accountID
 	if resp.GetError() != nil {
 		return nil, fmt.Errorf("AcquireNumber: %s", smsErrorText(resp.GetError()))
 	}
-	if resp.GetActivation() == nil {
-		return nil, fmt.Errorf("AcquireNumber: empty activation")
+	if resp.GetOrder() == nil {
+		return nil, fmt.Errorf("AcquireNumber: empty sms order")
 	}
-	return resp.GetActivation(), nil
+	return s.waitSMSActivationAcquired(ctx, resp.GetOrder(), defaultSMSAcquireWait)
 }

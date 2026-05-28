@@ -1,7 +1,6 @@
 package stripe
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,7 +8,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/byte-v-forge/common-lib/fingerprinthttp"
+	"github.com/byte-v-forge/common-lib/jwtx"
 )
 
 type CredentialKind string
@@ -47,23 +47,21 @@ func (c Credential) AuthConfig() map[string]string {
 	return map[string]string{string(c.Kind): c.Token}
 }
 
-func (c Credential) ApplyChatGPTHeaders(headers http.Header, userAgent string) {
-	if userAgent == "" {
-		userAgent = DefaultUserAgent
-	}
-	headers.Set("User-Agent", userAgent)
+func (c Credential) ApplyChatGPTHeaders(headers http.Header, profile fingerprinthttp.Profile) {
+	profile = profile.WithDefaults(DefaultGptProfile())
+	profile.ApplyBrowserHeaders(headers)
 	headers.Set("Accept", "*/*")
 	headers.Set("Accept-Language", "en-US,en;q=0.9")
 	headers.Set("Origin", "https://chatgpt.com")
 	headers.Set("Referer", "https://chatgpt.com/")
 	headers.Set("Content-Type", "application/json")
-	headers.Set("oai-device-id", uuid.NewString())
+	headers.Set("oai-device-id", strings.TrimSpace(profile.DeviceID))
 	headers.Set("oai-language", "en-US")
 	if c.Kind == CredentialAccessToken {
 		headers.Set("Authorization", "Bearer "+c.Token)
 		return
 	}
-	cookie := SessionCookieHeader(c.Token, headers.Get("oai-device-id"))
+	cookie := SessionCookieHeader(c.Token, profile.DeviceID)
 	if cookie != "" {
 		headers.Set("Cookie", cookie)
 	}
@@ -170,23 +168,7 @@ func sessionCookieSortKey(part string) string {
 }
 
 func AccessTokenClaims(accessToken string) map[string]any {
-	parts := strings.Split(strings.TrimSpace(accessToken), ".")
-	if len(parts) < 2 {
-		return nil
-	}
-	payload := parts[1]
-	raw, err := base64.RawURLEncoding.DecodeString(payload)
-	if err != nil {
-		raw, err = base64.URLEncoding.DecodeString(payload)
-	}
-	if err != nil {
-		return nil
-	}
-	var claims map[string]any
-	if err := json.Unmarshal(raw, &claims); err != nil {
-		return nil
-	}
-	return claims
+	return jwtx.PayloadOrNil(accessToken)
 }
 
 func AccessTokenAccountID(accessToken string) string {

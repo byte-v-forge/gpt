@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"gorm.io/gorm/clause"
+	"github.com/byte-v-forge/common-lib/gormx"
 
 	"orchestrator/db"
 	"orchestrator/pb"
@@ -32,10 +32,7 @@ func (s *Server) GoPayUserSetWAPhone(ctx context.Context, req *pb.GoPayUserSetWA
 	if pin != "" {
 		updates = append(updates, "pin")
 	}
-	err = s.db.WithContext(ctx).Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "state_key"}},
-		DoUpdates: clause.AssignmentColumns(updates),
-	}).Create(&profile).Error
+	err = s.db.WithContext(ctx).Clauses(gormx.OnConflictUpdateColumns([]string{"state_key"}, updates)).Create(&profile).Error
 	if err != nil {
 		return &pb.GoPayUserWAPhoneResponse{UserId: stateKey, ErrorMessage: fmt.Sprintf("save gopay user profile: %v", err)}, nil
 	}

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byte-v-forge/common-lib/browserfingerprint"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"github.com/google/uuid"
 )
 
@@ -17,7 +19,7 @@ type charger struct {
 	cfg              Config
 	checkoutProfile  requestProfile
 	paymentProfile   requestProfile
-	cs               *httpSession
+	cs               *GptClient
 	ext              *httpSession
 	countryCode      string
 	phone            string
@@ -31,10 +33,10 @@ type charger struct {
 const stripeCheckoutVersion = "2025-03-31.basil; checkout_server_update_beta=v1; checkout_manual_approval_preview=v1"
 
 func (s *Server) newCharger(ctx context.Context, cred credential, phone, countryCode, pin, tokenization string) (*charger, error) {
-	checkoutProfile := s.cfg.CheckoutProfile
+	checkoutProfile := cred.chatGPTProfile(s.cfg.CheckoutProfile)
 	paymentProfile := s.cfg.PaymentProfile
 	paymentFingerprint := paymentProfile.fingerprint()
-	cs, err := s.newChatGPTSession(ctx, cred, checkoutProfile)
+	cs, err := s.newGptClient(ctx, cred, checkoutProfile)
 	if err != nil {
 		return nil, err
 	}
@@ -88,18 +90,18 @@ func (c *charger) createCheckout(ctx context.Context) (string, error) {
 	}
 	c.chatGPTWarmup(ctx)
 	plan := c.cfg.CheckoutPlan
-	checkoutMode := firstNonEmpty(plan["checkout_ui_mode"], "hosted")
+	checkoutMode := stringx.FirstNonEmpty(plan["checkout_ui_mode"], "hosted")
 	body := map[string]any{
-		"entry_point": firstNonEmpty(plan["entry_point"], "all_plans_pricing_modal"),
-		"plan_name":   firstNonEmpty(plan["plan_name"], "chatgptplusplan"),
+		"entry_point": stringx.FirstNonEmpty(plan["entry_point"], "all_plans_pricing_modal"),
+		"plan_name":   stringx.FirstNonEmpty(plan["plan_name"], "chatgptplusplan"),
 		"billing_details": map[string]any{
-			"country":  firstNonEmpty(plan["billing_country"], "ID"),
-			"currency": firstNonEmpty(plan["billing_currency"], "IDR"),
+			"country":  stringx.FirstNonEmpty(plan["billing_country"], "ID"),
+			"currency": stringx.FirstNonEmpty(plan["billing_currency"], "IDR"),
 		},
 		"checkout_ui_mode": checkoutMode,
 	}
-	body["cancel_url"] = firstNonEmpty(plan["cancel_url"], "https://chatgpt.com/#pricing")
-	if promo := firstNonEmpty(plan["promo_campaign_id"], "plus-1-month-free"); promo != "" {
+	body["cancel_url"] = stringx.FirstNonEmpty(plan["cancel_url"], "https://chatgpt.com/#pricing")
+	if promo := stringx.FirstNonEmpty(plan["promo_campaign_id"], "plus-1-month-free"); promo != "" {
 		body["promo_campaign"] = map[string]any{"promo_campaign_id": promo, "is_coupon_from_query_param": false}
 	}
 	resp, err := c.cs.request(ctx, http.MethodPost, "https://chatgpt.com/backend-api/payments/checkout", requestOptions{jsonBody: body})
@@ -114,7 +116,7 @@ func (c *charger) createCheckout(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("checkout create: bad response %s", jsonExcerpt(resp.json, 500))
 	}
 	c.checkoutURL = checkoutURLFromResponse(resp.json, csID)
-	c.processorEntity = firstNonEmpty(extractProcessorEntity(resp.json), c.processorEntity, "openai_llc")
+	c.processorEntity = stringx.FirstNonEmpty(extractProcessorEntity(resp.json), c.processorEntity, "openai_llc")
 	return csID, nil
 }
 
@@ -139,17 +141,17 @@ func (c *charger) chatGPTWarmup(ctx context.Context) {
 		})
 		if resp != nil && item.url == "https://chatgpt.com/api/auth/session" && resp.status == http.StatusOK {
 			if accessToken := stringAt(resp.json, "accessToken"); accessToken != "" {
-				c.cs.headers.Set("Authorization", "Bearer "+accessToken)
+				c.cs.setHeader("Authorization", "Bearer "+accessToken)
 			}
 		}
 	}
-	if cookie := mergeCookieHeaders(c.cs.headers.Get("Cookie"), c.cs.cookieHeader("https://chatgpt.com/")); cookie != "" {
-		c.cs.headers.Set("Cookie", cookie)
+	if cookie := mergeCookieHeaders(c.cs.header("Cookie"), c.cs.cookieHeader("https://chatgpt.com/")); cookie != "" {
+		c.cs.setHeader("Cookie", cookie)
 	}
 }
 
 func (c *charger) processorEntityOrDefault() string {
-	return firstNonEmpty(c.processorEntity, extractProcessorEntityFromURL(c.checkoutURL), "openai_llc")
+	return stringx.FirstNonEmpty(c.processorEntity, extractProcessorEntityFromURL(c.checkoutURL), "openai_llc")
 }
 
 func (c *charger) checkoutApprovalURL(csID string) string {
@@ -158,20 +160,20 @@ func (c *charger) checkoutApprovalURL(csID string) string {
 
 func (c *charger) stripeCreatePaymentMethod(ctx context.Context, csID string) (string, error) {
 	billing := c.cfg.Billing
-	runtimeVersion := firstNonEmpty(c.cfg.Runtime["version"], "fed52f3bc6")
+	runtimeVersion := stringx.FirstNonEmpty(c.cfg.Runtime["version"], "fed52f3bc6")
 	clientSessionID := uuid.NewString()
 	form := url.Values{
-		"billing_details[name]":                                                    {firstNonEmpty(billing["name"], "John Doe")},
-		"billing_details[email]":                                                   {firstNonEmpty(billing["email"], "buyer@example.com")},
-		"billing_details[address][country]":                                        {firstNonEmpty(billing["country"], "US")},
-		"billing_details[address][line1]":                                          {firstNonEmpty(billing["line1"], "3110 Sunset Boulevard")},
-		"billing_details[address][city]":                                           {firstNonEmpty(billing["city"], "Los Angeles")},
-		"billing_details[address][postal_code]":                                    {firstNonEmpty(billing["postal_code"], "90026")},
-		"billing_details[address][state]":                                          {firstNonEmpty(billing["state"], "CA")},
+		"billing_details[name]":                                                    {stringx.FirstNonEmpty(billing["name"], "John Doe")},
+		"billing_details[email]":                                                   {stringx.FirstNonEmpty(billing["email"], "buyer@example.com")},
+		"billing_details[address][country]":                                        {stringx.FirstNonEmpty(billing["country"], "US")},
+		"billing_details[address][line1]":                                          {stringx.FirstNonEmpty(billing["line1"], "3110 Sunset Boulevard")},
+		"billing_details[address][city]":                                           {stringx.FirstNonEmpty(billing["city"], "Los Angeles")},
+		"billing_details[address][postal_code]":                                    {stringx.FirstNonEmpty(billing["postal_code"], "90026")},
+		"billing_details[address][state]":                                          {stringx.FirstNonEmpty(billing["state"], "CA")},
 		"type":                                                                     {"gopay"},
 		"payment_user_agent":                                                       {fmt.Sprintf("stripe.js/%s; stripe-js-v3/%s; payment-element; deferred-intent", runtimeVersion, runtimeVersion)},
 		"referrer":                                                                 {"https://chatgpt.com"},
-		"time_on_page":                                                             {fmt.Sprintf("%d", 25000+randomInt(30001))},
+		"time_on_page":                                                             {fmt.Sprintf("%d", 25000+browserfingerprint.RandomIndex(30001))},
 		"client_attribution_metadata[client_session_id]":                           {clientSessionID},
 		"client_attribution_metadata[checkout_session_id]":                         {csID},
 		"client_attribution_metadata[elements_session_id]":                         {newElementsSessionID()},
@@ -251,7 +253,7 @@ func (c *charger) stripeConfirm(ctx context.Context, csID, pmID string) (map[str
 		"sid":                                    {uuidHex()},
 		"payment_method":                         {pmID},
 		"init_checksum":                          {stringAt(initData, "init_checksum")},
-		"version":                                {firstNonEmpty(c.cfg.Runtime["version"], "fed52f3bc6")},
+		"version":                                {stringx.FirstNonEmpty(c.cfg.Runtime["version"], "fed52f3bc6")},
 		"expected_amount":                        {expectedAmount},
 		"expected_payment_method_type":           {"gopay"},
 		"return_url":                             {returnURL},
@@ -344,7 +346,7 @@ func (c *charger) chatGPTApprove(ctx context.Context, csID string) error {
 	return chatGPTApproveBlockedError{status: lastStatus, body: lastBody}
 }
 
-func (c *charger) chatGPTSentinelPing(ctx context.Context, session *httpSession) {
+func (c *charger) chatGPTSentinelPing(ctx context.Context, session *GptClient) {
 	if session == nil {
 		return
 	}
@@ -360,15 +362,16 @@ func (c *charger) chatGPTAuthHeaders(referer string) http.Header {
 		"Accept":       []string{"*/*"},
 		"Content-Type": []string{"application/json"},
 		"Origin":       []string{"https://chatgpt.com"},
-		"Referer":      []string{firstNonEmpty(referer, "https://chatgpt.com/")},
+		"Referer":      []string{stringx.FirstNonEmpty(referer, "https://chatgpt.com/")},
 	}
 	fingerprint.applyBrowserHeaders(headers)
-	if value := c.cs.headers.Get("Authorization"); value != "" {
+	headers.Set("Accept-Language", gptAcceptLanguage)
+	if value := c.cs.header("Authorization"); value != "" {
 		headers.Set("Authorization", value)
 	}
 	headers.Set("oai-device-id", fingerprint.DeviceID)
-	headers.Set("oai-language", fingerprint.OAILanguage)
-	if cookie := mergeCookieHeaders(c.cs.headers.Get("Cookie"), c.cs.cookieHeader("https://chatgpt.com/")); cookie != "" {
+	headers.Set("oai-language", gptOAILanguage)
+	if cookie := mergeCookieHeaders(c.cs.header("Cookie"), c.cs.cookieHeader("https://chatgpt.com/")); cookie != "" {
 		cookie = cookieHeaderWithDeviceID(splitCookieHeader(cookie), fingerprint.DeviceID)
 		headers.Set("Cookie", cookie)
 	}
@@ -387,7 +390,7 @@ func (c *charger) chatGPTApproveHeaders(csID string) http.Header {
 
 func (c *charger) chatGPTFingerprint() browserFingerprint {
 	if c != nil && c.cs != nil {
-		return c.cs.fingerprint.withFallback(c.checkoutProfile.Locale)
+		return c.cs.fingerprint()
 	}
 	return defaultRequestProfile("checkout").fingerprint()
 }

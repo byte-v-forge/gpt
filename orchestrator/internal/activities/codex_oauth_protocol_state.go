@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/randx"
 	"strings"
 	"time"
 
@@ -46,11 +47,11 @@ type codexOAuthProtocolCookie struct {
 }
 
 func newCodexOAuthProtocolState(jobID string, cfg CodexOAuthConfig, pkce codexOAuthPKCE) (codexOAuthProtocolState, error) {
-	flowID, err := randomURLToken(18)
+	flowID, err := randx.Base64URL(18)
 	if err != nil {
 		return codexOAuthProtocolState{}, err
 	}
-	oauthState, err := randomURLToken(32)
+	oauthState, err := randx.Base64URL(32)
 	if err != nil {
 		return codexOAuthProtocolState{}, err
 	}

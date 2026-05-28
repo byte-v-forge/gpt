@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"orchestrator/internal/chatgptauth"
 	"strings"
 )
 
@@ -11,9 +12,11 @@ const (
 	codexOAuthLeaseExhausted = "exhausted"
 	codexOAuthLeaseFailed    = "failed"
 	codexOAuthLeaseExpired   = "expired"
-
-	codexOAuthAuthSecretPrefix = "codex_oauth_auth_json:"
 )
+
+func codexOAuthAuthSecretKey(accountID string) string {
+	return chatgptauth.AccountAuthSecretKey(accountID)
+}
 
 func (s *Server) CodexOAuthAcquirePhoneActivity(ctx context.Context, input CodexOAuthAcquirePhoneInput) (*CodexOAuthPhoneLease, error) {
 	cfg := s.codexOAuthConfig.withDefaults()

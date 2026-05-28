@@ -2,6 +2,7 @@ package activities
 
 import (
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"strconv"
 	"strings"
 )
@@ -28,7 +29,7 @@ func browserAuthTextHints(text string) []string {
 	seen := map[string]bool{}
 	hints := make([]string, 0, 8)
 	for _, rawLine := range strings.Split(text, "\n") {
-		line := compactBrowserAuthText(rawLine, 80)
+		line := stringx.CompactSnippet(rawLine, 80)
 		if line == "" || seen[line] {
 			continue
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"strings"
 
 	"orchestrator/db"
@@ -29,7 +30,7 @@ func (s *Server) GoPayResolveWAPhoneActivity(ctx context.Context, input GoPayRes
 			data["profile_error_message"] = profileErr.Error()
 		}
 		requestPhone := normalizeIndonesiaPhone(input.GetWaPhone())
-		phone := firstNonEmpty(profilePhone, requestPhone)
+		phone := stringx.FirstNonEmpty(profilePhone, requestPhone)
 		data["profile_phone_present"] = profilePhone != ""
 		data["request_phone_present"] = requestPhone != ""
 		if profilePhone != "" {
@@ -153,23 +154,23 @@ func (s *Server) GoPayPaymentRebindSourceActivity(ctx context.Context, input GoP
 	if strings.TrimSpace(sourceJob.ResultJSON) != "" {
 		_ = json.Unmarshal([]byte(sourceJob.ResultJSON), &result)
 	}
-	accountID := firstNonEmpty(input.GetAccountId(), sourceJob.AccountID, stringField(result, "account_id"))
-	userID := firstNonEmpty(input.GetUserId(), jobParam(ctx, s, output.GetSourceJobId(), "user_id"), stringField(result, "user_id"))
+	accountID := stringx.FirstNonEmpty(input.GetAccountId(), sourceJob.AccountID, stringField(result, "account_id"))
+	userID := stringx.FirstNonEmpty(input.GetUserId(), jobParam(ctx, s, output.GetSourceJobId(), "user_id"), stringField(result, "user_id"))
 	userID, err = normalizeGoPayUserID(userID)
 	if err != nil {
 		data["error_message"] = err.Error()
 		output.Data = protoData(data)
 		return output, err
 	}
-	waPhone := firstNonEmpty(jobParam(ctx, s, output.GetSourceJobId(), "wa_phone"), stringField(result, "wa_phone"))
+	waPhone := stringx.FirstNonEmpty(jobParam(ctx, s, output.GetSourceJobId(), "wa_phone"), stringField(result, "wa_phone"))
 	if waPhone == "" {
 		err := fmt.Errorf("source job wa_phone is required for GoPay WA rebind")
 		data["error_message"] = err.Error()
 		output.Data = protoData(data)
 		return output, err
 	}
-	chargeRef := firstNonEmpty(stringField(result, "charge_ref"), nestedStringField(result, "gopay_payment", "charge_ref"), nestedStringField(result, "payment", "charge_ref"))
-	snapToken := firstNonEmpty(stringField(result, "snap_token"), nestedStringField(result, "gopay_payment", "snap_token"), nestedStringField(result, "payment", "snap_token"))
+	chargeRef := stringx.FirstNonEmpty(stringField(result, "charge_ref"), nestedStringField(result, "gopay_payment", "charge_ref"), nestedStringField(result, "payment", "charge_ref"))
+	snapToken := stringx.FirstNonEmpty(stringField(result, "snap_token"), nestedStringField(result, "gopay_payment", "snap_token"), nestedStringField(result, "payment", "snap_token"))
 	if chargeRef == "" && snapToken == "" {
 		err := fmt.Errorf("source job has no completed GoPay payment result")
 		data["error_message"] = err.Error()
@@ -200,15 +201,6 @@ func jobParam(ctx context.Context, s *Server, jobID, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(value)
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if trimmed := strings.TrimSpace(value); trimmed != "" {
-			return trimmed
-		}
-	}
-	return ""
 }
 
 func stringField(data map[string]any, key string) string {

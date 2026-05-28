@@ -3,11 +3,12 @@ package appsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/httpjson"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 	gopayapp "github.com/byte-v-forge/gpt/gopay/protocol/app"
 )
 
@@ -94,7 +95,7 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 	cc := phoneCountryCode(s.cfg, countryCode)
 	normalized := normalizePhoneWithConfig(s.cfg, phone, cc)
 	attempts := loginMethodsMaxAttempts
-	var resp *protocol.Response
+	var resp *httpjson.Response
 	var client *gopayapp.Client
 	var methods []string
 	var defaultMethod string
@@ -171,7 +172,7 @@ func (s *Server) startLogin(ctx context.Context, state stateMap, phone, pin, cou
 		}
 		return map[string]any{"success": false, "error": "verification_id missing from login probe state"}
 	}
-	if method := chooseOTPMethod(methods, otpChannel, firstNonEmpty(defaultMethod, "otp_wa")); method != "" {
+	if method := chooseOTPMethod(methods, otpChannel, stringx.FirstNonEmpty(defaultMethod, "otp_wa")); method != "" {
 		otpResp, err := client.Request(ctx, http.MethodPost, gotoAuthBaseURL+"/cvs/v1/initiate", signupInitiateBody{
 			VerificationID:            verificationID,
 			Flow:                      "login_1fa",

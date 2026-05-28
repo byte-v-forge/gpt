@@ -1,28 +1,34 @@
 package activities
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
 	fhttp "github.com/bogdanfinn/fhttp"
-	tlsclient "github.com/bogdanfinn/tls-client"
-	"github.com/bogdanfinn/tls-client/profiles"
+	"github.com/byte-v-forge/common-lib/browserfingerprint"
+	"github.com/byte-v-forge/common-lib/browserhttp"
+	"github.com/byte-v-forge/common-lib/fingerprinthttp"
+	"github.com/byte-v-forge/common-lib/stringx"
+	"github.com/google/uuid"
 )
 
-const codexOAuthProtocolUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+const (
+	codexOAuthProtocolUserAgent      = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36"
+	codexOAuthProtocolAcceptLanguage = "en-US,en;q=0.9"
+	codexOAuthProtocolLanguage       = "en-US"
+)
 
-type codexOAuthProtocolHTTPClient struct {
+type GptClient struct {
 	cfg                     CodexOAuthConfig
 	state                   *codexOAuthProtocolState
-	client                  tlsclient.HttpClient
-	jar                     tlsclient.CookieJar
+	client                  *fingerprinthttp.Client
+	profile                 fingerprinthttp.Profile
 	lastRequestSentAtUnixMs int64
 }
 
@@ -34,34 +40,28 @@ type codexOAuthProtocolHTTPResponse struct {
 	SentAtUnixMs int64
 }
 
-func newCodexOAuthProtocolHTTPClient(cfg CodexOAuthConfig, state *codexOAuthProtocolState) (*codexOAuthProtocolHTTPClient, error) {
+func newGptClient(cfg CodexOAuthConfig, state *codexOAuthProtocolState, profile fingerprinthttp.Profile) (*GptClient, error) {
 	cfg = cfg.withDefaults()
-	jar := tlsclient.NewCookieJar()
-	if state != nil {
-		restoreCodexOAuthProtocolCookies(jar, state.Cookies)
-	}
-	profile, ok := codexOAuthProtocolTLSProfile(cfg.ProtocolTLSProfile)
-	if !ok {
-		profile, _ = codexOAuthProtocolTLSProfile(defaultCodexOAuthProtocolTLSProfile)
-	}
-	options := []tlsclient.HttpClientOption{
-		tlsclient.WithTimeoutSeconds(45),
-		tlsclient.WithClientProfile(profile),
-		tlsclient.WithCookieJar(jar),
-		tlsclient.WithNotFollowRedirects(),
-		tlsclient.WithDisableHttp3(),
-	}
-	if proxyURL := strings.TrimSpace(cfg.ProtocolProxyURL); proxyURL != "" {
-		options = append(options, tlsclient.WithProxyUrl(proxyURL))
-	}
-	client, err := tlsclient.NewHttpClient(tlsclient.NewNoopLogger(), options...)
+	profile = profile.WithDefaults(codexOAuthProtocolDefaultProfile(cfg))
+	client, err := fingerprinthttp.New(fingerprinthttp.Config{
+		Timeout:            45 * time.Second,
+		ProxyURL:           profile.ProxyURL,
+		Profile:            profile,
+		DisableHTTP3:       true,
+		NotFollowRedirects: true,
+		RetryMax:           3,
+		MaxBodyBytes:       4 << 20,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &codexOAuthProtocolHTTPClient{cfg: cfg, state: state, client: client, jar: jar}, nil
+	if state != nil {
+		restoreCodexOAuthProtocolCookies(client.CookieJar(), state.Cookies)
+	}
+	return &GptClient{cfg: cfg, state: state, client: client, profile: profile}, nil
 }
 
-func restoreCodexOAuthProtocolCookies(jar tlsclient.CookieJar, cookies []codexOAuthProtocolCookie) {
+func restoreCodexOAuthProtocolCookies(jar browserhttp.CookieJar, cookies []codexOAuthProtocolCookie) {
 	byHost := map[string][]*fhttp.Cookie{}
 	for _, cookie := range cookies {
 		if strings.TrimSpace(cookie.HostKey) == "" || strings.TrimSpace(cookie.Name) == "" || cookie.Value == "" {
@@ -75,21 +75,17 @@ func restoreCodexOAuthProtocolCookies(jar tlsclient.CookieJar, cookies []codexOA
 	}
 }
 
-func codexOAuthProtocolTLSProfile(name string) (profiles.ClientProfile, bool) {
-	name = strings.TrimSpace(name)
-	for candidate, profile := range profiles.MappedTLSClients {
-		if strings.EqualFold(candidate, name) {
-			return profile, true
-		}
+func (c *GptClient) Close() {
+	if c != nil && c.client != nil {
+		c.client.Close()
 	}
-	return profiles.ClientProfile{}, false
 }
 
-func (c *codexOAuthProtocolHTTPClient) get(ctx context.Context, rawURL, referer string, acceptHTML bool) (*codexOAuthProtocolHTTPResponse, error) {
+func (c *GptClient) get(ctx context.Context, rawURL, referer string, acceptHTML bool) (*codexOAuthProtocolHTTPResponse, error) {
 	return c.request(ctx, fhttp.MethodGet, rawURL, referer, acceptHTML, nil)
 }
 
-func (c *codexOAuthProtocolHTTPClient) postJSON(ctx context.Context, rawURL, referer string, payload any, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
+func (c *GptClient) postJSON(ctx context.Context, rawURL, referer string, payload any, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -97,74 +93,144 @@ func (c *codexOAuthProtocolHTTPClient) postJSON(ctx context.Context, rawURL, ref
 	return c.request(ctx, fhttp.MethodPost, rawURL, referer, false, body, extraHeaders...)
 }
 
-func (c *codexOAuthProtocolHTTPClient) postForm(ctx context.Context, rawURL, referer string, form url.Values, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
+func (c *GptClient) postForm(ctx context.Context, rawURL, referer string, form url.Values, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
 	headers := append([]map[string]string{{"Content-Type": "application/x-www-form-urlencoded"}}, extraHeaders...)
 	return c.request(ctx, fhttp.MethodPost, rawURL, referer, false, []byte(form.Encode()), headers...)
 }
 
-func (c *codexOAuthProtocolHTTPClient) request(ctx context.Context, method, rawURL, referer string, acceptHTML bool, body []byte, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
-	c.lastRequestSentAtUnixMs = 0
-	var reader io.Reader
-	if body != nil {
-		reader = bytes.NewReader(body)
+func (c *GptClient) request(ctx context.Context, method, rawURL, referer string, acceptHTML bool, body []byte, extraHeaders ...map[string]string) (*codexOAuthProtocolHTTPResponse, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("codex oauth protocol client is nil")
 	}
-	req, err := fhttp.NewRequestWithContext(ctx, method, rawURL, reader)
-	if err != nil {
+	if err := requireGptOpenAIURL(rawURL); err != nil {
 		return nil, err
 	}
-	req.Header = codexOAuthProtocolHeaders(referer, c.deviceID(), acceptHTML, body != nil)
-	for _, headers := range extraHeaders {
-		for key, value := range headers {
+	c.lastRequestSentAtUnixMs = 0
+	headers := c.headers(referer, acceptHTML, body != nil)
+	for _, extra := range extraHeaders {
+		for key, value := range extra {
 			if strings.TrimSpace(key) != "" && strings.TrimSpace(value) != "" {
-				req.Header.Set(key, value)
+				headers.Set(key, value)
 			}
 		}
 	}
+	c.applyGptIdentityHeaders(headers)
 	sentAtUnixMs := time.Now().UnixMilli()
 	c.lastRequestSentAtUnixMs = sentAtUnixMs
-	resp, err := c.client.Do(req)
+	resp, err := c.client.Request(ctx, method, rawURL, fingerprinthttp.RequestOptions{Headers: headers, Body: body})
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
-	out := &codexOAuthProtocolHTTPResponse{StatusCode: resp.StatusCode, Header: resp.Header, SentAtUnixMs: sentAtUnixMs}
-	out.Body, err = io.ReadAll(io.LimitReader(resp.Body, 4<<20))
-	if err != nil {
-		return nil, err
-	}
+	out := &codexOAuthProtocolHTTPResponse{StatusCode: resp.StatusCode, Header: browserhttp.ToFHTTPHeader(resp.Headers), Body: resp.Body, SentAtUnixMs: sentAtUnixMs}
 	if c.state != nil {
-		c.state.applyCookieSnapshot(c.jar.GetAllCookies())
+		c.state.applyCookieSnapshot(c.client.CookieJar().GetAllCookies())
 	}
-	if len(out.Body) > 0 && strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "json") {
+	if len(out.Body) > 0 && strings.Contains(strings.ToLower(resp.Headers.Get("Content-Type")), "json") {
 		_ = json.Unmarshal(out.Body, &out.JSON)
 	}
 	return out, nil
 }
 
-func (c *codexOAuthProtocolHTTPClient) deviceID() string {
-	if c == nil || c.state == nil {
+func requireGptOpenAIURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
+	if host == "chatgpt.com" || strings.HasSuffix(host, ".chatgpt.com") || host == "openai.com" || strings.HasSuffix(host, ".openai.com") {
+		return nil
+	}
+	return fmt.Errorf("gpt client refuses non gpt/openai url: %s", host)
+}
+
+func (c *GptClient) headers(referer string, acceptHTML bool, hasBody bool) http.Header {
+	if strings.TrimSpace(referer) == "" {
+		referer = "https://auth.openai.com/"
+	}
+	origin := "https://auth.openai.com"
+	if parsed, err := url.Parse(referer); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+		origin = parsed.Scheme + "://" + parsed.Host
+	}
+	accept := "application/json"
+	if acceptHTML {
+		accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+	}
+	headers := http.Header{
+		"Accept":  {accept},
+		"Origin":  {origin},
+		"Referer": {referer},
+	}
+	if hasBody {
+		headers.Set("Content-Type", "application/json")
+	}
+	c.applyGptIdentityHeaders(headers)
+	return headers
+}
+
+func (c *GptClient) applyGptIdentityHeaders(headers http.Header) {
+	if headers == nil {
+		return
+	}
+	c.profile.ApplyBrowserHeaders(headers)
+	if headers.Get("User-Agent") == "" {
+		headers.Set("User-Agent", codexOAuthProtocolUserAgent)
+	}
+	headers.Set("Accept-Language", codexOAuthProtocolAcceptLanguage)
+	if deviceID := c.deviceID(); deviceID != "" {
+		headers.Set("oai-device-id", deviceID)
+	}
+	headers.Set("oai-language", codexOAuthProtocolLanguage)
+	for key, value := range codexOAuthProtocolDatadogHeaders() {
+		headers.Set(key, value)
+	}
+}
+
+func (c *GptClient) deviceID() string {
+	if c == nil {
 		return ""
 	}
-	if deviceID := strings.TrimSpace(c.state.DeviceID); deviceID != "" {
+	if deviceID := strings.TrimSpace(c.profile.DeviceID); deviceID != "" {
+		if c.state != nil {
+			c.state.DeviceID = deviceID
+		}
 		return deviceID
 	}
-	for _, cookies := range c.jar.GetAllCookies() {
-		for _, cookie := range cookies {
-			if cookie != nil && strings.EqualFold(cookie.Name, "oai-did") && strings.TrimSpace(cookie.Value) != "" {
-				c.state.DeviceID = strings.TrimSpace(cookie.Value)
-				return c.state.DeviceID
+	if c.state != nil {
+		if deviceID := strings.TrimSpace(c.state.DeviceID); deviceID != "" {
+			return deviceID
+		}
+	}
+	if c.client != nil && c.client.CookieJar() != nil {
+		for _, cookies := range c.client.CookieJar().GetAllCookies() {
+			for _, cookie := range cookies {
+				if cookie != nil && strings.EqualFold(cookie.Name, "oai-did") && strings.TrimSpace(cookie.Value) != "" {
+					deviceID := strings.TrimSpace(cookie.Value)
+					if c.state != nil {
+						c.state.DeviceID = deviceID
+					}
+					return deviceID
+				}
 			}
 		}
 	}
 	return ""
 }
 
-func (c *codexOAuthProtocolHTTPClient) cookieValue(name string, hostHints ...string) string {
+func (c *GptClient) userAgent() string {
+	if c != nil {
+		if userAgent := strings.TrimSpace(c.profile.UserAgent); userAgent != "" {
+			return userAgent
+		}
+	}
+	return codexOAuthProtocolUserAgent
+}
+
+func (c *GptClient) cookieValue(name string, hostHints ...string) string {
 	name = strings.TrimSpace(name)
-	if c == nil || name == "" {
+	if c == nil || c.client == nil || c.client.CookieJar() == nil || name == "" {
 		return ""
 	}
-	for hostKey, cookies := range c.jar.GetAllCookies() {
+	for hostKey, cookies := range c.client.CookieJar().GetAllCookies() {
 		if len(hostHints) > 0 {
 			matched := false
 			for _, hint := range hostHints {
@@ -186,35 +252,28 @@ func (c *codexOAuthProtocolHTTPClient) cookieValue(name string, hostHints ...str
 	return ""
 }
 
-func codexOAuthProtocolHeaders(referer, deviceID string, acceptHTML bool, hasBody bool) fhttp.Header {
-	if strings.TrimSpace(referer) == "" {
-		referer = "https://auth.openai.com/"
+func codexOAuthProtocolDefaultProfile(cfg CodexOAuthConfig) fingerprinthttp.Profile {
+	cfg = cfg.withDefaults()
+	candidate, _ := browserfingerprint.SelectChromiumCandidate(browserfingerprint.DefaultChromiumCandidates(), cfg.ProtocolTLSProfile)
+	fp := browserfingerprint.BuildChromium(candidate, "en-US", codexOAuthProtocolStableDeviceID(candidate))
+	if strings.TrimSpace(fp.UserAgent) == "" {
+		fp.UserAgent = codexOAuthProtocolUserAgent
 	}
-	origin := "https://auth.openai.com"
-	if parsed, err := url.Parse(referer); err == nil && parsed.Scheme != "" && parsed.Host != "" {
-		origin = parsed.Scheme + "://" + parsed.Host
+	return fingerprinthttp.Profile{
+		ProxyURL:       cfg.ProtocolProxyURL,
+		TLSProfileName: fp.TLSProfileName,
+		UserAgent:      fp.UserAgent,
+		SecCHUA:        fp.SecCHUA,
+		SecCHPlatform:  fp.SecCHPlatform,
+		AcceptLanguage: codexOAuthProtocolAcceptLanguage,
+		Language:       codexOAuthProtocolLanguage,
+		DeviceID:       fp.DeviceID,
 	}
-	accept := "application/json"
-	if acceptHTML {
-		accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-	}
-	headers := fhttp.Header{
-		"Accept":          {accept},
-		"Accept-Language": {"en-US,en;q=0.9"},
-		"Origin":          {origin},
-		"Referer":         {referer},
-		"User-Agent":      {codexOAuthProtocolUserAgent},
-	}
-	if hasBody {
-		headers.Set("Content-Type", "application/json")
-	}
-	if strings.TrimSpace(deviceID) != "" {
-		headers.Set("oai-device-id", strings.TrimSpace(deviceID))
-	}
-	for key, value := range codexOAuthProtocolDatadogHeaders() {
-		headers.Set(key, value)
-	}
-	return headers
+}
+
+func codexOAuthProtocolStableDeviceID(candidate browserfingerprint.ChromiumCandidate) string {
+	seed := fmt.Sprintf("byte-v-forge:codex-oauth-protocol:device:%s:%s:%s", candidate.ProfileName, candidate.MajorVersion, browserfingerprint.OSAlias(candidate))
+	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
 }
 
 func codexOAuthProtocolResponseJSON(resp *codexOAuthProtocolHTTPResponse) map[string]any {
@@ -244,7 +303,7 @@ func codexOAuthProtocolSafeText(value string, maxLen int) string {
 	value = codexOAuthProtocolCodeRE.ReplaceAllString(value, `"$1":"<redacted>"`)
 	value = codexOAuthProtocolEmailRE.ReplaceAllString(value, "<email>")
 	value = codexOAuthProtocolPhoneRE.ReplaceAllString(value, "<phone>")
-	return compactBrowserAuthText(value, maxLen)
+	return stringx.CompactSnippet(value, maxLen)
 }
 
 func codexOAuthProtocolAbsoluteURL(raw string) string {

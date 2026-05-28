@@ -33,20 +33,3 @@ func extractOTP(value string) string {
 func normalizeTier(tier string) string {
 	return strings.ToLower(strings.TrimSpace(tier))
 }
-
-func shouldSkipPlusTrialProbe(account AccountRef) bool {
-	return account.GetPlusActive() || normalizeTier(account.GetTier()) == "plus"
-}
-
-func skippedPlusTrialProbeData(account AccountRef) map[string]any {
-	reason := "plus_active"
-	if normalizeTier(account.GetTier()) == "plus" {
-		reason = "tier_plus"
-	}
-	return map[string]any{
-		"skipped":     true,
-		"reason":      reason,
-		"tier":        account.GetTier(),
-		"plus_active": account.GetPlusActive(),
-	}
-}

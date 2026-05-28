@@ -1,6 +1,6 @@
 import { Play } from 'lucide-react';
-import { RecordActionButtons } from '@/dashboard/module-kit';
-import type { RowActionDescriptor } from '@/dashboard/module-kit';
+import { RecordActionButtons } from '@byte-v-forge/common-ui';
+import type { RowActionDescriptor } from '@byte-v-forge/common-ui';
 import { canRegister } from './account-utils';
 import type { Account } from './types';
 

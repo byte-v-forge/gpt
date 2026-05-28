@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Badge, KVList, numberValue, objectValue, stringValue } from '@/dashboard/module-kit';
-import { registerWorkflowStepRenderers, stepDetailData } from '@/dashboard/modules/workflow/sdk';
-import type { WorkflowStepRendererProps } from '@/dashboard/modules/workflow/sdk';
+import { Badge, KVList, numberValue, objectValue, stringValue } from '@byte-v-forge/common-ui';
+import { stepDetailData } from './job-utils';
+import { registerWorkflowStepRenderers, type WorkflowStepRendererProps } from './step-renderers';
 import QRCode from 'qrcode';
 
 let registered = false;

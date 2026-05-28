@@ -3,6 +3,7 @@ package paymentsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/http"
 	"net/url"
 	"strings"
@@ -220,7 +221,7 @@ func (c *charger) tokenizePIN(ctx context.Context, challengeID, clientID string,
 	if resp.status >= 400 {
 		return "", fmt.Errorf("pin tokenize %d: %s", resp.status, resp.excerpt(500))
 	}
-	token := firstNonEmpty(stringAt(resp.data(), "token"), stringAt(resp.data(), "pin_token"), stringAt(resp.json, "data", "token"), stringAt(resp.json, "data", "pin_token"))
+	token := stringx.FirstNonEmpty(stringAt(resp.data(), "token"), stringAt(resp.data(), "pin_token"), stringAt(resp.json, "data", "token"), stringAt(resp.json, "data", "pin_token"))
 	if token == "" {
 		return "", fmt.Errorf("pin tokenize: no token in response")
 	}
@@ -257,10 +258,10 @@ func (c *charger) midtransCreateChargeData(ctx context.Context, snapToken string
 		return nil, err
 	}
 	chargeRef := extractMidtransChargeReference(resp.json)
-	qrString := firstNonEmpty(stringAt(resp.json, "qr_string"), stringAt(resp.json, "qris_string"))
+	qrString := stringx.FirstNonEmpty(stringAt(resp.json, "qr_string"), stringAt(resp.json, "qris_string"))
 	urls := midtransChargeURLs(resp.json)
 	if chargeRef == "" && isQRISTokenization(c.tokenization) && (qrString != "" || urls["qr_code_url"] != "") {
-		chargeRef = firstNonEmpty(extractReferenceFromText(urls["qr_code_url"]), snapToken)
+		chargeRef = stringx.FirstNonEmpty(extractReferenceFromText(urls["qr_code_url"]), snapToken)
 	}
 	if chargeRef == "" {
 		return nil, fmt.Errorf("midtrans charge: no reference in response: %s", jsonExcerpt(redactMidtransChargeDebug(resp.json), 500))
@@ -461,7 +462,7 @@ func (c *charger) midtransPollStatus(ctx context.Context, snapToken string) (map
 }
 
 func (c *charger) followMidtransFinishRedirect(ctx context.Context, state map[string]any, midtransStatus map[string]any) string {
-	finishURL := firstNonEmpty(stringAt(midtransStatus, "finish_redirect_url"), stringAt(midtransStatus, "finish_200_redirect_url"), stringAt(state, "finish_redirect_url"), stringAt(state, "finish_200_redirect_url"))
+	finishURL := stringx.FirstNonEmpty(stringAt(midtransStatus, "finish_redirect_url"), stringAt(midtransStatus, "finish_200_redirect_url"), stringAt(state, "finish_redirect_url"), stringAt(state, "finish_200_redirect_url"))
 	if finishURL == "" {
 		return ""
 	}

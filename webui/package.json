@@ -1,0 +1,58 @@
+{
+  "name": "@byte-v-forge/dashboard-gpt",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/dashboard/manifest.tsx",
+    "./proto/*": "./src/proto/*.ts"
+  },
+  "scripts": {
+    "proto": "./scripts/generate-proto.sh",
+    "prebuild": "npm run proto",
+    "prelint": "npm run proto",
+    "build": "vite build",
+    "lint": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@byte-v-forge/common-ui": "0.1.0",
+    "@tanstack/react-query": "^5.100.11",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.562.0",
+    "qrcode": "^1.5.4",
+    "radix-ui": "^1.4.3",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-hook-form": "^7.76.0",
+    "tailwind-merge": "^3.6.0"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "^1.15.5",
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/node": "^25.6.2",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.2",
+    "tailwindcss": "^4.3.0",
+    "ts-proto": "^2.11.8",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.0"
+  },
+  "dependencies": {
+    "@byte-v-forge/common-ui": "0.1.0",
+    "@faker-js/faker": "^10.4.0",
+    "@tanstack/react-query": "^5.100.11",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "country-region-data": "^4.1.0",
+    "lucide-react": "^0.562.0",
+    "qrcode": "^1.5.4",
+    "radix-ui": "^1.4.3",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-hook-form": "^7.76.0",
+    "tailwind-merge": "^3.6.0"
+  }
+}

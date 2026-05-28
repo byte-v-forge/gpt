@@ -1,22 +1,28 @@
 package app
 
 import (
-	"log"
-	"os"
 	"time"
 
-	workflowruntime "github.com/byte-v-forge/workflow-runtime"
+	"github.com/byte-v-forge/common-lib/envx"
+	"github.com/byte-v-forge/common-lib/natseventbus"
 )
 
 type orchestratorConfig struct {
-	ListenAddr string
+	ListenAddr        string
+	DashboardHTTPAddr string
+	N8NWebhookBaseURL string
 
-	BrowserAutomationAddr string
-	PaymentAddr           string
-	GoPayAppAddr          string
-	SmsAddr               string
-	AccountDBAddr         string
-	MailboxAddr           string
+	BrowserAutomationAddr  string
+	PaymentAddr            string
+	GoPayAppAddr           string
+	SmsAddr                string
+	GPTAccountAddr         string
+	RuntimeSecretRedisURL  string
+	OTPRelayRedisURL       string
+	RuntimeSecretKeyPrefix string
+	RuntimeSecretTTL       time.Duration
+	PlatformNATSURL        string
+	EventStreamName        string
 
 	BrowserAuthProxyRef       string
 	BrowserAuthLocale         string
@@ -46,12 +52,11 @@ type orchestratorConfig struct {
 	CodexOAuthPhoneMaxReuseCount            int
 	CodexOAuthPhoneCountryISO2              string
 	CodexOAuthPhoneCountryCallingCode       string
-	CodexOAuthPhoneMaxPriceUSD              string
 	CodexOAuthPhoneWaitSeconds              int32
 	CodexOAuthPhoneMinReuseRemainingSeconds int32
 
 	GoPayOTPWebhookListenAddr              string
-	MailboxWebhookToken                    string
+	GoPayOTPRelayKeyPrefix                 string
 	GoPayOTPWebhookTTL                     time.Duration
 	GoPayOTPWebhookMaxItems                int
 	GoPayOTPTimeout                        int32
@@ -87,99 +92,93 @@ type orchestratorConfig struct {
 	ChangePhoneDisabled            bool
 	ChangePhoneOTPRetryAttempts    int
 	ChangePhoneGetNumberRetryDelay time.Duration
-
-	WorkflowRuntime workflowruntime.Config
 }
 
 func loadOrchestratorConfig() orchestratorConfig {
 	return orchestratorConfig{
-		ListenAddr: envDefault("LISTEN_ADDR", ":50051"),
+		ListenAddr:        envx.StringDefault("LISTEN_ADDR", ":50051"),
+		DashboardHTTPAddr: envx.StringDefault("GPT_DASHBOARD_HTTP_ADDR", ":8080"),
+		N8NWebhookBaseURL: envx.StringDefault("GPT_N8N_WEBHOOK_BASE_URL", ""),
 
-		BrowserAutomationAddr: envDefault("BROWSER_AUTOMATION_ADDR", "browser-automation:50051"),
-		PaymentAddr:           envDefault("GPT_GOPAY_PAYMENT_ADDR", "127.0.0.1:50054"),
-		GoPayAppAddr:          envDefault("GPT_GOPAY_APP_ADDR", "127.0.0.1:50060"),
-		SmsAddr:               envDefault("SMS_ADDR", "sms-service:50051"),
-		AccountDBAddr:         envDefault("GPT_ACCOUNT_ADDR", "127.0.0.1:50052"),
-		MailboxAddr:           envDefault("MAILBOX_ADDR", "mailbox:50051"),
+		BrowserAutomationAddr:  envx.StringDefault("BROWSER_AUTOMATION_ADDR", "browser-automation:50051"),
+		PaymentAddr:            envx.StringDefault("GPT_GOPAY_PAYMENT_ADDR", "127.0.0.1:50054"),
+		GoPayAppAddr:           envx.StringDefault("GPT_GOPAY_APP_ADDR", "127.0.0.1:50060"),
+		SmsAddr:                envx.StringDefault("SMS_ADDR", "sms-service:50051"),
+		GPTAccountAddr:         envx.StringDefault("GPT_ACCOUNT_ADDR", "127.0.0.1:50052"),
+		RuntimeSecretRedisURL:  envx.StringDefault("GPT_RUNTIME_SECRET_REDIS_URL", ""),
+		OTPRelayRedisURL:       envx.StringDefault("GPT_OTP_RELAY_REDIS_URL", ""),
+		RuntimeSecretKeyPrefix: envx.StringDefault("GPT_RUNTIME_SECRET_KEY_PREFIX", "byte-v-forge:gpt:runtime-secrets"),
+		RuntimeSecretTTL:       envx.PositiveDurationSeconds("GPT_RUNTIME_SECRET_TTL_SECONDS", 24*time.Hour),
+		PlatformNATSURL:        envx.StringDefault("PLATFORM_NATS_URL", ""),
+		EventStreamName:        envx.StringDefault("PLATFORM_EVENT_STREAM_NAME", natseventbus.DefaultStream),
 
-		BrowserAuthProxyRef:       envDefault("BROWSER_AUTH_PROXY_REF", "register"),
-		BrowserAuthLocale:         envDefault("BROWSER_AUTH_LOCALE", "en-US"),
-		BrowserAuthAcceptLanguage: envDefault("BROWSER_AUTH_ACCEPT_LANGUAGE", "en-US,en;q=0.9"),
-		BrowserAuthTimezone:       envDefault("BROWSER_AUTH_TIMEZONE", ""),
-		BrowserAuthUserAgent:      envDefault("BROWSER_AUTH_USER_AGENT", ""),
-		BrowserAuthWindowWidth:    envInt("BROWSER_AUTH_WINDOW_WIDTH", 1365),
-		BrowserAuthWindowHeight:   envInt("BROWSER_AUTH_WINDOW_HEIGHT", 768),
-		BrowserAuthSessionTTL:     envPositiveDurationSeconds("BROWSER_AUTH_SESSION_TTL_SECONDS", 30*time.Minute),
-		BrowserAuthCommandTimeout: envPositiveDurationSeconds("BROWSER_AUTH_COMMAND_TIMEOUT_SECONDS", 120*time.Second),
-		BrowserAuthBlockImages:    envBool("BROWSER_AUTH_BLOCK_IMAGES", false),
-		BrowserAuthGeoIP:          envBool("BROWSER_AUTH_GEOIP", true),
-		BrowserAuthHumanize:       envDefault("BROWSER_AUTH_HUMANIZE", "true"),
+		BrowserAuthProxyRef:       envx.StringDefault("BROWSER_AUTH_PROXY_REF", "register"),
+		BrowserAuthLocale:         envx.StringDefault("BROWSER_AUTH_LOCALE", "en-US"),
+		BrowserAuthAcceptLanguage: envx.StringDefault("BROWSER_AUTH_ACCEPT_LANGUAGE", "en-US,en;q=0.9"),
+		BrowserAuthTimezone:       envx.StringDefault("BROWSER_AUTH_TIMEZONE", ""),
+		BrowserAuthUserAgent:      envx.StringDefault("BROWSER_AUTH_USER_AGENT", ""),
+		BrowserAuthWindowWidth:    envx.PositiveInt("BROWSER_AUTH_WINDOW_WIDTH", 1365),
+		BrowserAuthWindowHeight:   envx.PositiveInt("BROWSER_AUTH_WINDOW_HEIGHT", 768),
+		BrowserAuthSessionTTL:     envx.PositiveDurationSeconds("BROWSER_AUTH_SESSION_TTL_SECONDS", 30*time.Minute),
+		BrowserAuthCommandTimeout: envx.PositiveDurationSeconds("BROWSER_AUTH_COMMAND_TIMEOUT_SECONDS", 120*time.Second),
+		BrowserAuthBlockImages:    envx.Bool("BROWSER_AUTH_BLOCK_IMAGES", false),
+		BrowserAuthGeoIP:          envx.Bool("BROWSER_AUTH_GEOIP", true),
+		BrowserAuthHumanize:       envx.StringDefault("BROWSER_AUTH_HUMANIZE", "true"),
 
-		CodexOAuthClientID:                      envDefault("CODEX_OAUTH_CLIENT_ID", "app_EMoamEEZ73f0CkXaXp7hrann"),
-		CodexOAuthRedirectURI:                   envDefault("CODEX_OAUTH_REDIRECT_URI", "http://localhost:1455/auth/callback"),
-		CodexOAuthAuthURL:                       envDefault("CODEX_OAUTH_AUTH_URL", "https://auth.openai.com/oauth/authorize"),
-		CodexOAuthTokenURL:                      envDefault("CODEX_OAUTH_TOKEN_URL", "https://auth.openai.com/oauth/token"),
-		CodexOAuthTokenProxyURL:                 envDefault("CODEX_OAUTH_TOKEN_PROXY_URL", ""),
-		CodexOAuthProtocolProxyURL:              envDefault("CODEX_OAUTH_PROTOCOL_PROXY_URL", ""),
-		CodexOAuthProtocolProxyRuntimeHTTPAddr:  envDefault("CODEX_OAUTH_PROTOCOL_PROXY_RUNTIME_HTTP_ADDR", ""),
-		CodexOAuthProtocolTLSProfile:            envDefault("CODEX_OAUTH_PROTOCOL_TLS_PROFILE", "chrome_146"),
-		CodexOAuthProtocolSessionDumpEnabled:    envBool("CODEX_OAUTH_PROTOCOL_SESSION_DUMP_ENABLED", true),
-		CodexOAuthScope:                         envDefault("CODEX_OAUTH_SCOPE", "openid profile email offline_access api.connectors.read api.connectors.invoke"),
-		CodexOAuthPhoneLabel:                    envDefault("CODEX_OAUTH_PHONE_LABEL", "codex-oauth-add-phone"),
-		CodexOAuthPhoneProfileKey:               envDefault("CODEX_OAUTH_PHONE_PROFILE_KEY", "openai-th"),
-		CodexOAuthPhoneMaxReuseCount:            envInt("CODEX_OAUTH_PHONE_MAX_REUSE_COUNT", 3),
-		CodexOAuthPhoneCountryISO2:              envDefault("CODEX_OAUTH_PHONE_COUNTRY_ISO2", "TH"),
-		CodexOAuthPhoneCountryCallingCode:       envDefault("CODEX_OAUTH_PHONE_COUNTRY_CALLING_CODE", "66"),
-		CodexOAuthPhoneMaxPriceUSD:              envDefault("CODEX_OAUTH_PHONE_MAX_PRICE_USD", "0.067"),
-		CodexOAuthPhoneWaitSeconds:              envInt32("CODEX_OAUTH_PHONE_WAIT_SECONDS", 120),
-		CodexOAuthPhoneMinReuseRemainingSeconds: envInt32("CODEX_OAUTH_PHONE_MIN_REUSE_REMAINING_SECONDS", 300),
+		CodexOAuthClientID:                      envx.StringDefault("CODEX_OAUTH_CLIENT_ID", "app_EMoamEEZ73f0CkXaXp7hrann"),
+		CodexOAuthRedirectURI:                   envx.StringDefault("CODEX_OAUTH_REDIRECT_URI", "http://localhost:1455/auth/callback"),
+		CodexOAuthAuthURL:                       envx.StringDefault("CODEX_OAUTH_AUTH_URL", "https://auth.openai.com/oauth/authorize"),
+		CodexOAuthTokenURL:                      envx.StringDefault("CODEX_OAUTH_TOKEN_URL", "https://auth.openai.com/oauth/token"),
+		CodexOAuthTokenProxyURL:                 envx.StringDefault("CODEX_OAUTH_TOKEN_PROXY_URL", ""),
+		CodexOAuthProtocolProxyURL:              envx.StringDefault("CODEX_OAUTH_PROTOCOL_PROXY_URL", ""),
+		CodexOAuthProtocolProxyRuntimeHTTPAddr:  envx.StringDefault("CODEX_OAUTH_PROTOCOL_PROXY_RUNTIME_HTTP_ADDR", ""),
+		CodexOAuthProtocolTLSProfile:            envx.StringDefault("CODEX_OAUTH_PROTOCOL_TLS_PROFILE", "chrome_146"),
+		CodexOAuthProtocolSessionDumpEnabled:    envx.Bool("CODEX_OAUTH_PROTOCOL_SESSION_DUMP_ENABLED", true),
+		CodexOAuthScope:                         envx.StringDefault("CODEX_OAUTH_SCOPE", "openid profile email offline_access api.connectors.read api.connectors.invoke"),
+		CodexOAuthPhoneLabel:                    envx.StringDefault("CODEX_OAUTH_PHONE_LABEL", "codex-oauth-add-phone"),
+		CodexOAuthPhoneProfileKey:               envx.StringDefault("CODEX_OAUTH_PHONE_PROFILE_KEY", "openai-th"),
+		CodexOAuthPhoneMaxReuseCount:            envx.PositiveInt("CODEX_OAUTH_PHONE_MAX_REUSE_COUNT", 3),
+		CodexOAuthPhoneCountryISO2:              envx.StringDefault("CODEX_OAUTH_PHONE_COUNTRY_ISO2", "TH"),
+		CodexOAuthPhoneCountryCallingCode:       envx.StringDefault("CODEX_OAUTH_PHONE_COUNTRY_CALLING_CODE", "66"),
+		CodexOAuthPhoneWaitSeconds:              envx.PositiveInt32("CODEX_OAUTH_PHONE_WAIT_SECONDS", 120),
+		CodexOAuthPhoneMinReuseRemainingSeconds: envx.PositiveInt32("CODEX_OAUTH_PHONE_MIN_REUSE_REMAINING_SECONDS", 300),
 
-		GoPayOTPWebhookListenAddr:              envDefault("GOPAY_OTP_WEBHOOK_LISTEN_ADDR", ":8081"),
-		MailboxWebhookToken:                    envDefault("GPT_MAILBOX_WEBHOOK_TOKEN", ""),
-		GoPayOTPWebhookTTL:                     envPositiveDurationSeconds("GOPAY_OTP_WEBHOOK_TTL_SECONDS", 10*time.Minute),
-		GoPayOTPWebhookMaxItems:                envInt("GOPAY_OTP_WEBHOOK_MAX_ITEMS", 100),
-		GoPayOTPTimeout:                        envInt32("GOPAY_OTP_TIMEOUT_SECONDS", 180),
-		RegistrationOTPWait:                    envInt32("REGISTRATION_OTP_TIMEOUT_SECONDS", 180),
-		GoPayAppStepBodyLimit:                  int32(envInt("GOPAY_APP_STEP_BODY_LIMIT", 6000)),
-		GoPayAppLinkPaymentTimeout:             envPositiveDurationSeconds("GOPAY_APP_LINK_PAYMENT_TIMEOUT_SECONDS", 180*time.Second),
-		GoPayAppUnlinkTimeout:                  envPositiveDurationSeconds("GOPAY_APP_UNLINK_TIMEOUT_SECONDS", 15*time.Second),
-		GoPayAddBalanceMode:                    envDefault("GOPAY_ADD_BALANCE_MODE", "manual_transfer"),
-		GoPayAddBalanceEnvelopeLink:            envDefault("GOPAY_ADD_BALANCE_ENVELOPE_LINK", ""),
-		GoPayAddBalanceTransferInstructions:    envDefault("GOPAY_ADD_BALANCE_TRANSFER_INSTRUCTIONS", ""),
-		GoPayAddBalanceTransferAmountRp:        int64(envInt("GOPAY_ADD_BALANCE_TRANSFER_AMOUNT_RP", 1)),
-		GoPayAddBalanceTransferCurrency:        envDefault("GOPAY_ADD_BALANCE_TRANSFER_CURRENCY", "IDR"),
-		GoPayAddBalanceRekberinajaEndpoint:     envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_ENDPOINT_URL", "https://api.rekberinaja.com/api/transaction/product/checkout"),
-		GoPayAddBalanceRekberinajaToken:        envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_BEARER_TOKEN", ""),
-		GoPayAddBalanceRekberinajaDeviceID:     envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_DEVICE_ID", ""),
-		GoPayAddBalanceRekberinajaStore:        envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_STORE", "rekberinaja"),
-		GoPayAddBalanceRekberinajaProductID:    envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_PRODUCT_ID", ""),
-		GoPayAddBalanceRekberinajaServiceID:    envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_SERVICE_ID", ""),
-		GoPayAddBalanceRekberinajaPayment:      envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_PAYMENT_METHOD", "saldo"),
-		GoPayAddBalanceRekberinajaEmail:        envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_INVOICE_EMAIL", ""),
-		GoPayAddBalanceRekberinajaPromoCode:    envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_PROMO_CODE", ""),
-		GoPayAddBalanceRekberinajaUsePoin:      envBool("GOPAY_ADD_BALANCE_REKBERINAJA_USE_POIN", false),
-		GoPayAddBalanceRekberinajaUserAgent:    envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_USER_AGENT", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"),
-		GoPayAddBalanceRekberinajaOrigin:       envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_ORIGIN", "https://rekberinaja.com"),
-		GoPayAddBalanceRekberinajaReferer:      envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_REFERER", "https://rekberinaja.com/"),
-		GoPayAddBalanceRekberinajaRefresh:      envDefault("GOPAY_ADD_BALANCE_REKBERINAJA_REFRESH_TOKEN", ""),
-		GoPayAddBalanceRekberinajaFeeTotal:     int64(envInt("GOPAY_ADD_BALANCE_REKBERINAJA_FEE_TOTAL_RP", 1300)),
-		GoPayAddBalanceRekberinajaPollTimeout:  envInt32("GOPAY_ADD_BALANCE_REKBERINAJA_POLL_TIMEOUT_SECONDS", 180),
-		GoPayAddBalanceRekberinajaPollInterval: envInt32("GOPAY_ADD_BALANCE_REKBERINAJA_POLL_INTERVAL_SECONDS", 5),
-		GoPayAddBalanceConfirmTimeoutSeconds:   envInt32("GOPAY_ADD_BALANCE_CONFIRM_TIMEOUT_SECONDS", 1800),
+		GoPayOTPWebhookListenAddr:              envx.StringDefault("GOPAY_OTP_WEBHOOK_LISTEN_ADDR", ":8081"),
+		GoPayOTPRelayKeyPrefix:                 envx.StringDefault("GOPAY_OTP_RELAY_KEY_PREFIX", "byte-v-forge:gpt:gopay-otp"),
+		GoPayOTPWebhookTTL:                     envx.PositiveDurationSeconds("GOPAY_OTP_WEBHOOK_TTL_SECONDS", 10*time.Minute),
+		GoPayOTPWebhookMaxItems:                envx.PositiveInt("GOPAY_OTP_WEBHOOK_MAX_ITEMS", 100),
+		GoPayOTPTimeout:                        envx.PositiveInt32("GOPAY_OTP_TIMEOUT_SECONDS", 180),
+		RegistrationOTPWait:                    envx.PositiveInt32("REGISTRATION_OTP_TIMEOUT_SECONDS", 180),
+		GoPayAppStepBodyLimit:                  int32(envx.PositiveInt("GOPAY_APP_STEP_BODY_LIMIT", 6000)),
+		GoPayAppLinkPaymentTimeout:             envx.PositiveDurationSeconds("GOPAY_APP_LINK_PAYMENT_TIMEOUT_SECONDS", 180*time.Second),
+		GoPayAppUnlinkTimeout:                  envx.PositiveDurationSeconds("GOPAY_APP_UNLINK_TIMEOUT_SECONDS", 15*time.Second),
+		GoPayAddBalanceMode:                    envx.StringDefault("GOPAY_ADD_BALANCE_MODE", "manual_transfer"),
+		GoPayAddBalanceEnvelopeLink:            envx.StringDefault("GOPAY_ADD_BALANCE_ENVELOPE_LINK", ""),
+		GoPayAddBalanceTransferInstructions:    envx.StringDefault("GOPAY_ADD_BALANCE_TRANSFER_INSTRUCTIONS", ""),
+		GoPayAddBalanceTransferAmountRp:        int64(envx.PositiveInt("GOPAY_ADD_BALANCE_TRANSFER_AMOUNT_RP", 1)),
+		GoPayAddBalanceTransferCurrency:        envx.StringDefault("GOPAY_ADD_BALANCE_TRANSFER_CURRENCY", "IDR"),
+		GoPayAddBalanceRekberinajaEndpoint:     envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_ENDPOINT_URL", "https://api.rekberinaja.com/api/transaction/product/checkout"),
+		GoPayAddBalanceRekberinajaToken:        envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_BEARER_TOKEN", ""),
+		GoPayAddBalanceRekberinajaDeviceID:     envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_DEVICE_ID", ""),
+		GoPayAddBalanceRekberinajaStore:        envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_STORE", "rekberinaja"),
+		GoPayAddBalanceRekberinajaProductID:    envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_PRODUCT_ID", ""),
+		GoPayAddBalanceRekberinajaServiceID:    envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_SERVICE_ID", ""),
+		GoPayAddBalanceRekberinajaPayment:      envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_PAYMENT_METHOD", "saldo"),
+		GoPayAddBalanceRekberinajaEmail:        envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_INVOICE_EMAIL", ""),
+		GoPayAddBalanceRekberinajaPromoCode:    envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_PROMO_CODE", ""),
+		GoPayAddBalanceRekberinajaUsePoin:      envx.Bool("GOPAY_ADD_BALANCE_REKBERINAJA_USE_POIN", false),
+		GoPayAddBalanceRekberinajaUserAgent:    envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_USER_AGENT", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"),
+		GoPayAddBalanceRekberinajaOrigin:       envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_ORIGIN", "https://rekberinaja.com"),
+		GoPayAddBalanceRekberinajaReferer:      envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_REFERER", "https://rekberinaja.com/"),
+		GoPayAddBalanceRekberinajaRefresh:      envx.StringDefault("GOPAY_ADD_BALANCE_REKBERINAJA_REFRESH_TOKEN", ""),
+		GoPayAddBalanceRekberinajaFeeTotal:     int64(envx.PositiveInt("GOPAY_ADD_BALANCE_REKBERINAJA_FEE_TOTAL_RP", 1300)),
+		GoPayAddBalanceRekberinajaPollTimeout:  envx.PositiveInt32("GOPAY_ADD_BALANCE_REKBERINAJA_POLL_TIMEOUT_SECONDS", 180),
+		GoPayAddBalanceRekberinajaPollInterval: envx.PositiveInt32("GOPAY_ADD_BALANCE_REKBERINAJA_POLL_INTERVAL_SECONDS", 5),
+		GoPayAddBalanceConfirmTimeoutSeconds:   envx.PositiveInt32("GOPAY_ADD_BALANCE_CONFIRM_TIMEOUT_SECONDS", 1800),
 
-		ChangePhoneMaxFailures:         envInt("GOPAY_CHANGE_PHONE_MAX_FAILURES", defaultChangePhoneMaxFailures),
-		ChangePhoneDisabled:            envBool("GOPAY_CHANGE_PHONE_DISABLED", false),
-		ChangePhoneOTPRetryAttempts:    envIntNonNegative("GOPAY_CHANGE_PHONE_OTP_RETRY_ATTEMPTS", defaultChangePhoneOTPRetryAttempts),
-		ChangePhoneGetNumberRetryDelay: envNonNegativeDurationSeconds("GOPAY_CHANGE_PHONE_GET_NUMBER_RETRY_SECONDS", defaultChangePhoneGetNumberRetryDelay),
-
-		WorkflowRuntime: loadWorkflowRuntimeConfig(),
+		ChangePhoneMaxFailures:         envx.PositiveInt("GOPAY_CHANGE_PHONE_MAX_FAILURES", defaultChangePhoneMaxFailures),
+		ChangePhoneDisabled:            envx.Bool("GOPAY_CHANGE_PHONE_DISABLED", false),
+		ChangePhoneOTPRetryAttempts:    envx.NonNegativeInt("GOPAY_CHANGE_PHONE_OTP_RETRY_ATTEMPTS", defaultChangePhoneOTPRetryAttempts),
+		ChangePhoneGetNumberRetryDelay: envx.NonNegativeDurationSeconds("GOPAY_CHANGE_PHONE_GET_NUMBER_RETRY_SECONDS", defaultChangePhoneGetNumberRetryDelay),
 	}
-}
-
-func loadWorkflowRuntimeConfig() workflowruntime.Config {
-	config, err := workflowruntime.LoadConfigFromEnv(os.Getenv)
-	if err != nil {
-		log.Fatalf("load workflow runtime config: %v", err)
-	}
-	return config
 }

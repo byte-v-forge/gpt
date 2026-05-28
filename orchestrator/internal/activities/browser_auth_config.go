@@ -5,20 +5,18 @@ import (
 )
 
 const (
-	browserAuthStageQueued             = "queued"
-	browserAuthStageStarting           = "starting"
-	browserAuthStageEmailEntry         = "email_entry"
-	browserAuthStageCredentialEntry    = "credential_entry"
-	browserAuthStageOTPRequestClick    = "otp_request_click"
-	browserAuthStageOTPRequestClicked  = "otp_request_clicked"
-	browserAuthStageWaitingForOTP      = "waiting_for_otp"
-	browserAuthStageOTPSubmit          = "otp_submit"
-	browserAuthStageSessionCapture     = "session_capture"
-	browserAuthStageSucceeded          = "succeeded"
-	browserAuthStageFailed             = "failed"
-	browserAuthStageCancelled          = "cancelled"
-	browserAuthDefaultRegistrationName = "Alex Morgan"
-	browserAuthDefaultBirthday         = "01/15/1990"
+	browserAuthStageQueued            = "queued"
+	browserAuthStageStarting          = "starting"
+	browserAuthStageEmailEntry        = "email_entry"
+	browserAuthStageCredentialEntry   = "credential_entry"
+	browserAuthStageOTPRequestClick   = "otp_request_click"
+	browserAuthStageOTPRequestClicked = "otp_request_clicked"
+	browserAuthStageWaitingForOTP     = "waiting_for_otp"
+	browserAuthStageOTPSubmit         = "otp_submit"
+	browserAuthStageSessionCapture    = "session_capture"
+	browserAuthStageSucceeded         = "succeeded"
+	browserAuthStageFailed            = "failed"
+	browserAuthStageCancelled         = "cancelled"
 )
 
 type BrowserAuthConfig struct {
@@ -27,6 +25,10 @@ type BrowserAuthConfig struct {
 	AcceptLanguage string
 	Timezone       string
 	UserAgent      string
+	SecCHUA        string
+	SecCHPlatform  string
+	DeviceID       string
+	TLSProfileName string
 	WindowWidth    int
 	WindowHeight   int
 	SessionTTL     time.Duration

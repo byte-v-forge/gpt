@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/url"
 	"regexp"
 	"strings"
@@ -18,7 +19,7 @@ var codexOAuthProtocolWorkspaceIDPatterns = []*regexp.Regexp{
 }
 var codexOAuthProtocolUnifiedSessionRE = regexp.MustCompile(`us_[A-Za-z0-9]{16,}`)
 
-func runCodexOAuthProtocolURL(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, startURL, referer string, data map[string]any) (string, error) {
+func runCodexOAuthProtocolURL(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, startURL, referer string, data map[string]any) (string, error) {
 	currentURL := codexOAuthProtocolAbsoluteURL(startURL)
 	if currentURL == "" {
 		return state.Stage, nil
@@ -78,7 +79,7 @@ func runCodexOAuthProtocolURL(ctx context.Context, client *codexOAuthProtocolHTT
 	return "", fmt.Errorf("codex oauth protocol redirect limit exceeded")
 }
 
-func advanceCodexOAuthProtocolJSON(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, resp *codexOAuthProtocolHTTPResponse, sourceStage string, data map[string]any) (string, error) {
+func advanceCodexOAuthProtocolJSON(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, resp *codexOAuthProtocolHTTPResponse, sourceStage string, data map[string]any) (string, error) {
 	if err := codexOAuthProtocolRequireOK(resp, sourceStage); err != nil {
 		return "", err
 	}
@@ -164,7 +165,7 @@ func codexOAuthProtocolContinueURL(payload map[string]any) string {
 	}
 	page, _ := payload["page"].(map[string]any)
 	pagePayload, _ := page["payload"].(map[string]any)
-	return strings.TrimSpace(firstNonEmptyAny(pagePayload["url"], pagePayload["continue_url"]))
+	return strings.TrimSpace(stringx.FirstNonEmptyAny(pagePayload["url"], pagePayload["continue_url"]))
 }
 
 func codexOAuthProtocolStageFromURL(rawURL, body string) string {
@@ -222,7 +223,7 @@ func codexOAuthProtocolDeviceID(body string) string {
 	return strings.TrimSpace(match[1])
 }
 
-func codexOAuthProtocolWorkspaceContinue(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, currentURL, body string, data map[string]any) (string, bool) {
+func codexOAuthProtocolWorkspaceContinue(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, currentURL, body string, data map[string]any) (string, bool) {
 	workspaceID := codexOAuthProtocolWorkspaceIDFromState(state)
 	if workspaceID == "" {
 		workspaceID = codexOAuthProtocolQueryFirst(currentURL, "workspace_id", "id")
@@ -254,7 +255,7 @@ func codexOAuthProtocolWorkspaceContinue(ctx context.Context, client *codexOAuth
 	return nextURL, true
 }
 
-func codexOAuthProtocolChooseAccountContinue(ctx context.Context, client *codexOAuthProtocolHTTPClient, state *codexOAuthProtocolState, currentURL, body string, data map[string]any) (string, bool) {
+func codexOAuthProtocolChooseAccountContinue(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, currentURL, body string, data map[string]any) (string, bool) {
 	match := codexOAuthProtocolUnifiedSessionRE.FindString(body)
 	if match == "" {
 		return "", false

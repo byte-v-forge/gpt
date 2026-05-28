@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"fmt"
+	"orchestrator/internal/accountfingerprint"
 	"orchestrator/pb"
 	"strings"
 )
@@ -64,6 +65,12 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 		if strings.TrimSpace(account.GetEmail()) == "" {
 			return AccountRef{}, fmt.Errorf("account email is required")
 		}
+		if err := s.generateAccountFingerprint(ctx, account.GetAccountId(), accountfingerprint.GenerateParams{
+			CountryCode: spec.GetCountryCode(),
+			Region:      spec.GetRegion(),
+		}); err != nil {
+			return AccountRef{}, err
+		}
 		return accountRef(account), nil
 	}
 
@@ -92,7 +99,13 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 		return AccountRef{}, err
 	}
 	if resp.GetAccount() == nil || resp.GetAccount().GetAccountId() == "" {
-		return AccountRef{}, fmt.Errorf("account-db returned empty account")
+		return AccountRef{}, fmt.Errorf("gpt-account returned empty account")
+	}
+	if err := s.generateAccountFingerprint(ctx, resp.GetAccount().GetAccountId(), accountfingerprint.GenerateParams{
+		CountryCode: spec.GetCountryCode(),
+		Region:      spec.GetRegion(),
+	}); err != nil {
+		return AccountRef{}, err
 	}
 	return accountRef(resp.GetAccount()), nil
 }
@@ -115,7 +128,7 @@ func (s *Server) acquireEmail(ctx context.Context, accountID string, excludes []
 
 func accountEmailStrategy(spec *pb.AccountSpec) pb.AccountEmailStrategy {
 	if spec == nil || spec.GetEmailStrategy() == pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_UNSPECIFIED {
-		return pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_OUTLOOK_ALIAS
+		return pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_POOLED_ALIAS
 	}
 	return spec.GetEmailStrategy()
 }

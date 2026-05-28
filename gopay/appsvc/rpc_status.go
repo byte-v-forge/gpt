@@ -2,6 +2,7 @@ package appsvc
 
 import (
 	"context"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"time"
 
 	"github.com/byte-v-forge/gpt/gopay/pb"
@@ -19,7 +20,7 @@ func (s *Server) Status(ctx context.Context, req *pb.StatusRequest) (*pb.StatusR
 		errorMessage = stateString(state, "last_token_refresh_error")
 	}
 	return &pb.StatusResponse{
-		Stage:                     firstNonEmpty(stateString(state, "stage"), "idle"),
+		Stage:                     stringx.FirstNonEmpty(stateString(state, "stage"), "idle"),
 		Phone:                     stateString(state, "phone"),
 		DeviceFingerprint:         deviceFingerprintForState(state),
 		DeactivatedAt:             stateInt(state, "deactivated_at"),
@@ -51,7 +52,7 @@ func (s *Server) GetReadyAccountToken(ctx context.Context, req *pb.GetReadyAccou
 	if stateString(state, "stage") == "ready" {
 		check := s.checkTokenValid(ctx, state)
 		if !anyBool(check["success"]) || !anyBool(check["token_valid"]) {
-			return &pb.GetReadyAccountTokenResponse{Success: false, ErrorMessage: firstNonEmpty(anyString(check["error"]), "token validation failed"), StateJson: stateJSON(state)}, nil
+			return &pb.GetReadyAccountTokenResponse{Success: false, ErrorMessage: stringx.FirstNonEmpty(anyString(check["error"]), "token validation failed"), StateJson: stateJSON(state)}, nil
 		}
 		if !anyBool(check["has_min_balance"]) {
 			return &pb.GetReadyAccountTokenResponse{Success: false, ErrorMessage: s.tokenCheckError(check), StateJson: stateJSON(state)}, nil
@@ -59,7 +60,7 @@ func (s *Server) GetReadyAccountToken(ctx context.Context, req *pb.GetReadyAccou
 	}
 	token := stateString(state, "token")
 	if stateString(state, "stage") != "ready" || token == "" {
-		return &pb.GetReadyAccountTokenResponse{Success: false, ErrorMessage: "account token not ready: stage=" + firstNonEmpty(stateString(state, "stage"), "idle"), StateJson: stateJSON(state)}, nil
+		return &pb.GetReadyAccountTokenResponse{Success: false, ErrorMessage: "account token not ready: stage=" + stringx.FirstNonEmpty(stateString(state, "stage"), "idle"), StateJson: stateJSON(state)}, nil
 	}
 	if !tokenUsable(state, "token", 0) {
 		return &pb.GetReadyAccountTokenResponse{Success: false, ErrorMessage: "account token expired", StateJson: stateJSON(state)}, nil

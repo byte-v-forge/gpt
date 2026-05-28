@@ -7,9 +7,9 @@ import {
   RecordList,
   RecordMain,
   RecordTop
-} from '@/dashboard/module-kit';
-import type { RowActionDescriptor } from '@/dashboard/module-kit';
-import { maskEmail } from '@/dashboard/modules/mailbox/sdk';
+} from '@byte-v-forge/common-ui';
+import type { RowActionDescriptor } from '@byte-v-forge/common-ui';
+import { maskEmail } from '@byte-v-forge/common-ui';
 import {
   accountActivationChannel,
   accountCodexPhoneState,

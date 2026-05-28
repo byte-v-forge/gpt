@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,6 +12,9 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/byte-v-forge/common-lib/envx"
+	"github.com/byte-v-forge/common-lib/httpjson"
+	"github.com/byte-v-forge/common-lib/jsonx"
 	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
@@ -28,7 +32,7 @@ type Config struct {
 	DisplayEncoderKey     string
 	DisplayEncoderID      string
 	SignedMsgTemplatePath string
-	Logger                protocol.Logger
+	Logger                httpjson.Logger
 	DebugHTTP             bool
 }
 
@@ -37,15 +41,15 @@ func ConfigFromEnv(token string) Config {
 		Token:        token,
 		ProxyURL:     os.Getenv("GOPAY_PROXY_URL"),
 		DeviceConfig: DeviceConfigFromEnv(),
-		DebugHTTP:    envBool("GOPAY_APP_DEBUG_HTTP_REQUESTS"),
-		SignVersion:  firstNonEmpty(os.Getenv("GOPAY_SIGN_VERSION"), defaultGoPaySignVersion),
-		LegacyHMACKey: firstNonEmpty(
+		DebugHTTP:    envx.Bool("GOPAY_APP_DEBUG_HTTP_REQUESTS", false),
+		SignVersion:  stringx.FirstNonEmpty(os.Getenv("GOPAY_SIGN_VERSION"), defaultGoPaySignVersion),
+		LegacyHMACKey: stringx.FirstNonEmpty(
 			os.Getenv("GOPAY_LEGACY_DISPLAY_ENCODER_KEY"),
 			os.Getenv("GOPAY_HMAC_KEY"),
 			defaultGoPayLegacyDisplayEncoderKey,
 		),
-		DisplayEncoderKey:     firstNonEmpty(os.Getenv("GOPAY_DISPLAY_ENCODER_KEY"), defaultGoPayDisplayEncoderKey),
-		DisplayEncoderID:      firstNonEmpty(os.Getenv("GOPAY_DISPLAY_ENCODER_ID"), defaultGoPayDisplayEncoderID),
+		DisplayEncoderKey:     stringx.FirstNonEmpty(os.Getenv("GOPAY_DISPLAY_ENCODER_KEY"), defaultGoPayDisplayEncoderKey),
+		DisplayEncoderID:      stringx.FirstNonEmpty(os.Getenv("GOPAY_DISPLAY_ENCODER_ID"), defaultGoPayDisplayEncoderID),
 		SignedMsgTemplatePath: strings.TrimSpace(os.Getenv("GOPAY_SIGNED_MSG_TEMPLATE")),
 	}
 }
@@ -53,9 +57,9 @@ func ConfigFromEnv(token string) Config {
 type Client struct {
 	token     string
 	device    DeviceFingerprint
-	http      *protocol.Client
+	http      *httpjson.Client
 	signer    Signer
-	logger    protocol.Logger
+	logger    httpjson.Logger
 	debugHTTP bool
 }
 
@@ -70,7 +74,7 @@ func NewClient(cfg Config) (*Client, error) {
 	} else if device.TLSProfileName == "" {
 		device.TLSProfileName = protocol.ResolveTLSProfileName("")
 	}
-	var httpClient protocol.HTTPDoer
+	var httpClient httpjson.Doer
 	if cfg.HTTPClient != nil {
 		httpClient = cfg.HTTPClient
 	} else {
@@ -80,7 +84,7 @@ func NewClient(cfg Config) (*Client, error) {
 			return nil, err
 		}
 	}
-	base, err := protocol.NewClient("", protocol.WithHTTPDoer(httpClient), protocol.WithRetry(protocol.RetryPolicy{Attempts: 1}), protocol.WithLogger(cfg.Logger))
+	base, err := httpjson.NewClient("", httpjson.WithHTTPDoer(httpClient), httpjson.WithRetry(httpjson.RetryPolicy{Attempts: 1}), httpjson.WithLogger(cfg.Logger))
 	if err != nil {
 		return nil, err
 	}
@@ -104,33 +108,33 @@ func (c *Client) Device() DeviceFingerprint {
 	return c.device
 }
 
-func (c *Client) Get(ctx context.Context, rawURL string, expected ...int) (*protocol.Response, error) {
+func (c *Client) Get(ctx context.Context, rawURL string, expected ...int) (*httpjson.Response, error) {
 	return c.request(ctx, http.MethodGet, rawURL, nil, nil, expected...)
 }
 
-func (c *Client) Post(ctx context.Context, rawURL string, body any, expected ...int) (*protocol.Response, error) {
+func (c *Client) Post(ctx context.Context, rawURL string, body any, expected ...int) (*httpjson.Response, error) {
 	return c.request(ctx, http.MethodPost, rawURL, body, nil, expected...)
 }
 
-func (c *Client) Patch(ctx context.Context, rawURL string, body any, expected ...int) (*protocol.Response, error) {
+func (c *Client) Patch(ctx context.Context, rawURL string, body any, expected ...int) (*httpjson.Response, error) {
 	return c.request(ctx, http.MethodPatch, rawURL, body, nil, expected...)
 }
 
-func (c *Client) Put(ctx context.Context, rawURL string, body any, expected ...int) (*protocol.Response, error) {
+func (c *Client) Put(ctx context.Context, rawURL string, body any, expected ...int) (*httpjson.Response, error) {
 	return c.request(ctx, http.MethodPut, rawURL, body, nil, expected...)
 }
 
-func (c *Client) Delete(ctx context.Context, rawURL string, body any, expected ...int) (*protocol.Response, error) {
+func (c *Client) Delete(ctx context.Context, rawURL string, body any, expected ...int) (*httpjson.Response, error) {
 	return c.request(ctx, http.MethodDelete, rawURL, body, nil, expected...)
 }
 
-func (c *Client) Request(ctx context.Context, method string, rawURL string, body any, extra http.Header, expected ...int) (*protocol.Response, error) {
+func (c *Client) Request(ctx context.Context, method string, rawURL string, body any, extra http.Header, expected ...int) (*httpjson.Response, error) {
 	return c.request(ctx, method, rawURL, body, extra, expected...)
 }
 
-func (c *Client) TokenizePINWeb(ctx context.Context, pin string, challengeID string, clientID string, expected ...int) (*protocol.Response, error) {
+func (c *Client) TokenizePINWeb(ctx context.Context, pin string, challengeID string, clientID string, expected ...int) (*httpjson.Response, error) {
 	rawURL := CustomerBaseURL + "/api/v1/users/pin/tokens/nb"
-	bodyRaw, err := protocol.CompactJSON(map[string]any{
+	bodyRaw, err := jsonx.Compact(map[string]any{
 		"challenge_id": challengeID,
 		"client_id":    clientID,
 		"pin":          pin,
@@ -140,7 +144,7 @@ func (c *Client) TokenizePINWeb(ctx context.Context, pin string, challengeID str
 	}
 	headers := pinWebHeaders()
 	c.logHTTPRequest(ctx, http.MethodPost, rawURL, headers, bodyRaw)
-	resp, err := c.http.Do(ctx, protocol.Request{
+	resp, err := c.http.Do(ctx, httpjson.Request{
 		Method:       http.MethodPost,
 		Path:         rawURL,
 		Body:         bodyRaw,
@@ -152,8 +156,8 @@ func (c *Client) TokenizePINWeb(ctx context.Context, pin string, challengeID str
 	return resp, err
 }
 
-func (c *Client) request(ctx context.Context, method string, rawURL string, body any, extra http.Header, expected ...int) (*protocol.Response, error) {
-	bodyRaw, err := protocol.CompactJSON(body)
+func (c *Client) request(ctx context.Context, method string, rawURL string, body any, extra http.Header, expected ...int) (*httpjson.Response, error) {
+	bodyRaw, err := jsonx.Compact(body)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +166,7 @@ func (c *Client) request(ctx context.Context, method string, rawURL string, body
 		return nil, err
 	}
 	c.logHTTPRequest(ctx, method, rawURL, headers, bodyRaw)
-	resp, err := c.http.Do(ctx, protocol.Request{
+	resp, err := c.http.Do(ctx, httpjson.Request{
 		Method:       method,
 		Path:         rawURL,
 		Body:         bodyRaw,

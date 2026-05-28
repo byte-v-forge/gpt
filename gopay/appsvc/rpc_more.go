@@ -3,6 +3,7 @@ package appsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ func (s *Server) AuthStart(ctx context.Context, req *pb.AuthStartRequest) (*pb.A
 	}
 	tokenCheck := s.checkTokenValid(ctx, state)
 	if s.tokenCheckValid(tokenCheck) {
-		return &pb.AuthStartResponse{Success: true, Mode: "token", Stage: firstNonEmpty(stateString(state, "stage"), "ready"), Ready: true, StateJson: stateJSON(state)}, nil
+		return &pb.AuthStartResponse{Success: true, Mode: "token", Stage: stringx.FirstNonEmpty(stateString(state, "stage"), "ready"), Ready: true, StateJson: stateJSON(state)}, nil
 	}
 	switch stage {
 	case "login_otp_pending":
@@ -44,20 +45,20 @@ func (s *Server) AuthStart(ctx context.Context, req *pb.AuthStartRequest) (*pb.A
 		if ready {
 			tokenCheck := s.checkTokenValid(ctx, state)
 			if !s.tokenCheckValid(tokenCheck) {
-				return &pb.AuthStartResponse{Success: false, ErrorMessage: s.tokenCheckError(tokenCheck), Mode: "login", Stage: firstNonEmpty(stateString(state, "stage"), "idle"), StateJson: stateJSON(state)}, nil
+				return &pb.AuthStartResponse{Success: false, ErrorMessage: s.tokenCheckError(tokenCheck), Mode: "login", Stage: stringx.FirstNonEmpty(stateString(state, "stage"), "idle"), StateJson: stateJSON(state)}, nil
 			}
 		}
-		return &pb.AuthStartResponse{Success: true, Mode: "login", Stage: firstNonEmpty(stateString(state, "stage"), "idle"), OtpSent: anyBool(login["otp_sent"]), VerificationId: anyString(login["verification_id"]), VerificationMethod: anyString(login["method"]), Ready: ready, StateJson: stateJSON(state)}, nil
+		return &pb.AuthStartResponse{Success: true, Mode: "login", Stage: stringx.FirstNonEmpty(stateString(state, "stage"), "idle"), OtpSent: anyBool(login["otp_sent"]), VerificationId: anyString(login["verification_id"]), VerificationMethod: anyString(login["method"]), Ready: ready, StateJson: stateJSON(state)}, nil
 	}
 	if !anyBool(login["not_registered"]) {
-		return &pb.AuthStartResponse{Success: false, ErrorMessage: anyString(login["error"]), Mode: "login", Stage: firstNonEmpty(stateString(state, "stage"), "idle"), StateJson: stateJSON(state)}, nil
+		return &pb.AuthStartResponse{Success: false, ErrorMessage: anyString(login["error"]), Mode: "login", Stage: stringx.FirstNonEmpty(stateString(state, "stage"), "idle"), StateJson: stateJSON(state)}, nil
 	}
 	signup := s.startSignup(ctx, state, phone, "", "", req.GetCountryCode(), req.GetOtpChannel(), false)
 	return &pb.AuthStartResponse{
 		Success:            anyBool(signup["success"]),
 		ErrorMessage:       anyString(signup["error"]),
 		Mode:               "signup",
-		Stage:              firstNonEmpty(stateString(state, "stage"), "idle"),
+		Stage:              stringx.FirstNonEmpty(stateString(state, "stage"), "idle"),
 		OtpSent:            anyBool(signup["otp_sent"]),
 		VerificationId:     anyString(signup["verification_id"]),
 		VerificationMethod: anyString(signup["method"]),
@@ -75,20 +76,20 @@ func (s *Server) AuthComplete(ctx context.Context, req *pb.AuthCompleteRequest) 
 		if s.tokenCheckValid(tokenCheck) {
 			return &pb.AuthCompleteResponse{Success: true, Mode: "token", Stage: "ready", Phone: stateString(state, "phone"), Ready: true, StateJson: stateJSON(state)}, nil
 		}
-		return &pb.AuthCompleteResponse{Success: false, ErrorMessage: s.tokenCheckError(tokenCheck), Mode: "token", Stage: firstNonEmpty(stateString(state, "stage"), "ready"), Phone: stateString(state, "phone"), StateJson: stateJSON(state)}, nil
+		return &pb.AuthCompleteResponse{Success: false, ErrorMessage: s.tokenCheckError(tokenCheck), Mode: "token", Stage: stringx.FirstNonEmpty(stateString(state, "stage"), "ready"), Phone: stateString(state, "phone"), StateJson: stateJSON(state)}, nil
 	}
 	switch stage {
 	case "login_otp_pending":
 		if err := s.completeLogin(ctx, state, req.GetOtp()); err != nil {
-			return &pb.AuthCompleteResponse{Success: false, ErrorMessage: err.Error(), Mode: "login", Stage: firstNonEmpty(stateString(state, "stage"), "idle"), StateJson: stateJSON(state)}, nil
+			return &pb.AuthCompleteResponse{Success: false, ErrorMessage: err.Error(), Mode: "login", Stage: stringx.FirstNonEmpty(stateString(state, "stage"), "idle"), StateJson: stateJSON(state)}, nil
 		}
-		stage := firstNonEmpty(stateString(state, "stage"), "idle")
+		stage := stringx.FirstNonEmpty(stateString(state, "stage"), "idle")
 		ready := stage == "ready"
 		return &pb.AuthCompleteResponse{
 			Success:            true,
 			Mode:               "login",
 			Stage:              stage,
-			Phone:              firstNonEmpty(stateString(state, "phone"), stateString(state, "_login_phone")),
+			Phone:              stringx.FirstNonEmpty(stateString(state, "phone"), stateString(state, "_login_phone")),
 			Ready:              ready,
 			OtpSent:            stage == "login_otp_pending",
 			VerificationId:     stateString(state, "_login_verification_id"),
@@ -98,20 +99,20 @@ func (s *Server) AuthComplete(ctx context.Context, req *pb.AuthCompleteRequest) 
 	case "signup_otp_pending":
 		result := s.completeSignup(ctx, state, req.GetOtp())
 		ready := anyBool(result["success"]) && stateString(state, "stage") == "ready"
-		return &pb.AuthCompleteResponse{Success: anyBool(result["success"]), ErrorMessage: anyString(result["error"]), Mode: "signup", Stage: firstNonEmpty(stateString(state, "stage"), "idle"), Phone: anyString(result["phone"]), Ready: ready, PinSetupRequired: anyBool(result["pin_setup_required"]), StateJson: stateJSON(state)}, nil
+		return &pb.AuthCompleteResponse{Success: anyBool(result["success"]), ErrorMessage: anyString(result["error"]), Mode: "signup", Stage: stringx.FirstNonEmpty(stateString(state, "stage"), "idle"), Phone: anyString(result["phone"]), Ready: ready, PinSetupRequired: anyBool(result["pin_setup_required"]), StateJson: stateJSON(state)}, nil
 	case "signup_pin_otp_pending":
 		result := s.completeSignupPIN(ctx, state, req.GetOtp(), req.GetPin())
 		ready := anyBool(result["success"]) && stateString(state, "stage") == "ready"
-		return &pb.AuthCompleteResponse{Success: anyBool(result["success"]), ErrorMessage: anyString(result["error"]), Mode: "signup", Stage: firstNonEmpty(stateString(state, "stage"), "idle"), Phone: anyString(result["phone"]), Ready: ready, PinSetupComplete: anyBool(result["pin_setup_complete"]), StateJson: stateJSON(state)}, nil
+		return &pb.AuthCompleteResponse{Success: anyBool(result["success"]), ErrorMessage: anyString(result["error"]), Mode: "signup", Stage: stringx.FirstNonEmpty(stateString(state, "stage"), "idle"), Phone: anyString(result["phone"]), Ready: ready, PinSetupComplete: anyBool(result["pin_setup_complete"]), StateJson: stateJSON(state)}, nil
 	default:
-		return &pb.AuthCompleteResponse{Success: false, ErrorMessage: fmt.Sprintf("not waiting for auth otp: %s", firstNonEmpty(stage, "idle")), Stage: firstNonEmpty(stage, "idle"), StateJson: stateJSON(state)}, nil
+		return &pb.AuthCompleteResponse{Success: false, ErrorMessage: fmt.Sprintf("not waiting for auth otp: %s", stringx.FirstNonEmpty(stage, "idle")), Stage: stringx.FirstNonEmpty(stage, "idle"), StateJson: stateJSON(state)}, nil
 	}
 }
 
 func (s *Server) CheckTokenValid(ctx context.Context, req *pb.CheckTokenValidRequest) (*pb.CheckTokenValidResponse, error) {
 	state := s.parseRequestState(req.GetStateJson())
 	result := s.checkTokenValid(ctx, state)
-	return &pb.CheckTokenValidResponse{Success: anyBool(result["success"]), ErrorMessage: anyString(result["error"]), Stage: firstNonEmpty(stateString(state, "stage"), "idle"), Phone: stateString(state, "phone"), TokenValid: anyBool(result["token_valid"]), Refreshed: anyBool(result["refreshed"]), BalanceAmount: anyInt(result["balance_amount"]), HasMinBalance: anyBool(result["has_min_balance"]), BalanceCurrency: anyString(result["balance_currency"]), StateJson: stateJSON(state)}, nil
+	return &pb.CheckTokenValidResponse{Success: anyBool(result["success"]), ErrorMessage: anyString(result["error"]), Stage: stringx.FirstNonEmpty(stateString(state, "stage"), "idle"), Phone: stateString(state, "phone"), TokenValid: anyBool(result["token_valid"]), Refreshed: anyBool(result["refreshed"]), BalanceAmount: anyInt(result["balance_amount"]), HasMinBalance: anyBool(result["has_min_balance"]), BalanceCurrency: anyString(result["balance_currency"]), StateJson: stateJSON(state)}, nil
 }
 
 func (s *Server) ChangePhoneStart(ctx context.Context, req *pb.ChangePhoneStartRequest) (*pb.ChangePhoneStartResponse, error) {

@@ -1,6 +1,6 @@
 import { Bug, Copy, Inbox, Trash2 } from 'lucide-react';
-import { ActionButtonGroup, Button, buttonHint, formatUnix, mask } from '@/dashboard/module-kit';
-import type { ActionButtonDescriptor } from '@/dashboard/module-kit';
+import { ActionButtonGroup, Button, buttonHint, formatUnix, mask } from '@byte-v-forge/common-ui';
+import type { ActionButtonDescriptor } from '@byte-v-forge/common-ui';
 import { PaymentChannelIcon } from './account-badges';
 import { accountInboxHint } from './account-mail-utils';
 import { canGoPayPayment } from './account-utils';
@@ -83,7 +83,7 @@ function mailboxActions(account: Account, showSecrets: boolean, busy: boolean, i
   return [{
     id: 'fetch-otp',
     visible: canFetchOTP,
-    label: inboxLoading ? '拉取中' : '拉取 OTP',
+    label: inboxLoading ? '读取中' : '刷新投影',
     hint: accountInboxHint(account.email, mailboxContext, showSecrets),
     icon: <Inbox size={14} />,
     disabled: busy || inboxLoading,

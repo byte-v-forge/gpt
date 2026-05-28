@@ -3,15 +3,15 @@ package appsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/httpjson"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"net/http"
 	"strings"
 	"time"
-
-	"github.com/byte-v-forge/gpt/gopay/protocol"
 )
 
 type anyClient interface {
-	Get(context.Context, string, ...int) (*protocol.Response, error)
+	Get(context.Context, string, ...int) (*httpjson.Response, error)
 }
 
 func (s *Server) changePhoneStart(ctx context.Context, state stateMap, pin, newPhone, countryCode string) map[string]any {
@@ -89,7 +89,7 @@ func (s *Server) changePhoneRetry(ctx context.Context, state stateMap) map[strin
 	otpToken := stateString(state, "_change_otp_token")
 	phone := stateString(state, "_change_phone")
 	if otpToken == "" || phone == "" {
-		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for change phone otp: %s", firstNonEmpty(stateString(state, "stage"), "idle"))}
+		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for change phone otp: %s", stringx.FirstNonEmpty(stateString(state, "stage"), "idle"))}
 	}
 	client, err := s.clientForState(ctx, state)
 	if err != nil {
@@ -119,7 +119,7 @@ func (s *Server) changePhoneComplete(ctx context.Context, state stateMap, otp st
 	otpToken := stateString(state, "_change_otp_token")
 	phone := stateString(state, "_change_phone")
 	if otpToken == "" || phone == "" {
-		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for change phone otp: %s", firstNonEmpty(stateString(state, "stage"), "idle"))}
+		return map[string]any{"success": false, "error": fmt.Sprintf("not waiting for change phone otp: %s", stringx.FirstNonEmpty(stateString(state, "stage"), "idle"))}
 	}
 	if strings.TrimSpace(otp) == "" {
 		return map[string]any{"success": false, "error": "otp required"}
@@ -200,13 +200,13 @@ func (s *Server) syncProfileFields(state stateMap, profile map[string]any, count
 	if email := anyString(profile["email"]); email != "" {
 		state["email"] = email
 	}
-	if phone := firstNonEmpty(anyString(profile["phone"]), anyString(profile["number"])); phone != "" {
+	if phone := stringx.FirstNonEmpty(anyString(profile["phone"]), anyString(profile["number"])); phone != "" {
 		state["phone"] = normalizePhone(phone, countryCode)
 	}
 }
 
 func (s *Server) changePhoneProfileBody(state stateMap, countryCode, phone string) map[string]any {
-	name := firstNonEmpty(stateString(state, "name"), "gg")
+	name := stringx.FirstNonEmpty(stateString(state, "name"), "gg")
 	email := stateString(state, "email")
 	if email == "" {
 		email = fallbackProfileEmail(countryCode, phone)
@@ -233,11 +233,11 @@ func (s *Server) confirmChangePhone(ctx context.Context, client anyClient, count
 		if errMsg != "" {
 			last = errMsg
 		} else {
-			actual := normalizePhone(firstNonEmpty(anyString(profile["phone"]), anyString(profile["number"])), countryCode)
+			actual := normalizePhone(stringx.FirstNonEmpty(anyString(profile["phone"]), anyString(profile["number"])), countryCode)
 			if actual == expected {
 				return true, ""
 			}
-			last = fmt.Sprintf("phone change not confirmed: expected %s, got %s", expected, firstNonEmpty(actual, "-"))
+			last = fmt.Sprintf("phone change not confirmed: expected %s, got %s", expected, stringx.FirstNonEmpty(actual, "-"))
 		}
 		if time.Now().After(deadline) {
 			return false, last
@@ -246,7 +246,7 @@ func (s *Server) confirmChangePhone(ctx context.Context, client anyClient, count
 	}
 }
 
-func phoneRegisteredResponse(resp *protocol.Response) bool {
+func phoneRegisteredResponse(resp *httpjson.Response) bool {
 	if resp == nil || resp.StatusCode != http.StatusBadRequest {
 		return false
 	}

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
+	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -24,16 +24,16 @@ func (f *browserAuthFlow) startSession(client browserautomationv1.BrowserAutomat
 				Width:  int32(cfg.WindowWidth),
 				Height: int32(cfg.WindowHeight),
 			},
-			ProxyRef: cfg.ProxyRef,
-			ExtraHttpHeaders: map[string]string{
-				"Accept-Language": cfg.AcceptLanguage,
-			},
-			InitScripts: []string{browserAuthLanguageOverrideScript(cfg.Locale)},
+			ProxyRef:         cfg.ProxyRef,
+			ExtraHttpHeaders: browserAuthHeaders(cfg),
+			InitScripts:      []string{browserAuthLanguageOverrideScript(cfg.Locale)},
 			Labels: map[string]string{
 				"domain":                   "gpt",
 				"workflow":                 "browser_auth",
 				"mode":                     f.mode,
 				"job_id":                   f.jobID,
+				"fingerprint.device_id":    cfg.DeviceID,
+				"fingerprint.tls_profile":  cfg.TLSProfileName,
 				"camoufox.geoip":           boolLabel(cfg.GeoIP),
 				"camoufox.block_images":    boolLabel(cfg.BlockImages),
 				"camoufox.humanize":        cfg.Humanize,
@@ -58,6 +58,18 @@ func (f *browserAuthFlow) startSession(client browserautomationv1.BrowserAutomat
 	f.sessionID = sessionID
 	f.mu.Unlock()
 	return nil
+}
+
+func browserAuthHeaders(cfg BrowserAuthConfig) map[string]string {
+	headers := map[string]string{"Accept-Language": cfg.AcceptLanguage}
+	if cfg.SecCHUA != "" {
+		headers["sec-ch-ua"] = cfg.SecCHUA
+		headers["sec-ch-ua-mobile"] = "?0"
+	}
+	if cfg.SecCHPlatform != "" {
+		headers["sec-ch-ua-platform"] = cfg.SecCHPlatform
+	}
+	return headers
 }
 
 func (f *browserAuthFlow) stopSession(client browserautomationv1.BrowserAutomationServiceClient) {

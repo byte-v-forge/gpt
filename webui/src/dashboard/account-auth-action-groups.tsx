@@ -1,6 +1,6 @@
 import { KeyRound, Play, RefreshCw, Search } from 'lucide-react';
-import { ActionButtonGroup } from '@/dashboard/module-kit';
-import type { ActionButtonDescriptor } from '@/dashboard/module-kit';
+import { ActionButtonGroup } from '@byte-v-forge/common-ui';
+import type { ActionButtonDescriptor } from '@byte-v-forge/common-ui';
 import { CodexIcon } from './brand-icons';
 import { canLoginSession, canProbeAccount, canRefreshAccessToken, canRegister, loginActionHint, probeAccountHint } from './account-utils';
 import type { Account } from './types';

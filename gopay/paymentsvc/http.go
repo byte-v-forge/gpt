@@ -1,26 +1,22 @@
 package paymentsvc
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	stdhttp "net/http"
 	"net/url"
 	"strings"
 	"time"
 
-	fhttp "github.com/bogdanfinn/fhttp"
-	tlsclient "github.com/bogdanfinn/tls-client"
-	"github.com/byte-v-forge/gpt/gopay/protocol"
+	"github.com/byte-v-forge/common-lib/fingerprinthttp"
+	"github.com/byte-v-forge/common-lib/redactx"
 )
 
 const defaultTimeout = 30 * time.Second
 
 type httpSession struct {
-	client      tlsclient.HttpClient
-	cookieJar   fhttp.CookieJar
+	client      *fingerprinthttp.Client
 	proxyURL    string
 	headers     stdhttp.Header
 	fingerprint browserFingerprint
@@ -47,7 +43,6 @@ func newHTTPSession(proxyURL string, fingerprints ...browserFingerprint) (*httpS
 		fingerprint = fingerprints[0].withFallback(defaultBrowserLocale)
 	}
 	session := &httpSession{
-		cookieJar:   tlsclient.NewCookieJar(),
 		proxyURL:    strings.TrimSpace(proxyURL),
 		headers:     make(stdhttp.Header),
 		fingerprint: fingerprint,
@@ -60,21 +55,18 @@ func newHTTPSession(proxyURL string, fingerprints ...browserFingerprint) (*httpS
 
 func (s *httpSession) rebuildClient(fingerprint browserFingerprint) error {
 	fingerprint = fingerprint.withFallback(defaultBrowserLocale)
-	options := []tlsclient.HttpClientOption{
-		tlsclient.WithTimeoutSeconds(int(defaultTimeout.Seconds())),
-		tlsclient.WithClientProfile(fingerprint.TLSProfile),
-		tlsclient.WithDisableHttp3(),
-		tlsclient.WithCookieJar(s.cookieJar),
-	}
-	if s.proxyURL != "" {
-		options = append(options, tlsclient.WithProxyUrl(s.proxyURL))
-	}
-	client, err := tlsclient.NewHttpClient(tlsclient.NewNoopLogger(), options...)
+	client, err := fingerprinthttp.New(fingerprinthttp.Config{
+		Timeout:      defaultTimeout,
+		ProxyURL:     s.proxyURL,
+		Profile:      fingerprint.httpProfile(s.proxyURL),
+		DisableHTTP3: true,
+		RetryMax:     3,
+	})
 	if err != nil {
 		return err
 	}
 	if s.client != nil {
-		s.client.CloseIdleConnections()
+		s.client.Close()
 	}
 	s.client = client
 	s.fingerprint = fingerprint
@@ -90,37 +82,25 @@ func (s *httpSession) setProxy(proxyURL string) error {
 		return nil
 	}
 	s.proxyURL = proxyURL
-	return s.rebuildClient(s.fingerprint)
+	if s.client != nil {
+		if err := s.client.SetProxy(proxyURL); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *httpSession) close() {
 	if s != nil && s.client != nil {
-		s.client.CloseIdleConnections()
+		s.client.Close()
 	}
 }
 
 func (s *httpSession) cookieHeader(rawURL string) string {
-	if s == nil || s.cookieJar == nil {
+	if s == nil || s.client == nil {
 		return ""
 	}
-	target, err := url.Parse(rawURL)
-	if err != nil {
-		return ""
-	}
-	cookies := s.cookieJar.Cookies(target)
-	parts := make([]string, 0, len(cookies))
-	seen := map[string]bool{}
-	for _, cookie := range cookies {
-		if cookie == nil || strings.TrimSpace(cookie.Name) == "" || cookie.Value == "" {
-			continue
-		}
-		if seen[cookie.Name] {
-			continue
-		}
-		seen[cookie.Name] = true
-		parts = append(parts, cookie.Name+"="+cookie.Value)
-	}
-	return strings.Join(parts, "; ")
+	return s.client.CookieHeader(rawURL)
 }
 
 func mergeCookieHeaders(values ...string) string {
@@ -144,68 +124,22 @@ func mergeCookieHeaders(values ...string) string {
 }
 
 func (s *httpSession) request(ctx context.Context, method, rawURL string, opts requestOptions) (*httpResult, error) {
-	var body io.Reader
+	if s == nil || s.client == nil {
+		return nil, fmt.Errorf("http session is nil")
+	}
 	headers := cloneHeader(s.headers)
 	mergeHeader(headers, opts.headers)
-	if opts.jsonBody != nil {
-		raw, err := protocol.CompactJSON(opts.jsonBody)
-		if err != nil {
-			return nil, err
-		}
-		body = bytes.NewReader(raw)
-		if headers.Get("Content-Type") == "" {
-			headers.Set("Content-Type", "application/json")
-		}
-	} else if opts.formBody != nil {
-		body = strings.NewReader(opts.formBody.Encode())
-		headers.Set("Content-Type", "application/x-www-form-urlencoded")
-	}
-	target, err := url.Parse(rawURL)
+	resp, err := s.client.Request(ctx, method, rawURL, fingerprinthttp.RequestOptions{
+		Headers:    headers,
+		JSONBody:   opts.jsonBody,
+		FormBody:   opts.formBody,
+		Query:      opts.query,
+		NoRedirect: opts.noRedirect,
+	})
 	if err != nil {
 		return nil, err
 	}
-	if len(opts.query) > 0 {
-		query := target.Query()
-		for key, values := range opts.query {
-			for _, value := range values {
-				query.Add(key, value)
-			}
-		}
-		target.RawQuery = query.Encode()
-	}
-	req, err := fhttp.NewRequestWithContext(ctx, strings.ToUpper(method), target.String(), body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header = toFHTTPHeader(headers)
-	client := s.client
-	if opts.noRedirect {
-		client.SetFollowRedirect(false)
-		defer client.SetFollowRedirect(true)
-	}
-	var lastErr error
-	for attempt := 1; attempt <= 3; attempt++ {
-		resp, err := client.Do(req)
-		if err == nil {
-			defer resp.Body.Close()
-			raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 8*1024*1024))
-			if readErr != nil {
-				return nil, readErr
-			}
-			payload, _ := protocol.DecodeJSONMap(raw)
-			return &httpResult{status: resp.StatusCode, headers: fromFHTTPHeader(resp.Header), body: raw, json: map[string]any(payload)}, nil
-		}
-		lastErr = err
-		if attempt >= 3 || !retryableTransportError(err) {
-			break
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(time.Duration(attempt) * time.Second):
-		}
-	}
-	return nil, lastErr
+	return &httpResult{status: resp.StatusCode, headers: resp.Headers, body: resp.Body, json: resp.JSON}, nil
 }
 
 func (r *httpResult) data() map[string]any {
@@ -230,7 +164,7 @@ func (r *httpResult) excerpt(limit int) string {
 		raw, _ := json.Marshal(r.json)
 		text = string(raw)
 	}
-	return protocol.Snippet(protocol.RedactText(text), limit)
+	return redactx.Snippet(redactx.Text(text), limit)
 }
 
 func (r *httpResult) require(status int, label string) error {
@@ -260,37 +194,4 @@ func mergeHeader(dst stdhttp.Header, src stdhttp.Header) {
 			dst.Add(key, value)
 		}
 	}
-}
-
-func toFHTTPHeader(src stdhttp.Header) fhttp.Header {
-	dst := make(fhttp.Header)
-	for key, values := range src {
-		for _, value := range values {
-			dst.Add(key, value)
-		}
-	}
-	return dst
-}
-
-func fromFHTTPHeader(src fhttp.Header) stdhttp.Header {
-	dst := make(stdhttp.Header)
-	for key, values := range src {
-		for _, value := range values {
-			dst.Add(key, value)
-		}
-	}
-	return dst
-}
-
-func retryableTransportError(err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	for _, hint := range []string{"tls", "connection reset", "connection aborted", "timed out", "timeout", "temporarily unavailable", "network is unreachable", "proxy", "eof"} {
-		if strings.Contains(text, hint) {
-			return true
-		}
-	}
-	return false
 }

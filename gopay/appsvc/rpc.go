@@ -3,6 +3,7 @@ package appsvc
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"strings"
 
 	"github.com/byte-v-forge/gpt/gopay/pb"
@@ -40,7 +41,7 @@ func (s *Server) CheckPhone(ctx context.Context, req *pb.CheckPhoneRequest) (*pb
 		return &pb.CheckPhoneResponse{Available: false, Status: "error", ErrorMessage: "generated device missing", StateJson: stateJSON(proxyState)}, nil
 	}
 	result := s.checkPhoneByLoginMethods(ctx, phone, req.GetCountryCode(), proxyState)
-	status := firstNonEmpty(anyString(result["status"]), "error")
+	status := stringx.FirstNonEmpty(anyString(result["status"]), "error")
 	errorMessage := anyString(result["error"])
 	if status == "registered" {
 		errorMessage = "PHONE_REGISTERED"
@@ -109,15 +110,15 @@ func (s *Server) LoginComplete(ctx context.Context, req *pb.LoginCompleteRequest
 	state := s.parseRequestState(req.GetStateJson())
 	s.expireLoginIfNeeded(state)
 	if stateString(state, "stage") != "login_otp_pending" {
-		return &pb.LoginCompleteResponse{Success: false, ErrorMessage: fmt.Sprintf("not waiting for login otp: %s", firstNonEmpty(stateString(state, "stage"), "idle")), StateJson: stateJSON(state)}, nil
+		return &pb.LoginCompleteResponse{Success: false, ErrorMessage: fmt.Sprintf("not waiting for login otp: %s", stringx.FirstNonEmpty(stateString(state, "stage"), "idle")), StateJson: stateJSON(state)}, nil
 	}
 	if err := s.completeLogin(ctx, state, req.GetOtp()); err != nil {
 		return &pb.LoginCompleteResponse{Success: false, ErrorMessage: err.Error(), StateJson: stateJSON(state)}, nil
 	}
-	stage := firstNonEmpty(stateString(state, "stage"), "idle")
+	stage := stringx.FirstNonEmpty(stateString(state, "stage"), "idle")
 	return &pb.LoginCompleteResponse{
 		Success:            true,
-		Phone:              firstNonEmpty(stateString(state, "phone"), stateString(state, "_login_phone")),
+		Phone:              stringx.FirstNonEmpty(stateString(state, "phone"), stateString(state, "_login_phone")),
 		OtpSent:            stage == "login_otp_pending",
 		VerificationId:     stateString(state, "_login_verification_id"),
 		VerificationMethod: stateString(state, "_login_verification_method"),

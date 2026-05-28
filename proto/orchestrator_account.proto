@@ -3,8 +3,8 @@ syntax = "proto3";
 package orchestrator;
 
 import "google/protobuf/struct.proto";
-import "account_db.proto";
-import "mailbox_service.proto";
+import "gpt_account.proto";
+import "byte/v/forge/contracts/mailbox/v1/mailbox.proto";
 
 option go_package = "./;pb";
 
@@ -20,14 +20,14 @@ service AccountWorkflowService {
   rpc CodexOAuthBatchAddPhone(CodexOAuthBatchAddPhoneRequest) returns (CodexOAuthBatchAddPhoneResponse);
   rpc RegisterAndActivateAccount(RegisterAndActivateAccountRequest) returns (RegisterAndActivateAccountResponse);
   rpc FetchAccountMailbox(FetchAccountMailboxRequest) returns (FetchAccountMailboxResponse);
-  rpc SyncAccountMailboxes(SyncAccountMailboxesRequest) returns (SyncAccountMailboxesResponse);
 }
 
 enum AccountEmailStrategy {
   ACCOUNT_EMAIL_STRATEGY_UNSPECIFIED = 0;
   ACCOUNT_EMAIL_STRATEGY_EXPLICIT = 1;
-  ACCOUNT_EMAIL_STRATEGY_OUTLOOK_PRIMARY = 2;
-  ACCOUNT_EMAIL_STRATEGY_OUTLOOK_ALIAS = 3;
+  ACCOUNT_EMAIL_STRATEGY_POOLED_PRIMARY = 2;
+  ACCOUNT_EMAIL_STRATEGY_POOLED_ALIAS = 3;
+  reserved "ACCOUNT_EMAIL_STRATEGY_OUTLOOK_PRIMARY", "ACCOUNT_EMAIL_STRATEGY_OUTLOOK_ALIAS";
 }
 
 enum RegisterOTPMode {
@@ -50,6 +50,8 @@ message AccountSpec {
   reserved 4;
   reserved "use_split_strategy";
   AccountEmailStrategy email_strategy = 5;
+  string country_code = 6;
+  string region = 7;
 }
 
 message AccountRef {
@@ -71,10 +73,12 @@ message CreateGPTAccountRequest {
   reserved 4;
   reserved "use_split_strategy";
   AccountEmailStrategy email_strategy = 5;
+  string country_code = 6;
+  string region = 7;
 }
 
 message CreateGPTAccountResponse {
-  accountdb.Account account = 1;
+  gpt_account.Account account = 1;
   string error_message = 2;
 }
 
@@ -84,26 +88,12 @@ message FetchAccountMailboxRequest {
 }
 
 message FetchAccountMailboxResponse {
-  accountdb.Account account = 1;
-  mailbox.FetchMailboxInboxesResponse inbox = 2;
+  gpt_account.Account account = 1;
+  byte.v.forge.contracts.mailbox.v1.FetchMailboxInboxesResponse inbox = 2;
   string error_message = 3;
 }
 
-message SyncAccountMailboxesRequest {
-  int32 limit_per_mailbox = 1;
-  int32 account_limit = 2;
-}
 
-message SyncAccountMailboxesResponse {
-  bool success = 1;
-  string error_message = 2;
-  int32 account_count = 3;
-  int32 mailbox_count = 4;
-  int32 synced_count = 5;
-  int32 failed_count = 6;
-  int32 message_count = 7;
-  int64 max_message_at_unix = 8;
-}
 
 message PersistRegisteredInput {
   string account_id = 1;
@@ -131,6 +121,28 @@ message BrowserAuthStartInput {
 
 message BrowserAuthStartOutput {
   string account_id = 1;
+  string browser_session_id = 2;
+  string email = 3;
+  bool otp_required = 4;
+  int64 otp_issued_after_unix = 5;
+  int32 otp_timeout_seconds = 6;
+  RegisterActivityOutput result = 7;
+  google.protobuf.Struct data = 8;
+  int64 otp_wait_started_at_unix = 9;
+  int64 otp_request_action_started_at_unix = 10;
+}
+
+message ProtocolAuthStartInput {
+  string job_id = 1;
+  string account_id = 2;
+  string mode = 3;
+  string country_code = 4;
+  string region = 5;
+  string proxy_url = 6;
+}
+
+message ProtocolAuthStartOutput {
+  string account_id = 1;
   string flow_id = 2;
   string email = 3;
   bool otp_required = 4;
@@ -145,7 +157,7 @@ message BrowserAuthStartOutput {
 message BrowserAuthCompleteInput {
   string job_id = 1;
   string account_id = 2;
-  string flow_id = 3;
+  string browser_session_id = 3;
   string mode = 4;
   string otp_param = 5;
   string submitted_at_param = 6;
@@ -156,12 +168,12 @@ message BrowserAuthCompleteInput {
 message BrowserAuthResendOTPInput {
   string job_id = 1;
   string account_id = 2;
-  string flow_id = 3;
+  string browser_session_id = 3;
   string mode = 4;
 }
 
 message BrowserAuthResendOTPOutput {
-  string flow_id = 1;
+  string browser_session_id = 1;
   string email = 2;
   bool success = 3;
   string error_message = 4;
@@ -171,15 +183,16 @@ message BrowserAuthResendOTPOutput {
   google.protobuf.Struct data = 8;
 }
 
-message BrowserAuthWaitInput {
+message ProtocolAuthWaitInput {
   string job_id = 1;
   string account_id = 2;
   string flow_id = 3;
   string mode = 4;
   string email = 5;
+  string proxy_url = 6;
 }
 
-message BrowserAuthWaitOutput {
+message ProtocolAuthWaitOutput {
   string account_id = 1;
   string flow_id = 2;
   string email = 3;
@@ -192,8 +205,26 @@ message BrowserAuthWaitOutput {
   int64 otp_request_action_started_at_unix = 10;
 }
 
-message BrowserAuthCancelInput {
+message ProtocolAuthCompleteInput {
+  string job_id = 1;
+  string account_id = 2;
+  string flow_id = 3;
+  string mode = 4;
+  string otp_param = 5;
+  string submitted_at_param = 6;
+  int64 otp_issued_after_unix = 7;
+  string otp_source = 8;
+  string proxy_url = 9;
+}
+
+message ProtocolAuthCancelInput {
   string flow_id = 1;
+  string mode = 2;
+  string job_id = 3;
+}
+
+message BrowserAuthCancelInput {
+  string browser_session_id = 1;
   string mode = 2;
   string job_id = 3;
 }
@@ -215,6 +246,8 @@ message RegisterAccountRequest {
   reserved "use_split_strategy";
   AccountEmailStrategy email_strategy = 8;
   RegisterOTPOptions otp_options = 9;
+  string country_code = 10;
+  string region = 11;
 }
 
 message RegisterAccountResponse {
@@ -283,6 +316,8 @@ message RegisterAndActivateAccountRequest {
   string gopay_phone = 15;
   string gopay_country_code = 16;
   string gopay_pin = 17;
+  string country_code = 18;
+  string region = 19;
 }
 
 message RegisterAndActivateAccountResponse {
@@ -296,86 +331,6 @@ message RegisterAndActivateAccountResponse {
   string snap_token = 8;
   string access_token = 9;
   bool started = 10;
-}
-
-message RegisterAccountWorkflowInput {
-  string job_id = 1;
-  AccountSpec account = 2;
-  RegisterOTPOptions otp_options = 3;
-}
-
-message RegisterAccountWorkflowResult {
-  string job_id = 1;
-  string session_token = 2;
-  string access_token = 3;
-  bool plus_trial_eligible = 4;
-  string checkout_url = 5;
-  string error_message = 6;
-}
-
-message LoginSessionWorkflowInput {
-  string job_id = 1;
-  string account_id = 2;
-}
-
-message LoginSessionWorkflowResult {
-  string job_id = 1;
-  string session_token = 2;
-  string access_token = 3;
-  string error_message = 4;
-}
-
-message CodexOAuthWorkflowInput {
-  string job_id = 1;
-  string account_id = 2;
-  string label = 3;
-}
-
-message CodexOAuthWorkflowResult {
-  string job_id = 1;
-  bool success = 2;
-  string error_message = 3;
-  string auth_secret_key = 4;
-  bool add_phone_required = 5;
-}
-
-message CodexOAuthAddPhoneWorkflowInput {
-  string job_id = 1;
-  string account_id = 2;
-  string label = 3;
-  int32 max_reuse_count = 4;
-}
-
-message CodexOAuthAddPhoneWorkflowResult {
-  string job_id = 1;
-  bool success = 2;
-  string error_message = 3;
-  string auth_secret_key = 4;
-  string phone_label = 5;
-  int32 phone_reuse_count = 6;
-  int32 phone_reuse_limit = 7;
-}
-
-message CodexOAuthBatchAddPhoneWorkflowInput {
-  string job_id = 1;
-  repeated string account_ids = 2;
-  string label = 3;
-  int32 max_reuse_count = 4;
-}
-
-message CodexOAuthBatchAddPhoneWorkflowResult {
-  string job_id = 1;
-  bool success = 2;
-  string error_message = 3;
-  int32 total_count = 4;
-  int32 success_count = 5;
-  int32 add_phone_count = 6;
-  int32 direct_oauth_count = 7;
-  string stopped_reason = 8;
-  string phone_label = 9;
-  int32 phone_reuse_count = 10;
-  int32 phone_reuse_limit = 11;
-  repeated string processed_account_ids = 12;
 }
 
 message CodexOAuthAcquirePhoneInput {
@@ -491,25 +446,4 @@ message CodexOAuthReleasePhoneInput {
   string activation_id = 3;
   string label = 4;
   string error_message = 5;
-}
-
-message RegisterAndActivateWorkflowInput {
-  string job_id = 1;
-  AccountSpec account = 2;
-  RegisterOTPOptions otp_options = 3;
-  string gopay_phone = 4;
-  string gopay_country_code = 5;
-  string gopay_pin = 6;
-}
-
-message RegisterAndActivateWorkflowResult {
-  string job_id = 1;
-  string session_token = 2;
-  string access_token = 3;
-  bool plus_trial_eligible = 4;
-  string checkout_url = 5;
-  bool activation_success = 6;
-  string error_message = 7;
-  string charge_ref = 8;
-  string snap_token = 9;
 }

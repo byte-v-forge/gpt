@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, formatUnix, mask, useEventQueryCache, useQuery, useQueryClient, useToastMessage } from '@/dashboard/module-kit';
-import { latestOtpForEmail, maskEmail, normalizeUiEmail } from '@/dashboard/modules/mailbox/sdk';
+import { api, formatUnix, mask, useQuery, useQueryClient, useToastMessage } from '@byte-v-forge/common-ui';
+import { latestOtpForEmail, maskEmail, normalizeUiEmail } from '@byte-v-forge/common-ui';
 import { goPayPaymentActionLabel, goPayPaymentRequestChannel, isPureGoPayWAPaymentChannel } from './gopay-utils';
 import { mailboxContextForEmail } from './account-mail-utils';
 import { isInvalidGptAccount } from './account-utils';
 import { useGptAccountCleanupActions } from './account-cleanup-hook';
-import { accountInboxQueryKey, loadStoredInbox, mailboxEventURL, mergeInboxResponse } from './account-inbox-query';
-import type { MailboxEmailEvent } from './account-inbox-query';
+import { accountInboxQueryKey, loadAccountMailboxProjection } from './account-inbox-query';
 import type { GptAccountData } from './account-data';
-import type { GoPayUserWAPhoneResponse } from '@/proto/orchestrator_gopay_app';
-import type { Account, ConcreteGoPayPaymentChannel, FetchAccountMailboxResponse, InboxResponse, SyncAccountMailboxesResponse } from './types';
+import type { GoPayUserWAPhoneResponse } from '../proto/orchestrator_gopay_app';
+import type { Account, ConcreteGoPayPaymentChannel, FetchAccountMailboxResponse, InboxResponse } from './types';
 
 const GO_PAY_USER_ID = 'local';
 
@@ -18,27 +17,18 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
   const queryClient = useQueryClient();
   const mailboxContext = data.selected ? mailboxContextForEmail(data.mailboxes, data.allocations, data.selected) : null;
   const primaryMailboxEmail = normalizeUiEmail(mailboxContext?.primary_email || '');
-  const selectedInboxKey = useMemo(() => accountInboxQueryKey(data.selected?.account_id || '', primaryMailboxEmail), [data.selected?.account_id, primaryMailboxEmail]);
+  const selectedInboxVersion = data.selected?.mailbox_last_message_at_unix || 0;
+  const selectedInboxKey = useMemo(() => accountInboxQueryKey(data.selected?.account_id || '', primaryMailboxEmail, selectedInboxVersion), [data.selected?.account_id, primaryMailboxEmail, selectedInboxVersion]);
   const inboxQuery = useQuery<InboxResponse | null>({
     queryKey: selectedInboxKey,
-    queryFn: () => loadStoredInbox(primaryMailboxEmail),
+    queryFn: () => loadAccountMailboxProjection(data.selected?.account_id || ''),
     enabled: !!data.selected && !!primaryMailboxEmail,
     refetchOnMount: 'always',
     initialData: null
   });
-  useEventQueryCache<MailboxEmailEvent>({
-    enabled: !!primaryMailboxEmail,
-    url: mailboxEventURL(primaryMailboxEmail),
-    eventName: 'email',
-    targets: [{
-      queryKey: selectedInboxKey,
-      update: (prev, event) => event.message ? mergeInboxResponse(prev as InboxResponse | null | undefined, event.email_address || primaryMailboxEmail, event.message) : prev
-    }]
-  });
   const goPayProfile = useQuery({ queryKey: ['gpt', 'gopay', 'profile', GO_PAY_USER_ID], queryFn: loadGoPayProfile });
   const [working, setWorking] = useState(false);
   const [inboxLoading, setInboxLoading] = useState(false);
-  const [syncingMailboxes, setSyncingMailboxes] = useState(false);
   const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
   const cleanup = useGptAccountCleanupActions(data, setSelectedAccountID, toast);
 
@@ -67,7 +57,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
       const apiChannel = goPayPaymentRequestChannel(otpChannel);
       const appInput = { user_id: GO_PAY_USER_ID, wa_phone: input.phone, country_code: input.country_code, pin: input.pin };
       const body = waOnly ? { account_id: account.account_id, ...appInput } : { account_id: account.account_id, otp_channel: apiChannel, ...appInput };
-      const resp = await api<{ job_id?: string; error_message?: string }>(waOnly ? '/api/workflows/gopay-wa-payment' : '/api/workflows/gopay-payment', { method: 'POST', body: JSON.stringify(body) });
+      const resp = await api<{ job_id?: string; error_message?: string }>(waOnly ? '/api/gpt/workflows/gopay-wa-payment' : '/api/gpt/workflows/gopay-payment', { method: 'POST', body: JSON.stringify(body) });
       toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || `${goPayPaymentActionLabel(otpChannel)} 已提交: ${resp.job_id || 'ok'}`);
       if (!resp.error_message) await data.invalidate();
     } catch (err) {
@@ -85,7 +75,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     setWorking(true);
     try {
       const accountIds = accounts.map((account) => account.account_id).filter(Boolean);
-      const resp = await api<{ job_id?: string; error_message?: string }>('/api/workflows/codex-oauth-add-phone/batch', {
+      const resp = await api<{ job_id?: string; error_message?: string }>('/api/gpt/workflows/codex-oauth-add-phone/batch', {
         method: 'POST',
         body: JSON.stringify({ account_ids: accountIds })
       });
@@ -101,7 +91,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     if (!canMutateAccount(account)) return;
     setWorking(true);
     try {
-      const updated = await api<Account>(`/api/accounts/${account.account_id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      const updated = await api<Account>(`/api/gpt/accounts/${account.account_id}`, { method: 'PATCH', body: JSON.stringify(payload) });
       data.cacheAccount(updated);
       setSelectedAccountID(updated.account_id);
       toast.showOK(successText);
@@ -118,7 +108,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     if (!canMutateAccount(account)) return;
     setRefreshing((prev) => new Set(prev).add(account.account_id));
     try {
-      const updated = await api<Account>(`/api/accounts/${account.account_id}/access-token`, { method: 'POST', body: '{}' });
+      const updated = await api<Account>(`/api/gpt/accounts/${account.account_id}/access-token`, { method: 'POST', body: '{}' });
       data.cacheAccount(updated);
       toast.showOK('Access Token 已自动获取');
       await data.invalidate();
@@ -135,15 +125,16 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     if (!canMutateAccount(account)) return;
     setInboxLoading(true);
     try {
-      const resp = await api<FetchAccountMailboxResponse>(`/api/accounts/${account.account_id}/mailbox/inbox`, { method: 'POST', body: JSON.stringify({ limit_per_mailbox: 10 }) });
+      const resp = await api<FetchAccountMailboxResponse>(`/api/gpt/accounts/${account.account_id}/mailbox/inbox`, { method: 'POST', body: JSON.stringify({ limit_per_mailbox: 10 }) });
       if (resp.account) {
         data.cacheAccount(resp.account);
         setSelectedAccountID(resp.account.account_id);
       }
       if (resp.inbox) queryClient.setQueryData(selectedInboxKey, resp.inbox);
+      await queryClient.invalidateQueries({ queryKey: selectedInboxKey });
       const latest = resp.inbox ? latestOtpForEmail(resp.inbox, data.mailboxes, account.email) : null;
       const mailbox = account.primary_mailbox_email || account.email;
-      toast.showToast(resp.error_message ? 'error' : 'ok', `${showSecrets ? mailbox : maskEmail(mailbox)} 收信完成：${resp.inbox?.message_count || 0} 封邮件${latest ? `，OTP ${showSecrets ? latest.otp : mask(latest.otp)}，${formatUnix(latest.received_at_unix)}` : ''}${resp.error_message ? `，${resp.error_message}` : ''}`);
+      toast.showToast(resp.error_message ? 'error' : 'ok', `${showSecrets ? mailbox : maskEmail(mailbox)} 读取 GPT 邮件投影${latest ? `，OTP ${showSecrets ? latest.otp : mask(latest.otp)}，${formatUnix(latest.received_at_unix)}` : ''}${resp.error_message ? `，${resp.error_message}` : ''}`);
       if (resp.account) await data.invalidate();
     } catch (err) {
       toast.showError(err);
@@ -152,30 +143,14 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     }
   }
 
-  async function syncMailboxes() {
-    setSyncingMailboxes(true);
-    try {
-      const resp = await api<SyncAccountMailboxesResponse>('/api/accounts/mailbox/sync', {
-        method: 'POST',
-        body: JSON.stringify({ limit_per_mailbox: 25, account_limit: 500 })
-      });
-      toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || `邮箱同步完成：${resp.synced_count || 0}/${resp.account_count || 0} 个账号，${resp.message_count || 0} 封新邮件`);
-      await queryClient.invalidateQueries({ queryKey: ['gpt', 'inbox'] });
-      await data.invalidate();
-    } catch (err) {
-      toast.showError(err);
-    } finally {
-      setSyncingMailboxes(false);
-    }
-  }
 
   function goPayAppInput() { return { phone: goPayProfile.data?.wa_phone || '', country_code: '+62', pin: goPayProfile.data?.pin || '' }; }
 
   function canMutateAccount(account: Account) { if (!isInvalidGptAccount(account)) return true; toast.showError('失效账号只能删除'); return false; }
 
-  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, syncingMailboxes, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, updateAccount, refreshAccessToken, fetchInbox, syncMailboxes, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
+  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, updateAccount, refreshAccessToken, fetchInbox, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
 }
 
 function loadGoPayProfile() {
-  return api<GoPayUserWAPhoneResponse>(`/api/gopay/profile?user_id=${GO_PAY_USER_ID}`);
+  return api<GoPayUserWAPhoneResponse>(`/api/gpt/gopay/profile?user_id=${GO_PAY_USER_ID}`);
 }

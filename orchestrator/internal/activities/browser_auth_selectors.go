@@ -3,7 +3,7 @@ package activities
 import (
 	"time"
 
-	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
+	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
 )
 
 func browserAuthEntrySelector(mode string) *browserautomationv1.BrowserSelectorGroup {

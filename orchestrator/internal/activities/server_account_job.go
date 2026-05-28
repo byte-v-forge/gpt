@@ -15,7 +15,7 @@ func (s *Server) createAccount(ctx context.Context, account *pb.Account) (*pb.Ac
 		return nil, fmt.Errorf("create account: %w", err)
 	}
 	if resp.GetAccount() == nil || resp.GetAccount().GetAccountId() == "" {
-		return nil, fmt.Errorf("account-db returned empty account")
+		return nil, fmt.Errorf("gpt-account returned empty account")
 	}
 	return resp.GetAccount(), nil
 }

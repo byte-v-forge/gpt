@@ -11,11 +11,11 @@ import (
 func (s *Server) prepareGoPayPayment(ctx context.Context, step activityStep, input GoPayActivityInput, account *pb.Account) (output GoPayPaymentPrepareOutput, err error) {
 	sessionToken := strings.TrimSpace(input.GetSessionToken())
 	if sessionToken == "" {
-		sessionToken = strings.TrimSpace(account.GetSessionToken())
+		sessionToken = s.cachedChatGPTSessionToken(ctx, account.GetAccountId())
 	}
 	accessToken := strings.TrimSpace(input.GetAccessToken())
 	if accessToken == "" {
-		accessToken = strings.TrimSpace(account.GetAccessToken())
+		accessToken = s.cachedChatGPTAccessToken(ctx, account.GetAccountId())
 	}
 	tokenization := strings.TrimSpace(input.GetTokenization())
 	suppliedCheckoutURL := strings.TrimSpace(input.GetCheckoutUrl())
@@ -55,8 +55,12 @@ func (s *Server) prepareGoPayPayment(ctx context.Context, step activityStep, inp
 		"checkout_reuse_blocked":    suppliedCheckoutURL != "" || suppliedCheckoutSessionID != "",
 		"gopay_phone_present":       gopayPhone != "",
 	})
+	credential, err := s.paymentCredential(ctx, account.GetAccountId(), sessionToken, accessToken)
+	if err != nil {
+		return output, err
+	}
 	prepared, err := s.paymentClient.PrepareGoPay(ctx, &pb.PrepareGoPayRequest{
-		Credential:        paymentCredential(sessionToken, accessToken),
+		Credential:        credential,
 		Tokenization:      tokenization,
 		CheckoutUrl:       checkoutURL,
 		CheckoutSessionId: checkoutSessionID,

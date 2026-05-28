@@ -3,10 +3,11 @@ package activities
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/common-lib/stringx"
 	"strings"
 	"time"
 
-	smsv1 "github.com/byte-v-forge/sms/gen/go/byte/v/forge/contracts/sms/v1"
+	smsv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/sms/v1"
 	"orchestrator/db"
 )
 
@@ -52,7 +53,7 @@ func (s *Server) releaseCodexPhone(ctx context.Context, phone *CodexOAuthPhoneLe
 	}
 	row.LastJobID = jobID
 	row.LastAccountID = accountID
-	row.LastError = compactBrowserAuthText(message, 500)
+	row.LastError = stringx.CompactSnippet(message, 500)
 	failureKind, terminalStatus := codexOAuthPhoneFailureDisposition(message)
 	row.LastFailureKind = failureKind
 	if strings.TrimSpace(label) != "" {
@@ -68,7 +69,7 @@ func (s *Server) releaseCodexPhone(ctx context.Context, phone *CodexOAuthPhoneLe
 		row.Status = terminalStatus
 		if !phoneUsed {
 			if err := s.cancelCodexOAuthSMSActivation(ctx, row.ActivationID, jobID, message); err != nil {
-				row.LastError = compactBrowserAuthText(row.LastError+"; cancel failed: "+err.Error(), 500)
+				row.LastError = stringx.CompactSnippet(row.LastError+"; cancel failed: "+err.Error(), 500)
 			}
 		} else if terminalStatus == codexOAuthLeaseExhausted {
 			_ = s.completeSMSActivation(ctx, row.ActivationID, "codex-oauth-page-exhausted-"+jobID)
@@ -80,7 +81,7 @@ func (s *Server) releaseCodexPhone(ctx context.Context, phone *CodexOAuthPhoneLe
 		row.LastFailureKind = codexOAuthFirstNonEmpty(row.LastFailureKind, "phone_expired")
 		if !phoneUsed {
 			if err := s.cancelCodexOAuthSMSActivation(ctx, row.ActivationID, jobID, "phone_expired"); err != nil {
-				row.LastError = compactBrowserAuthText(row.LastError+"; cancel failed: "+err.Error(), 500)
+				row.LastError = stringx.CompactSnippet(row.LastError+"; cancel failed: "+err.Error(), 500)
 			}
 		}
 		return s.db.WithContext(ctx).Save(&row).Error
@@ -104,16 +105,13 @@ func (s *Server) codexOAuthActivationHasCode(ctx context.Context, activationID s
 	if s.smsClient == nil || strings.TrimSpace(activationID) == "" {
 		return false
 	}
-	resp, err := s.smsClient.GetActivation(ctx, &smsv1.GetActivationRequest{ActivationId: strings.TrimSpace(activationID)})
+	resp, err := s.smsClient.GetOrder(ctx, &smsv1.GetOrderRequest{OrderId: strings.TrimSpace(activationID)})
 	if err != nil || resp == nil || resp.GetError() != nil {
 		return false
 	}
-	if strings.TrimSpace(resp.GetCode().GetValue()) != "" {
-		return true
-	}
-	switch resp.GetActivation().GetStatus() {
-	case smsv1.SmsActivationStatus_SMS_ACTIVATION_STATUS_CODE_RECEIVED,
-		smsv1.SmsActivationStatus_SMS_ACTIVATION_STATUS_COMPLETED:
+	switch resp.GetOrder().GetStatus() {
+	case smsv1.SmsOrderStatus_SMS_ORDER_STATUS_CODE_RECEIVED,
+		smsv1.SmsOrderStatus_SMS_ORDER_STATUS_COMPLETED:
 		return true
 	default:
 		return false
@@ -124,10 +122,10 @@ func (s *Server) cancelCodexOAuthSMSActivation(ctx context.Context, activationID
 	if s.smsClient == nil || strings.TrimSpace(activationID) == "" {
 		return nil
 	}
-	resp, err := s.smsClient.CancelActivation(ctx, &smsv1.CancelActivationRequest{
-		ActivationId: strings.TrimSpace(activationID),
-		RequestId:    "codex-oauth-cancel-" + strings.TrimSpace(jobID),
-		Reason:       compactBrowserAuthText(reason, 200),
+	resp, err := s.smsClient.CancelOrder(ctx, &smsv1.CancelOrderRequest{
+		OrderId:   strings.TrimSpace(activationID),
+		RequestId: "codex-oauth-cancel-" + strings.TrimSpace(jobID),
+		Reason:    stringx.CompactSnippet(reason, 200),
 	})
 	if err != nil {
 		return fmt.Errorf("CancelActivation: %w", err)
@@ -154,7 +152,7 @@ func codexOAuthPhoneLeaseFromRow(row db.CodexOAuthPhoneLease, reused bool) *Code
 	}
 }
 
-func codexOAuthActivationExpiresAt(activation *smsv1.SmsActivation) int64 {
+func codexOAuthActivationExpiresAt(activation *smsv1.SmsOrder) int64 {
 	if activation != nil && activation.GetExpiresAt() != nil {
 		return activation.GetExpiresAt().AsTime().Unix()
 	}

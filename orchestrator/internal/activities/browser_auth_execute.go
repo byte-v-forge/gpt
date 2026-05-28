@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	browserautomationv1 "github.com/byte-v-forge/browser-automation/gen/go/byte/v/forge/contracts/browserautomation/v1"
+	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -13,6 +13,16 @@ func (f *browserAuthFlow) execute(client browserautomationv1.BrowserAutomationSe
 	sessionID := f.getSessionID()
 	if sessionID == "" {
 		return nil, fmt.Errorf("browser session is not ready")
+	}
+	labels := map[string]string{
+		"domain":             "gpt",
+		"workflow":           "browser_auth",
+		"mode":               f.mode,
+		"job_id":             f.jobID,
+		"browser_session_id": sessionID,
+	}
+	if f.flowID != "" && f.flowID != sessionID {
+		labels["flow_id"] = f.flowID
 	}
 	ctx, cancel := context.WithTimeout(f.ctx, taskTimeout(commands, cfg.CommandTimeout))
 	defer cancel()
@@ -24,13 +34,7 @@ func (f *browserAuthFlow) execute(client browserautomationv1.BrowserAutomationSe
 			ScenarioKey: "gpt.browser_auth." + f.mode,
 			Timeout:     durationpb.New(taskTimeout(commands, cfg.CommandTimeout)),
 			Commands:    commands,
-			Labels: map[string]string{
-				"domain":   "gpt",
-				"workflow": "browser_auth",
-				"mode":     f.mode,
-				"job_id":   f.jobID,
-				"flow_id":  f.flowID,
-			},
+			Labels:      labels,
 		},
 	})
 	if err != nil {

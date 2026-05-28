@@ -134,7 +134,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
       await queryClient.invalidateQueries({ queryKey: selectedInboxKey });
       const latest = resp.inbox ? latestOtpForEmail(resp.inbox, data.mailboxes, account.email) : null;
       const mailbox = account.primary_mailbox_email || account.email;
-      toast.showToast(resp.error_message ? 'error' : 'ok', `${showSecrets ? mailbox : maskEmail(mailbox)} 读取 GPT 邮件投影${latest ? `，OTP ${showSecrets ? latest.otp : mask(latest.otp)}，${formatUnix(latest.received_at_unix)}` : ''}${resp.error_message ? `，${resp.error_message}` : ''}`);
+      toast.showToast(resp.error_message ? 'error' : 'ok', `${showSecrets ? mailbox : maskEmail(mailbox)} 重新读取 OTP 缓存${latest ? `，OTP ${showSecrets ? latest.otp : mask(latest.otp)}，${formatUnix(latest.received_at_unix)}` : ''}${resp.error_message ? `，${resp.error_message}` : ''}`);
       if (resp.account) await data.invalidate();
     } catch (err) {
       toast.showError(err);

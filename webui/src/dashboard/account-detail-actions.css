@@ -36,27 +36,41 @@
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
+  overflow: hidden;
 }
 
 .detailActionContent .sectionActions {
   width: auto;
   margin-left: auto;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.detailActionContent .sectionActions button {
+  white-space: nowrap;
 }
 
 .detailOtpCode {
+  min-width: 0;
   min-height: 30px;
+  flex: 1 1 auto;
   border: 1px solid var(--border-soft);
   border-radius: 8px;
   padding: 0 0 0 9px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  overflow: hidden;
   background: var(--surface-soft);
 }
 
 .detailOtpCode strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 13px;
   font-weight: 750;
@@ -156,5 +170,6 @@
   color: var(--muted-foreground);
   font-size: 12px;
   font-style: normal;
+  flex: 0 0 auto;
   white-space: nowrap;
 }

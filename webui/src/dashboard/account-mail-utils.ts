@@ -17,9 +17,9 @@ export function mailboxContextForEmail(mailboxes: Mailbox[], allocations: GPTEma
 
 export function accountInboxHint(email: string, context: AccountMailboxContext | null, showSecrets: boolean) {
   const accountEmail = showSecrets ? email : maskEmail(email);
-  if (!context?.is_split) return `读取当前账号邮箱 ${accountEmail} 的 GPT 邮件投影`;
+  if (!context?.is_split) return `重新读取当前账号邮箱 ${accountEmail} 的 OTP 缓存`;
   const primaryEmail = showSecrets ? context.primary_email : maskEmail(context.primary_email);
-  return `读取邮箱账号 ${primaryEmail} 的 GPT 邮件投影，按收件地址 ${accountEmail} 匹配`;
+  return `重新读取邮箱账号 ${primaryEmail} 的 OTP 缓存，按收件地址 ${accountEmail} 匹配`;
 }
 
 export function canFetchAccountInbox(account: Account, context: AccountMailboxContext | null, _capabilities: unknown[]) {

@@ -1,4 +1,4 @@
-import { Bug, Copy, Inbox, Trash2 } from 'lucide-react';
+import { Bug, Copy, RefreshCw, Trash2 } from 'lucide-react';
 import { ActionButtonGroup, Button, buttonHint, formatUnix, mask } from '@byte-v-forge/common-ui';
 import type { ActionButtonDescriptor } from '@byte-v-forge/common-ui';
 import { PaymentChannelIcon } from './account-badges';
@@ -19,7 +19,6 @@ export function AccountDetailActions({ account, showSecrets, busy, inboxLoading,
   onFetchInbox: (account: Account) => Promise<void>;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
 }) {
-  const otpRow = mailboxActions(account, showSecrets, busy, inboxLoading, mailboxContext, canFetchOTP, onFetchInbox);
   const channelRow = channelActions(account, busy, onGoPayPayment);
   return (
     <div className="detailActionRows">
@@ -28,7 +27,16 @@ export function AccountDetailActions({ account, showSecrets, busy, inboxLoading,
           <span className="detailActionLabel">OTP</span>
           <div className="detailActionContent">
             <LatestOTPValue latestOtp={latestOtp} showSecrets={showSecrets} onCopy={onCopy} />
-            <ActionButtonGroup className="sectionActions" actions={otpRow} />
+            {canFetchOTP && (
+              <Button
+                className="copyButton detailOtpRefresh"
+                {...buttonHint(accountInboxHint(account.email, mailboxContext, showSecrets))}
+                disabled={busy || inboxLoading}
+                onClick={() => void onFetchInbox(account)}
+              >
+                <RefreshCw size={14} />
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -77,18 +85,6 @@ function LatestOTPValue({ latestOtp, showSecrets, onCopy }: {
 
 function hasVisibleAction(actions: ActionButtonDescriptor[]) {
   return actions.some((action) => action.visible !== false);
-}
-
-function mailboxActions(account: Account, showSecrets: boolean, busy: boolean, inboxLoading: boolean, mailboxContext: AccountMailboxContext | null, canFetchOTP: boolean, onFetchInbox: (account: Account) => Promise<void>): ActionButtonDescriptor[] {
-  return [{
-    id: 'fetch-otp',
-    visible: canFetchOTP,
-    label: inboxLoading ? '读取中' : '刷新投影',
-    hint: accountInboxHint(account.email, mailboxContext, showSecrets),
-    icon: <Inbox size={14} />,
-    disabled: busy || inboxLoading,
-    onClick: () => void onFetchInbox(account),
-  }];
 }
 
 function channelActions(account: Account, busy: boolean, onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void): ActionButtonDescriptor[] {

@@ -1,4 +1,4 @@
-import { ContentTabs, KVList } from '@byte-v-forge/common-ui';
+import { ContentTabs, KVList, useQuery } from '@byte-v-forge/common-ui';
 import type { KVDescriptor } from '@byte-v-forge/common-ui';
 import { maskEmail } from '@byte-v-forge/common-ui';
 import {
@@ -8,6 +8,7 @@ import {
 import { AccountChannelTag, AccountCodexPhoneTag, AccountSignalBadge } from './account-badges';
 import { AccountFingerprintPanel } from './account-fingerprint-panel';
 import { AccountPrimaryActions } from './account-auth-action-groups';
+import { accountAuthQueryKey, loadAccountAuthTokens } from './account-auth-query';
 import { AccountDangerActions, AccountDetailActions } from './account-detail-actions';
 import { TokenEditor } from './account-detail-editors';
 import { canFetchAccountInbox } from './account-mail-utils';
@@ -44,6 +45,13 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
 }) {
   const invalid = isInvalidGptAccount(account);
   const canFetchOTP = !invalid && canFetchAccountInbox(account, mailboxContext, mailboxProviderCapabilities);
+  const authQuery = useQuery({
+    queryKey: accountAuthQueryKey(account.account_id),
+    queryFn: () => loadAccountAuthTokens(account.account_id),
+    enabled: !invalid && showSecrets,
+    refetchOnMount: 'always'
+  });
+  const auth = showSecrets ? authQuery.data : null;
   const credentialFields: KVDescriptor[] = [{
     id: 'email',
     label: '邮箱',
@@ -82,8 +90,8 @@ export function AccountDetails({ account, showSecrets, busy, inboxLoading, refre
         </div>
       )}
       <KVList items={credentialFields} onCopy={onCopy} />
-      {!invalid && <TokenEditor label="Session" field="session_token" account={account} showSecrets={showSecrets} onCopy={onCopy} onSave={onSessionSave} />}
-      {!invalid && <TokenEditor label="Access" field="access_token" account={account} showSecrets={showSecrets} onCopy={onCopy} onSave={onAccessSave} />}
+      {!invalid && <TokenEditor label="Session" field="session_token" account={account} token={auth?.session_token || ''} expiresAtUnix={auth?.session_token_expires_at_unix || 0} loading={authQuery.isLoading} showSecrets={showSecrets} onCopy={onCopy} onSave={onSessionSave} />}
+      {!invalid && <TokenEditor label="Access" field="access_token" account={account} token={auth?.access_token || ''} expiresAtUnix={auth?.access_token_expires_at_unix || 0} loading={authQuery.isLoading} showSecrets={showSecrets} onCopy={onCopy} onSave={onAccessSave} />}
       <KVList items={timeFields} onCopy={onCopy} />
       <AccountDangerActions account={account} busy={busy} onDelete={onDelete} />
     </section>

@@ -5,6 +5,7 @@ import { goPayPaymentActionLabel, goPayPaymentRequestChannel, isPureGoPayWAPayme
 import { mailboxContextForEmail } from './account-mail-utils';
 import { isInvalidGptAccount } from './account-utils';
 import { useGptAccountCleanupActions } from './account-cleanup-hook';
+import { accountAuthQueryPrefix } from './account-auth-query';
 import { accountInboxQueryKey, loadAccountMailboxProjection } from './account-inbox-query';
 import type { GptAccountData } from './account-data';
 import type { GoPayUserWAPhoneResponse } from '../proto/orchestrator_gopay_app';
@@ -95,6 +96,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
       data.cacheAccount(updated);
       setSelectedAccountID(updated.account_id);
       toast.showOK(successText);
+      if (payload.session_token || payload.access_token) await queryClient.invalidateQueries({ queryKey: accountAuthQueryPrefix });
       await data.invalidate();
     } catch (err) {
       toast.showError(err);

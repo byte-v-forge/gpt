@@ -1,4 +1,5 @@
 import { createHotStreamURL, useHotStreamInvalidation } from '@byte-v-forge/common-ui';
+import { accountAuthQueryPrefix } from './account-auth-query';
 import { accountQueryKeys } from './account-data';
 import { accountInboxQueryPrefix } from './account-inbox-query';
 
@@ -10,6 +11,7 @@ export function useGptAccountEventCache() {
     url: createHotStreamURL('/api/gpt', { eventTypes: accountEventTypes, resourceTypes: accountResourceTypes }),
     rules: [
       { queryKey: accountQueryKeys.accounts, eventTypes: ['gpt.account.updated', 'gpt.account.deleted', 'gpt.account_mailbox.updated'], resourceTypes: ['gpt.account', 'gpt.account_mailbox'] },
+      { queryKey: accountAuthQueryPrefix, eventTypes: ['gpt.account.updated', 'gpt.account.deleted'], resourceTypes: ['gpt.account'] },
       { queryKey: accountInboxQueryPrefix, eventTypes: ['gpt.account_mailbox.updated'], resourceTypes: ['gpt.account_mailbox'] },
       { queryKey: accountQueryKeys.allocations, eventTypes: ['gpt.email_allocation.updated'], resourceTypes: ['gpt.email_allocation'] }
     ]

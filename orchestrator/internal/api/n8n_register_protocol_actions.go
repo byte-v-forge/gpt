@@ -342,8 +342,8 @@ func (s *Server) FinishN8NRegisterProtocol(ctx context.Context, jobID string, ac
 	if err != nil {
 		return nil, s.markActionFailed(ctx, jobID, stepRegisterAccountProtocolComplete, jobstatus.FailedRetryable, false, true, err, nil)
 	}
-	if register == nil || (strings.TrimSpace(register.GetSessionToken()) == "" && strings.TrimSpace(register.GetAccessToken()) == "") {
-		err := fmt.Errorf("protocol register did not return ChatGPT credentials")
+	if register == nil || strings.TrimSpace(register.GetSessionToken()) == "" || strings.TrimSpace(register.GetAccessToken()) == "" {
+		err := fmt.Errorf("protocol register did not return both ChatGPT session and access tokens")
 		return nil, s.markActionFailed(ctx, jobID, stepRegisterAccountProtocolComplete, jobstatus.FailedRetryable, false, true, err, nil)
 	}
 	result := map[string]any{

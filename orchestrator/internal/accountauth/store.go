@@ -52,12 +52,28 @@ func SaveCodexAuthJSON(ctx context.Context, store runtimesecrets.Store, accountI
 	return saveField(ctx, store, accountID, chatgptauth.FieldCodexAuthJSON, chatgptauth.FieldCodexAuthExpiresAtUnix, authJSON, expiresAt, ttl)
 }
 
+type TokenSnapshot struct {
+	Value         string
+	Present       bool
+	ExpiresAtUnix int64
+}
+
 func LoadChatGPTSessionToken(ctx context.Context, store runtimesecrets.Store, accountID string) (string, bool, error) {
-	return loadField(ctx, store, accountID, chatgptauth.FieldChatGPTSessionToken, chatgptauth.FieldChatGPTSessionExpiresAtUnix)
+	snapshot, err := LoadChatGPTSessionTokenSnapshot(ctx, store, accountID)
+	return snapshot.Value, snapshot.Present, err
 }
 
 func LoadChatGPTAccessToken(ctx context.Context, store runtimesecrets.Store, accountID string) (string, bool, error) {
-	return loadField(ctx, store, accountID, chatgptauth.FieldChatGPTAccessToken, chatgptauth.FieldChatGPTAccessExpiresAtUnix)
+	snapshot, err := LoadChatGPTAccessTokenSnapshot(ctx, store, accountID)
+	return snapshot.Value, snapshot.Present, err
+}
+
+func LoadChatGPTSessionTokenSnapshot(ctx context.Context, store runtimesecrets.Store, accountID string) (TokenSnapshot, error) {
+	return loadFieldSnapshot(ctx, store, accountID, chatgptauth.FieldChatGPTSessionToken, chatgptauth.FieldChatGPTSessionExpiresAtUnix)
+}
+
+func LoadChatGPTAccessTokenSnapshot(ctx context.Context, store runtimesecrets.Store, accountID string) (TokenSnapshot, error) {
+	return loadFieldSnapshot(ctx, store, accountID, chatgptauth.FieldChatGPTAccessToken, chatgptauth.FieldChatGPTAccessExpiresAtUnix)
 }
 
 func LoadCodexAuthJSON(ctx context.Context, store runtimesecrets.Store, accountID string) (string, bool, error) {
@@ -91,25 +107,30 @@ func saveField(ctx context.Context, store runtimesecrets.Store, accountID string
 }
 
 func loadField(ctx context.Context, store runtimesecrets.Store, accountID string, valueField string, expiresField string) (string, bool, error) {
+	snapshot, err := loadFieldSnapshot(ctx, store, accountID, valueField, expiresField)
+	return snapshot.Value, snapshot.Present, err
+}
+
+func loadFieldSnapshot(ctx context.Context, store runtimesecrets.Store, accountID string, valueField string, expiresField string) (TokenSnapshot, error) {
 	accountID = strings.TrimSpace(accountID)
 	if store == nil || accountID == "" {
-		return "", false, nil
+		return TokenSnapshot{}, nil
 	}
 	key := chatgptauth.AccountAuthSecretKey(accountID)
 	values, err := store.HashLoadMany(ctx, key, valueField, expiresField)
 	if err != nil {
-		return "", false, err
+		return TokenSnapshot{}, err
 	}
 	value := strings.TrimSpace(values[valueField])
 	if value == "" {
-		return "", false, nil
+		return TokenSnapshot{}, nil
 	}
 	expiresAt, err := strconv.ParseInt(strings.TrimSpace(values[expiresField]), 10, 64)
 	if err != nil || expiresAt <= time.Now().Unix() {
 		_ = store.HashDelete(ctx, key, valueField, expiresField)
-		return "", false, nil
+		return TokenSnapshot{}, nil
 	}
-	return value, true, nil
+	return TokenSnapshot{Value: value, Present: true, ExpiresAtUnix: expiresAt}, nil
 }
 
 func defaultTTL(store runtimesecrets.Store) time.Duration {

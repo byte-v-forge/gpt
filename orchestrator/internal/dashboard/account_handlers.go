@@ -197,6 +197,10 @@ func (s *server) handleAccount(w http.ResponseWriter, r *http.Request) {
 			s.handleAccountAccessToken(w, r, accountID)
 			return
 		}
+		if len(parts) == 2 && parts[1] == "auth" {
+			s.handleAccountAuth(w, r, accountID)
+			return
+		}
 		if len(parts) == 2 && parts[1] == "checkout-link" {
 			s.handleAccountCheckoutLink(w, r, accountID)
 			return

@@ -557,6 +557,32 @@
         3120,
         60
       ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Normalize Input').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "release-accepted-dynamic-lease",
+      "name": "Release Accepted Dynamic Lease",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4420,
+        80
+      ],
+      "notes": "Best-effort cleanup for dynamic IP leases after register workflow terminal states."
     }
   ],
   "connections": {
@@ -772,6 +798,72 @@
         [
           {
             "node": "Wait For OTP Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish After Start": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish After Advance": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish After OTP": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail OTP Timeout": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Unexpected State": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Dynamic Proxy": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
             "type": "main",
             "index": 0
           }

@@ -15,9 +15,9 @@ type N8NProbeActions interface {
 	N8NProbeDynamicProxySettings(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error)
 	RecordN8NProbeDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string, data map[string]any) (any, error)
 	FailN8NProbeDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error)
-	CheckN8NProbeTokenWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
-	RunN8NProbePlusTrialWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
-	RunN8NProbeTierWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
+	CheckN8NProbeToken(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
+	RunN8NProbePlusTrial(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
+	RunN8NProbeTier(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
 	CompleteN8NProbeAccount(ctx context.Context, jobID string, accountID string, n8nExecutionID string, plusTrial map[string]any, tier map[string]any) (any, error)
 	FailN8NProbeAccount(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error)
 }
@@ -118,7 +118,7 @@ func (s *server) runProbePlusTrial(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	resp, err := s.n8nProbeActions.RunN8NProbePlusTrialWithProxy(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
+	resp, err := s.n8nProbeActions.RunN8NProbePlusTrial(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return
@@ -132,7 +132,7 @@ func (s *server) checkProbeToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	resp, err := s.n8nProbeActions.CheckN8NProbeTokenWithProxy(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
+	resp, err := s.n8nProbeActions.CheckN8NProbeToken(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return
@@ -146,7 +146,7 @@ func (s *server) runProbeTier(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	resp, err := s.n8nProbeActions.RunN8NProbeTierWithProxy(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
+	resp, err := s.n8nProbeActions.RunN8NProbeTier(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return

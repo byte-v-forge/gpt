@@ -88,11 +88,7 @@ func (s *Server) StartN8NProbeAccount(ctx context.Context, accountID string) (*p
 	return &pb.ProbeAccountResponse{JobId: jobID, Started: true}, nil
 }
 
-func (s *Server) CheckN8NProbeToken(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error) {
-	return s.CheckN8NProbeTokenWithProxy(ctx, jobID, accountID, n8nExecutionID, "")
-}
-
-func (s *Server) CheckN8NProbeTokenWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
+func (s *Server) CheckN8NProbeToken(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
 	jobID = strings.TrimSpace(jobID)
 	accountID = strings.TrimSpace(accountID)
 	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
@@ -179,11 +175,7 @@ func (s *Server) CheckN8NProbeTokenWithProxy(ctx context.Context, jobID string, 
 	return result, nil
 }
 
-func (s *Server) RunN8NProbePlusTrial(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error) {
-	return s.RunN8NProbePlusTrialWithProxy(ctx, jobID, accountID, n8nExecutionID, "")
-}
-
-func (s *Server) RunN8NProbePlusTrialWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
+func (s *Server) RunN8NProbePlusTrial(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
 	jobID = strings.TrimSpace(jobID)
 	accountID = strings.TrimSpace(accountID)
 	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
@@ -209,11 +201,7 @@ func (s *Server) RunN8NProbePlusTrialWithProxy(ctx context.Context, jobID string
 	return result, nil
 }
 
-func (s *Server) RunN8NProbeTier(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error) {
-	return s.RunN8NProbeTierWithProxy(ctx, jobID, accountID, n8nExecutionID, "")
-}
-
-func (s *Server) RunN8NProbeTierWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
+func (s *Server) RunN8NProbeTier(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
 	jobID = strings.TrimSpace(jobID)
 	accountID = strings.TrimSpace(accountID)
 	n8nExecutionID = strings.TrimSpace(n8nExecutionID)

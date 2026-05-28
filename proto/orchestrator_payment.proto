@@ -27,11 +27,13 @@ message ProbePlusTrialActivityInput {
   string account_id = 2;
   string access_token = 3;
   string session_token = 4;
+  string proxy_url = 5;
 }
 
 message ProbeTierActivityInput {
   string job_id = 1;
   string account_id = 2;
+  string proxy_url = 3;
 }
 
 message ProbePlusTrialActivityOutput {

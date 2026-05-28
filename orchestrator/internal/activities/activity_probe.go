@@ -45,7 +45,7 @@ func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input ProbePl
 			return data, fmt.Errorf("session_token or access_token is required")
 		}
 
-		credential, callErr := s.paymentCredential(ctx, accountID, sessionToken, accessToken)
+		credential, callErr := s.paymentCredentialWithProxy(ctx, accountID, sessionToken, accessToken, input.GetProxyUrl())
 		if callErr != nil {
 			output.Data = protoData(data)
 			return data, callErr
@@ -148,7 +148,7 @@ func (s *Server) ProbeTierAtomicActivity(ctx context.Context, input ProbeTierAct
 			output.Data = protoData(data)
 			return data, fmt.Errorf("session_token or access_token is required")
 		}
-		credential, callErr := s.paymentCredential(ctx, account.GetAccountId(), sessionToken, accessToken)
+		credential, callErr := s.paymentCredentialWithProxy(ctx, account.GetAccountId(), sessionToken, accessToken, input.GetProxyUrl())
 		if callErr != nil {
 			output.Data = protoData(data)
 			return data, callErr

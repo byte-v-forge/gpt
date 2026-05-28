@@ -12,9 +12,12 @@ import (
 
 type N8NProbeActions interface {
 	StartN8NProbeAccount(ctx context.Context, accountID string) (*pb.ProbeAccountResponse, error)
-	CheckN8NProbeToken(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error)
-	RunN8NProbePlusTrial(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error)
-	RunN8NProbeTier(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error)
+	N8NProbeDynamicProxySettings(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error)
+	RecordN8NProbeDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string, data map[string]any) (any, error)
+	FailN8NProbeDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error)
+	CheckN8NProbeTokenWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
+	RunN8NProbePlusTrialWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
+	RunN8NProbeTierWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
 	CompleteN8NProbeAccount(ctx context.Context, jobID string, accountID string, n8nExecutionID string, plusTrial map[string]any, tier map[string]any) (any, error)
 	FailN8NProbeAccount(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error)
 }
@@ -23,6 +26,7 @@ type probeStepRequest struct {
 	JobID          string `json:"job_id"`
 	AccountID      string `json:"account_id"`
 	N8NExecutionID string `json:"n8n_execution_id"`
+	ProxyURL       string `json:"proxy_url"`
 }
 
 type probeCompleteRequest struct {
@@ -41,6 +45,11 @@ type probeFailRequest struct {
 	Data           map[string]any `json:"data"`
 }
 
+type probeProxyRecordRequest struct {
+	probeStepRequest
+	Data map[string]any `json:"data"`
+}
+
 func (s *server) handleProbeAccountAction(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -52,6 +61,12 @@ func (s *server) handleProbeAccountAction(w http.ResponseWriter, r *http.Request
 	}
 	action := strings.Trim(strings.TrimPrefix(r.URL.Path, "/actions/probe-account/"), "/")
 	switch action {
+	case "proxy-settings":
+		s.probeProxySettings(w, r)
+	case "record-proxy":
+		s.recordProbeProxy(w, r)
+	case "fail-proxy":
+		s.failProbeProxy(w, r)
 	case "check-token":
 		s.checkProbeToken(w, r)
 	case "plus-trial":
@@ -67,13 +82,43 @@ func (s *server) handleProbeAccountAction(w http.ResponseWriter, r *http.Request
 	}
 }
 
+func (s *server) probeProxySettings(w http.ResponseWriter, r *http.Request) {
+	var req probeStepRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	resp, err := s.n8nProbeActions.N8NProbeDynamicProxySettings(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID)
+	writeProbeAction(w, resp, err)
+}
+
+func (s *server) recordProbeProxy(w http.ResponseWriter, r *http.Request) {
+	var req probeProxyRecordRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	resp, err := s.n8nProbeActions.RecordN8NProbeDynamicProxy(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL, req.Data)
+	writeProbeAction(w, resp, err)
+}
+
+func (s *server) failProbeProxy(w http.ResponseWriter, r *http.Request) {
+	var req probeFailRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	resp, err := s.n8nProbeActions.FailN8NProbeDynamicProxy(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ErrorMessage, req.Data)
+	writeProbeAction(w, resp, err)
+}
+
 func (s *server) runProbePlusTrial(w http.ResponseWriter, r *http.Request) {
 	var req probeStepRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	resp, err := s.n8nProbeActions.RunN8NProbePlusTrial(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID)
+	resp, err := s.n8nProbeActions.RunN8NProbePlusTrialWithProxy(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return
@@ -87,7 +132,7 @@ func (s *server) checkProbeToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	resp, err := s.n8nProbeActions.CheckN8NProbeToken(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID)
+	resp, err := s.n8nProbeActions.CheckN8NProbeTokenWithProxy(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return
@@ -101,7 +146,15 @@ func (s *server) runProbeTier(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	resp, err := s.n8nProbeActions.RunN8NProbeTier(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID)
+	resp, err := s.n8nProbeActions.RunN8NProbeTierWithProxy(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func writeProbeAction(w http.ResponseWriter, resp any, err error) {
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return

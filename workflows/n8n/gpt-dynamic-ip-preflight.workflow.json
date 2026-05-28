@@ -8,7 +8,7 @@
         "inputSource": "passthrough"
       },
       "id": "fd8bcb7b-4aba-5716-a003-ce9cb1121e4d",
-      "name": "When Executed by Register Workflow",
+      "name": "When Executed by GPT Workflow",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1.1,
       "position": [
@@ -19,7 +19,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/register-protocol/proxy-settings' }}",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/' + ($json.action_scope || 'register-protocol') + '/proxy-settings' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -40,7 +40,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const settings = $input.first().json;\nconst input = $('When Executed by Register Workflow').first().json;\nconst maxAttempts = Math.max(1, Math.min(100, Number(settings.max_proxy_attempts || 10)));\nconst lineAttemptLimit = Math.ceil(maxAttempts / 2);\nconst items = [];\nfor (let attempt = 1; attempt <= maxAttempts; attempt++) {\n  const preferLineProxy = attempt <= lineAttemptLimit;\n  const gatewayAttempt = preferLineProxy ? attempt : attempt - lineAttemptLimit;\n  const request = JSON.parse(JSON.stringify(settings.lease_request || {}));\n  request.policy = request.policy || {};\n  request.policy.labels = {\n    ...(request.policy.labels || {}),\n    attempt: String(gatewayAttempt),\n    workflow_attempt: String(attempt),\n    max_proxy_attempts: String(maxAttempts),\n  };\n  request.chain_policy = {\n    ...(request.chain_policy || {}),\n    country_code: settings.country_code || request?.policy?.labels?.country_code || request?.policy?.region || '',\n    region: settings.region || request?.policy?.labels?.region || request?.policy?.region || '',\n    purpose: settings.purpose || request.purpose || 'REGISTER_PROTOCOL',\n    max_attempts: maxAttempts,\n    allow_direct_dynamic_gateway: true,\n    prefer_line_proxy: preferLineProxy,\n  };\n  items.push({ json: {\n    ...input,\n    settings,\n    attempt,\n    gateway_attempt: gatewayAttempt,\n    prefer_line_proxy: preferLineProxy,\n    max_proxy_attempts: maxAttempts,\n    preflight_enabled: !!settings.preflight_enabled,\n    cf_canary_enabled: !!settings.cf_canary_enabled,\n    require_residential: !!settings.require_residential,\n    min_ip_purity_score: Number(settings.min_ip_purity_score || 0),\n    lease_request: request,\n  }});\n}\nreturn items;\n"
+        "jsCode": "const settings = $input.first().json;\nconst input = $('When Executed by GPT Workflow').first().json;\nconst maxAttempts = Math.max(1, Math.min(100, Number(settings.max_proxy_attempts || 10)));\nconst lineAttemptLimit = Math.ceil(maxAttempts / 2);\nconst items = [];\nfor (let attempt = 1; attempt <= maxAttempts; attempt++) {\n  const preferLineProxy = attempt <= lineAttemptLimit;\n  const gatewayAttempt = preferLineProxy ? attempt : attempt - lineAttemptLimit;\n  const request = JSON.parse(JSON.stringify(settings.lease_request || {}));\n  request.policy = request.policy || {};\n  request.policy.labels = {\n    ...(request.policy.labels || {}),\n    attempt: String(gatewayAttempt),\n    workflow_attempt: String(attempt),\n    max_proxy_attempts: String(maxAttempts),\n  };\n  request.chain_policy = {\n    ...(request.chain_policy || {}),\n    country_code: settings.country_code || request?.policy?.labels?.country_code || request?.policy?.region || '',\n    region: settings.region || request?.policy?.labels?.region || request?.policy?.region || '',\n    purpose: settings.purpose || request.purpose || 'REGISTER_PROTOCOL',\n    max_attempts: maxAttempts,\n    allow_direct_dynamic_gateway: true,\n    prefer_line_proxy: preferLineProxy,\n  };\n  items.push({ json: {\n    ...input,\n    settings,\n    attempt,\n    gateway_attempt: gatewayAttempt,\n    prefer_line_proxy: preferLineProxy,\n    max_proxy_attempts: maxAttempts,\n    preflight_enabled: !!settings.preflight_enabled,\n    cf_canary_enabled: !!settings.cf_canary_enabled,\n    require_residential: !!settings.require_residential,\n    min_ip_purity_score: Number(settings.min_ip_purity_score || 0),\n    lease_request: request,\n  }});\n}\nreturn items;\n"
       },
       "id": "3ea83a76-576a-50e7-895e-cc3b2d6c7adb",
       "name": "Build Proxy Attempt Items",
@@ -551,17 +551,6 @@
     }
   ],
   "connections": {
-    "When Executed by Register Workflow": {
-      "main": [
-        [
-          {
-            "node": "Get GPT Proxy Settings",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Get GPT Proxy Settings": {
       "main": [
         [
@@ -834,6 +823,17 @@
         [
           {
             "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by GPT Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get GPT Proxy Settings",
             "type": "main",
             "index": 0
           }

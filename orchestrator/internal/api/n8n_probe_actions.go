@@ -25,6 +25,7 @@ type N8NProbeTokenResult struct {
 	ExpiresAtUnix     int64          `json:"expires_at_unix,omitempty"`
 	TTLSeconds        int64          `json:"ttl_seconds,omitempty"`
 	Reason            string         `json:"reason,omitempty"`
+	ProxyURL          string         `json:"proxy_url,omitempty"`
 	Account           map[string]any `json:"account"`
 }
 
@@ -88,9 +89,14 @@ func (s *Server) StartN8NProbeAccount(ctx context.Context, accountID string) (*p
 }
 
 func (s *Server) CheckN8NProbeToken(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error) {
+	return s.CheckN8NProbeTokenWithProxy(ctx, jobID, accountID, n8nExecutionID, "")
+}
+
+func (s *Server) CheckN8NProbeTokenWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
 	jobID = strings.TrimSpace(jobID)
 	accountID = strings.TrimSpace(accountID)
 	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
+	proxyURL = strings.TrimSpace(proxyURL)
 	if jobID == "" || accountID == "" {
 		return nil, fmt.Errorf("job_id and account_id are required")
 	}
@@ -110,6 +116,7 @@ func (s *Server) CheckN8NProbeToken(ctx context.Context, jobID string, accountID
 		AccountID:      account.GetAccountId(),
 		N8NExecutionID: n8nExecutionID,
 		Step:           "check_token",
+		ProxyURL:       proxyURL,
 		Account: probeAccountFacts(pb.AccountRef{
 			AccountId:         account.GetAccountId(),
 			PlusTrialKnown:    account.PlusTrialEligible != nil,
@@ -142,7 +149,7 @@ func (s *Server) CheckN8NProbeToken(ctx context.Context, jobID string, accountID
 	if s.paymentClient == nil {
 		return nil, fmt.Errorf("payment service is not configured")
 	}
-	credential, err := s.paymentCredential(ctx, accountID, sessionToken, "")
+	credential, err := s.paymentCredentialWithProxy(ctx, accountID, sessionToken, "", proxyURL)
 	if err != nil {
 		result.RequiresLogin = true
 		result.Reason = "account_fingerprint_missing"
@@ -173,16 +180,21 @@ func (s *Server) CheckN8NProbeToken(ctx context.Context, jobID string, accountID
 }
 
 func (s *Server) RunN8NProbePlusTrial(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error) {
+	return s.RunN8NProbePlusTrialWithProxy(ctx, jobID, accountID, n8nExecutionID, "")
+}
+
+func (s *Server) RunN8NProbePlusTrialWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
 	jobID = strings.TrimSpace(jobID)
 	accountID = strings.TrimSpace(accountID)
 	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
+	proxyURL = strings.TrimSpace(proxyURL)
 	if jobID == "" || accountID == "" {
 		return nil, fmt.Errorf("job_id and account_id are required")
 	}
 	if err := s.bindN8NProbeExecution(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
-	out, err := s.activities.ProbePlusTrialAtomicActivity(ctx, pb.ProbePlusTrialActivityInput{JobId: jobID, AccountId: accountID})
+	out, err := s.activities.ProbePlusTrialAtomicActivity(ctx, pb.ProbePlusTrialActivityInput{JobId: jobID, AccountId: accountID, ProxyUrl: proxyURL})
 	result := &N8NProbeStepResult{
 		JobID:          jobID,
 		AccountID:      accountID,
@@ -198,16 +210,21 @@ func (s *Server) RunN8NProbePlusTrial(ctx context.Context, jobID string, account
 }
 
 func (s *Server) RunN8NProbeTier(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error) {
+	return s.RunN8NProbeTierWithProxy(ctx, jobID, accountID, n8nExecutionID, "")
+}
+
+func (s *Server) RunN8NProbeTierWithProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
 	jobID = strings.TrimSpace(jobID)
 	accountID = strings.TrimSpace(accountID)
 	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
+	proxyURL = strings.TrimSpace(proxyURL)
 	if jobID == "" || accountID == "" {
 		return nil, fmt.Errorf("job_id and account_id are required")
 	}
 	if err := s.bindN8NProbeExecution(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
-	out, err := s.activities.ProbeTierAtomicActivity(ctx, pb.ProbeTierActivityInput{JobId: jobID, AccountId: accountID})
+	out, err := s.activities.ProbeTierAtomicActivity(ctx, pb.ProbeTierActivityInput{JobId: jobID, AccountId: accountID, ProxyUrl: proxyURL})
 	result := &N8NProbeStepResult{
 		JobID:          jobID,
 		AccountID:      accountID,

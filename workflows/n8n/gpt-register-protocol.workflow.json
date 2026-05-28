@@ -43,6 +43,12 @@
               "name": "n8n_execution_id",
               "value": "={{ $execution.id }}",
               "type": "string"
+            },
+            {
+              "id": "action-scope",
+              "name": "action_scope",
+              "value": "register-protocol",
+              "type": "string"
             }
           ]
         },

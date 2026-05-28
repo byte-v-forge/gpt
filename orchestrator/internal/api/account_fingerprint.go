@@ -35,6 +35,10 @@ func (s *Server) accountFingerprint(ctx context.Context, accountID string) (acco
 }
 
 func (s *Server) paymentCredential(ctx context.Context, accountID, sessionToken, accessToken string) (*pb.ChatGPTCredential, error) {
+	return s.paymentCredentialWithProxy(ctx, accountID, sessionToken, accessToken, "")
+}
+
+func (s *Server) paymentCredentialWithProxy(ctx context.Context, accountID, sessionToken, accessToken string, proxyURL string) (*pb.ChatGPTCredential, error) {
 	sessionToken = strings.TrimSpace(sessionToken)
 	accessToken = strings.TrimSpace(accessToken)
 	if sessionToken == "" && accessToken == "" {
@@ -60,6 +64,9 @@ func (s *Server) paymentCredential(ctx context.Context, accountID, sessionToken,
 		DeviceId:        fingerprint.DeviceID,
 		Platform:        profile.OSFamily,
 		Timezone:        profile.Timezone,
+	}
+	if proxyURL = strings.TrimSpace(proxyURL); proxyURL != "" {
+		cred.RequestProfile.ProxyUrl = proxyURL
 	}
 	return cred, nil
 }

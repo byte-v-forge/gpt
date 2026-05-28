@@ -38,8 +38,16 @@ type n8nDynamicProxyResult struct {
 }
 
 func (s *Server) N8NDynamicProxySettings(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error) {
+	return s.n8nDynamicProxySettings(ctx, jobID, accountID, n8nExecutionID, actionRegisterProtocol, s.bindN8NRegisterProtocolExecution)
+}
+
+func (s *Server) N8NProbeDynamicProxySettings(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error) {
+	return s.n8nDynamicProxySettings(ctx, jobID, accountID, n8nExecutionID, actionProbeAccount, s.bindN8NProbeExecution)
+}
+
+func (s *Server) n8nDynamicProxySettings(ctx context.Context, jobID string, accountID string, n8nExecutionID string, purpose string, bind func(context.Context, string, string) error) (any, error) {
 	jobID, accountID, n8nExecutionID = normalizeN8NRegisterProtocolIDs(jobID, accountID, n8nExecutionID)
-	if err := s.bindN8NRegisterProtocolExecution(ctx, jobID, n8nExecutionID); err != nil {
+	if err := bind(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
 	params, err := s.jobStore.Params(ctx, jobID)
@@ -57,12 +65,14 @@ func (s *Server) N8NDynamicProxySettings(ctx context.Context, jobID string, acco
 	preflight := settings.GetProxyPreflight()
 	countryCode := normalizeProtocolCountryCode(params[protocolCountryCodeParam])
 	region := normalizeProtocolRegion(countryCode, params[protocolRegionParam])
+	if countryCode == "" || region == "" {
+		countryCode, region = s.dynamicProxyGeoFromFingerprint(ctx, accountID, countryCode, region)
+	}
 	state := protocolProxyState(countryCode, region)
 	attempts := preflight.GetMaxProxyAttempts()
 	if attempts == 0 {
 		attempts = 10
 	}
-	purpose := actionRegisterProtocol
 	request := map[string]any{
 		"account_id": accountID,
 		"purpose":    purpose,
@@ -76,7 +86,7 @@ func (s *Server) N8NDynamicProxySettings(ctx context.Context, jobID string, acco
 			"rotation_mode": "PROXY_ROTATION_MODE_STICKY_SESSION",
 			"labels": map[string]string{
 				"purpose":      purpose,
-				"driver":       "codex_protocol",
+				"driver":       "gpt_workflow",
 				"country_code": countryCode,
 				"region":       region,
 			},
@@ -121,8 +131,16 @@ func (s *Server) N8NDynamicProxySettings(ctx context.Context, jobID string, acco
 }
 
 func (s *Server) RecordN8NDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string, data map[string]any) (any, error) {
+	return s.recordN8NDynamicProxy(ctx, jobID, accountID, n8nExecutionID, proxyURL, data, actionRegisterProtocol, s.bindN8NRegisterProtocolExecution)
+}
+
+func (s *Server) RecordN8NProbeDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string, data map[string]any) (any, error) {
+	return s.recordN8NDynamicProxy(ctx, jobID, accountID, n8nExecutionID, proxyURL, data, actionProbeAccount, s.bindN8NProbeExecution)
+}
+
+func (s *Server) recordN8NDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string, data map[string]any, purpose string, bind func(context.Context, string, string) error) (any, error) {
 	jobID, accountID, n8nExecutionID = normalizeN8NRegisterProtocolIDs(jobID, accountID, n8nExecutionID)
-	if err := s.bindN8NRegisterProtocolExecution(ctx, jobID, n8nExecutionID); err != nil {
+	if err := bind(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
 	proxyURL = strings.TrimSpace(proxyURL)
@@ -134,7 +152,7 @@ func (s *Server) RecordN8NDynamicProxy(ctx context.Context, jobID string, accoun
 	if err := s.setJobParams(ctx, jobID, map[string]string{protocolProxyURLParam: proxyURL}); err != nil {
 		return nil, err
 	}
-	if err := s.saveAccountProxyUsage(ctx, proxyUsageInput{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Purpose: actionRegisterProtocol, ProxyURL: proxyURL, Data: data}); err != nil {
+	if err := s.saveAccountProxyUsage(ctx, proxyUsageInput{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Purpose: purpose, ProxyURL: proxyURL, Data: data}); err != nil {
 		return nil, err
 	}
 	if err := s.activities.StartJobStepActivity(ctx, pb.JobStepStartInput{JobId: jobID, StepName: stepDynamicIPPreflight, Recoverable: false, Retryable: true, Detail: structData(data)}); err != nil {
@@ -153,8 +171,16 @@ func (s *Server) RecordN8NDynamicProxy(ctx context.Context, jobID string, accoun
 }
 
 func (s *Server) FailN8NDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error) {
+	return s.failN8NDynamicProxy(ctx, jobID, accountID, n8nExecutionID, errorMessage, data, s.bindN8NRegisterProtocolExecution)
+}
+
+func (s *Server) FailN8NProbeDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error) {
+	return s.failN8NDynamicProxy(ctx, jobID, accountID, n8nExecutionID, errorMessage, data, s.bindN8NProbeExecution)
+}
+
+func (s *Server) failN8NDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any, bind func(context.Context, string, string) error) (any, error) {
 	jobID, accountID, n8nExecutionID = normalizeN8NRegisterProtocolIDs(jobID, accountID, n8nExecutionID)
-	if err := s.bindN8NRegisterProtocolExecution(ctx, jobID, n8nExecutionID); err != nil {
+	if err := bind(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
 	if strings.TrimSpace(errorMessage) == "" {
@@ -165,6 +191,43 @@ func (s *Server) FailN8NDynamicProxy(ctx context.Context, jobID string, accountI
 		return nil, markErr
 	}
 	return &n8nDynamicProxyResult{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Step: stepDynamicIPPreflight, Data: data}, nil
+}
+
+func (s *Server) dynamicProxyGeoFromFingerprint(ctx context.Context, accountID string, countryCode string, region string) (string, string) {
+	if s.fingerprints == nil || strings.TrimSpace(accountID) == "" {
+		return countryCode, region
+	}
+	profile, ok, err := s.fingerprints.Get(ctx, accountID)
+	if err != nil || !ok {
+		return countryCode, region
+	}
+	inferredCountry, inferredRegion := dynamicProxyGeoFromTimezone(profile.Timezone)
+	if countryCode == "" {
+		countryCode = inferredCountry
+	}
+	if region == "" {
+		region = inferredRegion
+	}
+	return countryCode, region
+}
+
+func dynamicProxyGeoFromTimezone(timezone string) (string, string) {
+	switch strings.TrimSpace(timezone) {
+	case "Asia/Tokyo":
+		return "JP", "JP-13"
+	case "Asia/Jakarta":
+		return "ID", "ID-JK"
+	case "Asia/Bangkok":
+		return "TH", "TH-10"
+	case "Asia/Singapore":
+		return "SG", "SG-01"
+	case "America/Los_Angeles":
+		return "US", "US-CA"
+	case "America/Chicago":
+		return "US", "US-TX"
+	default:
+		return "US", "US-NY"
+	}
 }
 
 func protocolProxyState(countryCode string, region string) string {

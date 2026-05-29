@@ -3,14 +3,14 @@ import { ActionButtonGroup } from '@byte-v-forge/common-ui';
 import type { ActionButtonDescriptor } from '@byte-v-forge/common-ui';
 import { GPT_ACTIONS, gptActionAvailability, gptActionLabel, type GptActionCatalog, type GptActionPlacement } from './action-catalog';
 import { CodexIcon } from './brand-icons';
-import { canLoginSession, canProbeAccount, canRefreshAccessToken, canRegister, loginActionHint, probeAccountHint } from './account-utils';
+import { canLoginSession, canProbeAccount, canUpdateWebAccessToken, canRegister, loginActionHint, probeAccountHint } from './account-utils';
 import type { Account } from './types';
 
-export function AccountPrimaryActions({ account, actionCatalog, busy, refreshingAccessToken, onProbeAccount, onRegister, onRegisterProtocol, onLogin, onLoginProtocol, onCodexOAuthAddPhone, onCodexOAuthProtocol, onRefreshAccessToken }: {
+export function AccountPrimaryActions({ account, actionCatalog, busy, updatingWebAccessToken, onProbeAccount, onRegister, onRegisterProtocol, onLogin, onLoginProtocol, onCodexOAuthAddPhone, onCodexOAuthProtocol, onUpdateWebAccessToken }: {
   account: Account;
   actionCatalog?: GptActionCatalog;
   busy: boolean;
-  refreshingAccessToken: boolean;
+  updatingWebAccessToken: boolean;
   onProbeAccount: (account: Account) => void;
   onRegister: (account: Account) => void;
   onRegisterProtocol: (account: Account) => void;
@@ -18,13 +18,13 @@ export function AccountPrimaryActions({ account, actionCatalog, busy, refreshing
   onLoginProtocol: (account: Account) => void;
   onCodexOAuthAddPhone: (account: Account) => void;
   onCodexOAuthProtocol: (account: Account) => void;
-  onRefreshAccessToken: (account: Account) => Promise<void>;
+  onUpdateWebAccessToken: (account: Account) => Promise<void>;
 }) {
   return (
     <div className="detailActionRows accountPrimaryActionRows">
       <HeaderActionRow label="浏览器" actions={browserActions(actionCatalog, account, busy, onRegister, onLogin, onCodexOAuthAddPhone)} />
       <HeaderActionRow label="协议" actions={protocolActions(actionCatalog, account, busy, onRegisterProtocol, onLoginProtocol, onCodexOAuthProtocol)} />
-      <HeaderActionRow label="工具" actions={utilityActions(actionCatalog, account, busy, refreshingAccessToken, onRefreshAccessToken, onProbeAccount)} />
+      <HeaderActionRow label="工具" actions={utilityActions(actionCatalog, account, busy, updatingWebAccessToken, onUpdateWebAccessToken, onProbeAccount)} />
     </div>
   );
 }
@@ -108,9 +108,9 @@ function utilityActions(catalog: GptActionCatalog | undefined, account: Account,
   const probe = gptActionAvailability(catalog, GPT_ACTIONS.probeAccount, account, placement);
   return [{
     id: 'refresh-access-token',
-    visible: canRefreshAccessToken(account),
-    label: refreshing ? '刷新中' : '刷新 Token',
-    hint: '使用当前 Session 刷新 Access Token',
+    visible: canUpdateWebAccessToken(account),
+    label: refreshing ? '更新中' : '更新 Web AT',
+    hint: '使用当前 Session Token 获取 ChatGPT Web AT',
     icon: <RefreshCw size={14} />,
     disabled: busy || refreshing,
     onClick: () => void onRefresh(account),

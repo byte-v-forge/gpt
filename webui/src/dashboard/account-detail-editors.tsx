@@ -53,7 +53,7 @@ export function TokenEditor({ label, field, account, token, expiresAtUnix, loadi
 
 function tokenPlaceholder(label: string, showSecrets: boolean, loading: boolean, token: string, expiresAtUnix: number) {
   if (!showSecrets) return '敏感信息已隐藏';
-  if (loading) return `读取 ${label} Token...`;
-  if (!token.trim()) return `${label} Token 未保存或已过期`;
-  return expiresAtUnix > 0 ? `有效至 ${formatUnix(expiresAtUnix)}` : `${label} Token 已保存`;
+  if (loading) return `读取 ${label}...`;
+  if (!token.trim()) return `${label} 未保存或已过期`;
+  return expiresAtUnix > 0 ? `有效至 ${formatUnix(expiresAtUnix)}` : `${label} 已保存`;
 }

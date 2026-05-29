@@ -104,7 +104,7 @@ function GptAccountsTab({ actionCatalog }: { actionCatalog?: GptActionCatalog })
             latestOtp={latestOtpForEmail(actions.inbox, data.mailboxes, data.selected.email)}
             activationChannel={accountActivationChannel(data.selected, data.jobs, actions.actionCatalog)}
             codexPhoneState={selectedPhoneState!}
-            refreshingAccessToken={actions.refreshing.has(data.selected.account_id)}
+            updatingWebAccessToken={actions.updatingWebAccessTokens.has(data.selected.account_id)}
             onCopy={actions.toast.copyValue}
             onFetchInbox={actions.fetchInbox}
             onSessionSave={(account, sessionToken) => actions.updateAccount(account, { session_token: sessionToken }, '认证信息已更新')}
@@ -117,7 +117,7 @@ function GptAccountsTab({ actionCatalog }: { actionCatalog?: GptActionCatalog })
             onCodexOAuthAddPhone={(account) => actions.runWorkflow(GPT_ACTIONS.codexOAuth, account)}
             onCodexOAuthProtocol={(account) => actions.runWorkflow(GPT_ACTIONS.codexOAuthProtocol, account)}
             onGoPayPayment={(account, channel) => void actions.runGoPayPayment(account, channel)}
-            onRefreshAccessToken={actions.refreshAccessToken}
+            onUpdateWebAccessToken={actions.updateWebAccessToken}
             onDelete={actions.deleteAccount}
           />
         )}

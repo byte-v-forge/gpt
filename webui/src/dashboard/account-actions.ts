@@ -32,7 +32,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
   const actionCatalog = providedActionCatalog ?? actionCatalogQuery.data;
   const [working, setWorking] = useState(false);
   const [inboxLoading, setInboxLoading] = useState(false);
-  const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
+  const [updatingWebAccessTokens, setUpdatingWebAccessTokens] = useState<Set<string>>(new Set());
   const cleanup = useGptAccountCleanupActions(data, setSelectedAccountID, toast);
 
   useEffect(() => {
@@ -125,16 +125,16 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     }
   }
 
-  async function refreshAccessToken(account: Account) {
+  async function updateWebAccessToken(account: Account) {
     if (!canMutateAccount(account)) return;
-    setRefreshing((prev) => new Set(prev).add(account.account_id));
+    setUpdatingWebAccessTokens((prev) => new Set(prev).add(account.account_id));
     try {
       const updated = await api<Account>(`/api/gpt/accounts/${account.account_id}/access-token`, { method: 'POST', body: '{}' });
       data.cacheAccount(updated);
-      toast.showOK('Access Token 已自动获取');
+      toast.showOK('Web AT 已更新');
       await data.invalidate();
     } finally {
-      setRefreshing((prev) => { const next = new Set(prev); next.delete(account.account_id); return next; });
+      setUpdatingWebAccessTokens((prev) => { const next = new Set(prev); next.delete(account.account_id); return next; });
     }
   }
 
@@ -171,7 +171,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     return false;
   }
 
-  return { toast, actionCatalog, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, updateAccount, refreshAccessToken, fetchInbox, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
+  return { toast, actionCatalog, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, updatingWebAccessTokens, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, updateAccount, updateWebAccessToken, fetchInbox, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
 }
 
 function loadGoPayProfile() {

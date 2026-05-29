@@ -23,7 +23,7 @@ export function AccountDetails({
   showSecrets,
   busy,
   inboxLoading,
-  refreshingAccessToken,
+  updatingWebAccessToken,
   mailboxContext,
   latestOtp,
   activationChannel,
@@ -40,7 +40,7 @@ export function AccountDetails({
   onCodexOAuthAddPhone,
   onCodexOAuthProtocol,
   onGoPayPayment,
-  onRefreshAccessToken,
+  onUpdateWebAccessToken,
   onDelete
 }: {
   account: Account;
@@ -49,7 +49,7 @@ export function AccountDetails({
   showSecrets: boolean;
   busy: boolean;
   inboxLoading: boolean;
-  refreshingAccessToken: boolean;
+  updatingWebAccessToken: boolean;
   mailboxContext: AccountMailboxContext | null;
   latestOtp: LatestOtp | null;
   activationChannel: string;
@@ -66,7 +66,7 @@ export function AccountDetails({
   onCodexOAuthAddPhone: (account: Account) => void;
   onCodexOAuthProtocol: (account: Account) => void;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
-  onRefreshAccessToken: (account: Account) => Promise<void>;
+  onUpdateWebAccessToken: (account: Account) => Promise<void>;
   onDelete: (account: Account) => Promise<void>;
 }) {
   const invalid = isInvalidGptAccount(account);
@@ -121,13 +121,13 @@ export function AccountDetails({
       </div>
       {!invalid && (
         <div className="accountDetailActionStack">
-          <AccountPrimaryActions account={account} actionCatalog={actionCatalog} busy={busy} refreshingAccessToken={refreshingAccessToken} onProbeAccount={onProbeAccount} onRegister={onRegister} onRegisterProtocol={onRegisterProtocol} onLogin={onLogin} onLoginProtocol={onLoginProtocol} onCodexOAuthAddPhone={onCodexOAuthAddPhone} onCodexOAuthProtocol={onCodexOAuthProtocol} onRefreshAccessToken={onRefreshAccessToken} />
+          <AccountPrimaryActions account={account} actionCatalog={actionCatalog} busy={busy} updatingWebAccessToken={updatingWebAccessToken} onProbeAccount={onProbeAccount} onRegister={onRegister} onRegisterProtocol={onRegisterProtocol} onLogin={onLogin} onLoginProtocol={onLoginProtocol} onCodexOAuthAddPhone={onCodexOAuthAddPhone} onCodexOAuthProtocol={onCodexOAuthProtocol} onUpdateWebAccessToken={onUpdateWebAccessToken} />
           <AccountDetailActions account={account} actionCatalog={actionCatalog} showSecrets={showSecrets} busy={busy} inboxLoading={inboxLoading} mailboxContext={mailboxContext} latestOtp={latestOtp} canFetchOTP={canFetchOTP} onCopy={onCopy} onFetchInbox={onFetchInbox} onGoPayPayment={onGoPayPayment} />
         </div>
       )}
       <KVList items={credentialFields} onCopy={onCopy} />
-      {!invalid && <TokenEditor label="Session" field="session_token" account={account} token={auth?.session_token || ''} expiresAtUnix={auth?.session_token_expires_at_unix || 0} loading={authQuery.isLoading} showSecrets={showSecrets} onCopy={onCopy} onSave={onSessionSave} />}
-      {!invalid && <TokenEditor label="Access" field="access_token" account={account} token={auth?.access_token || ''} expiresAtUnix={auth?.access_token_expires_at_unix || 0} loading={authQuery.isLoading} showSecrets={showSecrets} onCopy={onCopy} onSave={onAccessSave} />}
+      {!invalid && <TokenEditor label="Session Token" field="session_token" account={account} token={auth?.session_token || ''} expiresAtUnix={auth?.session_token_expires_at_unix || 0} loading={authQuery.isLoading} showSecrets={showSecrets} onCopy={onCopy} onSave={onSessionSave} />}
+      {!invalid && <TokenEditor label="Web AT" field="access_token" account={account} token={auth?.access_token || ''} expiresAtUnix={auth?.access_token_expires_at_unix || 0} loading={authQuery.isLoading} showSecrets={showSecrets} onCopy={onCopy} onSave={onAccessSave} />}
       <KVList items={timeFields} onCopy={onCopy} />
       <AccountDangerActions account={account} busy={busy} onDelete={onDelete} />
     </section>

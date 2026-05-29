@@ -23,7 +23,7 @@ export function probeAccountHint(account: Account) {
   return '先探测 Plus 资格，再探测 Tier';
 }
 
-export function canRefreshAccessToken(account: Account) {
+export function canUpdateWebAccessToken(account: Account) {
   return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && hasRegisteredSession(account);
 }
 
@@ -33,12 +33,12 @@ export function canLoginSession(account: Account) {
 
 export function loginActionLabel(account: Account) {
   void account;
-  return '登录刷新 Token';
+  return '登录更新认证';
 }
 
 export function loginActionHint(account: Account) {
   void account;
-  return '通过账号密码登录并刷新 Redis 中的 Session / Access Token';
+  return '通过账号密码登录并更新 Redis 中的 Session Token / Web AT';
 }
 
 export function accountSignalText(account: Account) {

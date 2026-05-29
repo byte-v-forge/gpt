@@ -33,8 +33,8 @@ const emailAllocationStatusLabels: DisplayLabelMap = {
 const actionLabels: DisplayLabelMap = {
   [GPT_ACTIONS.register]: '注册账号',
   [GPT_ACTIONS.registerProtocol]: '协议注册账号',
-  [GPT_ACTIONS.loginSession]: '登录取 Token',
-  [GPT_ACTIONS.loginSessionProtocol]: '协议登录取 Token',
+  [GPT_ACTIONS.loginSession]: '登录更新认证',
+  [GPT_ACTIONS.loginSessionProtocol]: '协议登录更新认证',
   [GPT_ACTIONS.codexOAuth]: '浏览器 auth.json',
   [GPT_ACTIONS.codexOAuthProtocol]: '协议 auth.json',
   [GPT_ACTIONS.codexOAuthAddPhone]: 'Codex OAuth 加手机号',

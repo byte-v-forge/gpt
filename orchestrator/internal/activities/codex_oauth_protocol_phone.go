@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input CodexOAuthAddPhoneBrowserInput) (CodexOAuthAddPhoneBrowserOutput, error) {
-	cfg := s.codexOAuthConfig.withDefaults()
+	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
 	output := CodexOAuthAddPhoneBrowserOutput{PhoneReuseCount: input.GetPhone().GetReuseCount(), PhoneReuseLimit: input.GetPhone().GetReuseLimit()}
 	data := codexOAuthBrowserData(label, input.GetPhone())

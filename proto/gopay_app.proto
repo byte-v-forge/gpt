@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package gopay_app;
 
+import "google/protobuf/struct.proto";
+
 option go_package = "./;pb";
 
 enum GoPayOTPChannel {
@@ -169,7 +171,13 @@ message SignupCompleteResponse {
   string state_json = 100;
 }
 
-message GenerateDeviceProxyRequest {}
+message GenerateDeviceProxyRequest {
+  string account_id = 1;
+  string country_code = 2;
+  bool force_new = 3;
+  bool skip_preflight = 4;
+  bool ephemeral_profile = 5;
+}
 
 message GenerateDeviceProxyResponse {
   bool success = 1;
@@ -178,6 +186,7 @@ message GenerateDeviceProxyResponse {
   int32 dynamic_egress_size = 4;
   string proxy_hash = 5;
   string device_fingerprint = 6;
+  google.protobuf.Struct data = 7;
   string state_json = 100;
 }
 

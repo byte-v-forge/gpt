@@ -29,6 +29,8 @@ type GenerateParams struct {
 
 type Profile struct {
 	AccountID              string
+	CountryCode            string
+	Region                 string
 	BrowserProfileTemplate string
 	BrowserFamily          string
 	BrowserMajorVersion    string
@@ -120,6 +122,8 @@ func (s *Store) Preview(accountID string, params GenerateParams) Profile {
 	fingerprint := browserfingerprint.BuildChromium(candidate, locale, deviceID)
 	return normalizeStableProfile(Profile{
 		AccountID:              accountID,
+		CountryCode:            countryCode,
+		Region:                 region,
 		BrowserProfileTemplate: selectorLabel(candidate),
 		BrowserFamily:          "Chrome",
 		BrowserMajorVersion:    candidate.MajorVersion,
@@ -243,6 +247,25 @@ func timezoneForGeo(countryCode string, region string) string {
 }
 
 func normalizeStableProfile(profile Profile) Profile {
+	profile.CountryCode = normalizeCountryCode(profile.CountryCode)
+	profile.Region = normalizeRegion(profile.CountryCode, profile.Region)
+	if profile.CountryCode == "" && strings.Contains(profile.Region, "-") {
+		profile.CountryCode, _, _ = strings.Cut(profile.Region, "-")
+		profile.CountryCode = normalizeCountryCode(profile.CountryCode)
+	}
+	if profile.CountryCode == "" || profile.Region == "" {
+		if countryCode, region, ok := GeoFromTimezone(profile.Timezone); ok {
+			if profile.CountryCode == "" {
+				profile.CountryCode = countryCode
+			}
+			if profile.Region == "" {
+				profile.Region = region
+			}
+		}
+	}
+	if profile.CountryCode != "" && profile.Region == "" {
+		profile.Region = defaultRegion(profile.CountryCode)
+	}
 	profile.Locale = stableLocale
 	profile.AcceptLanguage = stableAcceptLanguage
 	profile.Language = stableLanguage
@@ -259,6 +282,27 @@ func normalizeStableProfile(profile Profile) Profile {
 		profile.DeviceID = fingerprint.DeviceID
 	}
 	return profile
+}
+
+func GeoFromTimezone(timezone string) (string, string, bool) {
+	switch strings.TrimSpace(timezone) {
+	case "Asia/Tokyo":
+		return "JP", "JP-13", true
+	case "Asia/Jakarta":
+		return "ID", "ID-JK", true
+	case "Asia/Bangkok":
+		return "TH", "TH-10", true
+	case "Asia/Singapore":
+		return "SG", "SG-01", true
+	case "America/Los_Angeles":
+		return "US", "US-CA", true
+	case "America/Chicago":
+		return "US", "US-TX", true
+	case "America/New_York":
+		return "US", "US-NY", true
+	default:
+		return "", "", false
+	}
 }
 
 func stableCandidateForProfile(profile Profile) browserfingerprint.ChromiumCandidate {
@@ -279,6 +323,8 @@ func stableCandidateForProfile(profile Profile) browserfingerprint.ChromiumCandi
 func (s *Store) backfillStableFields(ctx context.Context, row db.AccountBrowserFingerprint, profile Profile) {
 	updates := map[string]any{}
 	putUpdate(updates, "browser_profile_template", row.BrowserProfileTemplate, profile.BrowserProfileTemplate)
+	putUpdate(updates, "country_code", row.CountryCode, profile.CountryCode)
+	putUpdate(updates, "region", row.Region, profile.Region)
 	putUpdate(updates, "browser_family", row.BrowserFamily, profile.BrowserFamily)
 	putUpdate(updates, "browser_major_version", row.BrowserMajorVersion, profile.BrowserMajorVersion)
 	putUpdate(updates, "os_family", row.OSFamily, profile.OSFamily)
@@ -306,6 +352,8 @@ func putUpdate(updates map[string]any, key string, current string, next string) 
 func profileFromRow(row db.AccountBrowserFingerprint) Profile {
 	return normalizeStableProfile(Profile{
 		AccountID:              row.AccountID,
+		CountryCode:            row.CountryCode,
+		Region:                 row.Region,
 		BrowserProfileTemplate: row.BrowserProfileTemplate,
 		BrowserFamily:          row.BrowserFamily,
 		BrowserMajorVersion:    row.BrowserMajorVersion,
@@ -327,6 +375,8 @@ func rowFromProfile(profile Profile) db.AccountBrowserFingerprint {
 	profile = normalizeStableProfile(profile)
 	return db.AccountBrowserFingerprint{
 		AccountID:              profile.AccountID,
+		CountryCode:            profile.CountryCode,
+		Region:                 profile.Region,
 		BrowserProfileTemplate: profile.BrowserProfileTemplate,
 		BrowserFamily:          profile.BrowserFamily,
 		BrowserMajorVersion:    profile.BrowserMajorVersion,

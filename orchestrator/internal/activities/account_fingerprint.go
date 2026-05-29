@@ -34,7 +34,7 @@ func (s *Server) generateAccountFingerprint(ctx context.Context, accountID strin
 }
 
 func (s *Server) browserAuthConfigForAccount(ctx context.Context, account *pb.Account) (BrowserAuthConfig, error) {
-	cfg := s.browserAuthConfig.withDefaults()
+	cfg := s.browserAuthSettings(ctx)
 	profile, err := s.accountFingerprint(ctx, account.GetAccountId())
 	if err != nil {
 		return cfg, err

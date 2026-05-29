@@ -1,0 +1,89 @@
+.accountWorkflowTimelinePanel {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  max-height: calc(100dvh - 176px);
+  overflow: auto;
+  padding-right: 4px;
+}
+.workflowRunCard {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 14px;
+}
+.workflowRunHeader,
+.workflowStepTopline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+.workflowRunTitle,
+.workflowStepBody {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+.workflowRunTitle span,
+.workflowStepBody p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+.workflowRunError,
+.workflowStepError {
+  overflow-wrap: anywhere;
+  border-radius: 10px;
+  background: var(--danger-soft);
+  color: var(--danger) !important;
+  padding: 8px 10px;
+}
+.workflowStepList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.workflowStepItem {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr);
+  gap: 10px;
+}
+.workflowStepDot {
+  width: 9px;
+  height: 9px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+.workflowStepItem.good .workflowStepDot { background: var(--success); }
+.workflowStepItem.mid .workflowStepDot { background: #f59e0b; }
+.workflowStepItem.bad .workflowStepDot { background: var(--danger); }
+.workflowStepItem.current .workflowStepBody {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+.workflowStepBody {
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  padding: 10px;
+}
+.workflowStepTopline strong {
+  color: var(--foreground);
+  font-size: 13px;
+}
+.workflowStepTopline span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.workflowStepProgress { color: #2563eb !important; }
+.workflowStepEmpty {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}

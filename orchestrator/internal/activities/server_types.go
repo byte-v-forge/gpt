@@ -9,6 +9,7 @@ import (
 	smsv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/sms/v1"
 	"gorm.io/gorm"
 	"orchestrator/internal/accountfingerprint"
+	"orchestrator/internal/actionregistry"
 	"orchestrator/internal/gopayotp"
 	"orchestrator/internal/jobprojection"
 	"orchestrator/internal/runtimesecrets"
@@ -29,90 +30,66 @@ type GPTSettingsReader interface {
 }
 
 type Config struct {
-	DB                             *gorm.DB
-	OTPProjection                  OTPProjection
-	JobStore                       *jobprojection.Store
-	RuntimeSecrets                 runtimesecrets.Store
-	Fingerprints                   *accountfingerprint.Store
-	AccountClient                  pb.GPTAccountServiceClient
-	BrowserAutomationClient        browserautomationv1.BrowserAutomationServiceClient
-	BrowserAuth                    BrowserAuthConfig
-	CodexOAuth                     CodexOAuthConfig
-	PaymentClient                  pb.PaymentServiceClient
-	OTPRelay                       gopayotp.Relay
-	GoPayClient                    pb.GopayAppServiceClient
-	SmsClient                      smsv1.SmsOrderServiceClient
-	SmsCatalogClient               smsv1.SmsCatalogServiceClient
-	MailboxPollRequester           MailboxPollRequester
-	GPTSettings                    GPTSettingsReader
-	EmailAllocator                 AccountEmailAllocator
-	OTPTimeout                     int32
-	RegistrationOTPTimeout         int32
-	GoPayAppStepBodyLimit          int32
-	GoPayAppLinkPaymentTimeout     time.Duration
-	GoPayAppUnlinkTimeout          time.Duration
-	ChangePhoneMaxFailures         int
-	ChangePhoneDisabled            bool
-	ChangePhoneOTPRetryAttempts    int
-	ChangePhoneGetNumberRetryDelay time.Duration
+	DB                      *gorm.DB
+	OTPProjection           OTPProjection
+	JobStore                *jobprojection.Store
+	RuntimeSecrets          runtimesecrets.Store
+	Fingerprints            *accountfingerprint.Store
+	AccountClient           pb.GPTAccountServiceClient
+	BrowserAutomationClient browserautomationv1.BrowserAutomationServiceClient
+	BrowserAuth             BrowserAuthConfig
+	CodexOAuth              CodexOAuthConfig
+	PaymentClient           pb.PaymentServiceClient
+	OTPRelay                gopayotp.Relay
+	GoPayClient             pb.GopayAppServiceClient
+	SmsClient               smsv1.SmsOrderServiceClient
+	SmsCatalogClient        smsv1.SmsCatalogServiceClient
+	MailboxPollRequester    MailboxPollRequester
+	GPTSettings             GPTSettingsReader
+	EmailAllocator          AccountEmailAllocator
+	ActionRegistry          *actionregistry.Registry
 }
 
 type Server struct {
-	db                             *gorm.DB
-	otpProjection                  OTPProjection
-	jobStore                       *jobprojection.Store
-	runtimeSecrets                 runtimesecrets.Store
-	fingerprints                   *accountfingerprint.Store
-	accountClient                  pb.GPTAccountServiceClient
-	browserAutomationClient        browserautomationv1.BrowserAutomationServiceClient
-	browserAuthConfig              BrowserAuthConfig
-	codexOAuthConfig               CodexOAuthConfig
-	paymentClient                  pb.PaymentServiceClient
-	otpRelay                       gopayotp.Relay
-	gopayClient                    pb.GopayAppServiceClient
-	smsClient                      smsv1.SmsOrderServiceClient
-	smsCatalogClient               smsv1.SmsCatalogServiceClient
-	mailboxPollRequester           MailboxPollRequester
-	gptSettings                    GPTSettingsReader
-	emailAllocator                 AccountEmailAllocator
-	otpTimeout                     int32
-	regOTPTimeout                  int32
-	gopayAppStepBodyLimit          int32
-	gopayAppLinkPaymentTimeout     time.Duration
-	gopayAppUnlinkTimeout          time.Duration
-	changePhoneMaxFailures         int
-	changePhoneDisabled            bool
-	changePhoneOTPRetryAttempts    int
-	changePhoneGetNumberRetryDelay time.Duration
+	db                      *gorm.DB
+	otpProjection           OTPProjection
+	jobStore                *jobprojection.Store
+	runtimeSecrets          runtimesecrets.Store
+	fingerprints            *accountfingerprint.Store
+	accountClient           pb.GPTAccountServiceClient
+	browserAutomationClient browserautomationv1.BrowserAutomationServiceClient
+	browserAuthConfig       BrowserAuthConfig
+	codexOAuthConfig        CodexOAuthConfig
+	paymentClient           pb.PaymentServiceClient
+	otpRelay                gopayotp.Relay
+	gopayClient             pb.GopayAppServiceClient
+	smsClient               smsv1.SmsOrderServiceClient
+	smsCatalogClient        smsv1.SmsCatalogServiceClient
+	mailboxPollRequester    MailboxPollRequester
+	gptSettings             GPTSettingsReader
+	emailAllocator          AccountEmailAllocator
+	actionRegistry          *actionregistry.Registry
 }
 
 func NewServer(cfg Config) *Server {
 	return &Server{
-		db:                             cfg.DB,
-		otpProjection:                  cfg.OTPProjection,
-		jobStore:                       cfg.JobStore,
-		runtimeSecrets:                 cfg.RuntimeSecrets,
-		fingerprints:                   cfg.Fingerprints,
-		accountClient:                  cfg.AccountClient,
-		browserAutomationClient:        cfg.BrowserAutomationClient,
-		browserAuthConfig:              cfg.BrowserAuth.withDefaults(),
-		codexOAuthConfig:               cfg.CodexOAuth.withDefaults(),
-		paymentClient:                  cfg.PaymentClient,
-		otpRelay:                       cfg.OTPRelay,
-		gopayClient:                    cfg.GoPayClient,
-		smsClient:                      cfg.SmsClient,
-		smsCatalogClient:               cfg.SmsCatalogClient,
-		mailboxPollRequester:           cfg.MailboxPollRequester,
-		gptSettings:                    cfg.GPTSettings,
-		emailAllocator:                 defaultAccountEmailAllocator(cfg.EmailAllocator, cfg.AccountClient),
-		otpTimeout:                     cfg.OTPTimeout,
-		regOTPTimeout:                  cfg.RegistrationOTPTimeout,
-		gopayAppStepBodyLimit:          cfg.GoPayAppStepBodyLimit,
-		gopayAppLinkPaymentTimeout:     cfg.GoPayAppLinkPaymentTimeout,
-		gopayAppUnlinkTimeout:          cfg.GoPayAppUnlinkTimeout,
-		changePhoneMaxFailures:         cfg.ChangePhoneMaxFailures,
-		changePhoneDisabled:            cfg.ChangePhoneDisabled,
-		changePhoneOTPRetryAttempts:    cfg.ChangePhoneOTPRetryAttempts,
-		changePhoneGetNumberRetryDelay: cfg.ChangePhoneGetNumberRetryDelay,
+		db:                      cfg.DB,
+		otpProjection:           cfg.OTPProjection,
+		jobStore:                cfg.JobStore,
+		runtimeSecrets:          cfg.RuntimeSecrets,
+		fingerprints:            cfg.Fingerprints,
+		accountClient:           cfg.AccountClient,
+		browserAutomationClient: cfg.BrowserAutomationClient,
+		browserAuthConfig:       cfg.BrowserAuth.withDefaults(),
+		codexOAuthConfig:        cfg.CodexOAuth.withDefaults(),
+		paymentClient:           cfg.PaymentClient,
+		otpRelay:                cfg.OTPRelay,
+		gopayClient:             cfg.GoPayClient,
+		smsClient:               cfg.SmsClient,
+		smsCatalogClient:        cfg.SmsCatalogClient,
+		mailboxPollRequester:    cfg.MailboxPollRequester,
+		gptSettings:             cfg.GPTSettings,
+		emailAllocator:          defaultAccountEmailAllocator(cfg.EmailAllocator, cfg.AccountClient),
+		actionRegistry:          actionregistry.RegisterDefault(cfg.ActionRegistry),
 	}
 }

@@ -1,10 +1,11 @@
 import { AlertTriangle, Clock, ShieldCheck } from 'lucide-react';
 import { compactCellError, formatUnix } from '@byte-v-forge/common-ui';
 import { formatJobTime } from './job-utils';
+import type { GptActionCatalog } from './action-catalog';
 import { actionText } from './labels';
 import type { DisplayLabelMap, GoPayDashboardStateResponse, GoPayUserStatusResponse, Job } from './types';
 
-export function GoPayStatusCard({ state, currentJob, loading }: { state: GoPayDashboardStateResponse | null; currentJob?: Job; loading: boolean }) {
+export function GoPayStatusCard({ actionCatalog, state, currentJob, loading }: { actionCatalog?: GptActionCatalog; state: GoPayDashboardStateResponse | null; currentJob?: Job; loading: boolean }) {
   const status = state?.status;
   const error = state?.error_message || state?.wa_phone_error_message || status?.error_message || '';
   const stage = String(status?.stage || '').trim();
@@ -25,7 +26,7 @@ export function GoPayStatusCard({ state, currentJob, loading }: { state: GoPayDa
       {currentJob && (
         <div className="goPayCurrentFlow">
           <span>当前流程</span>
-          <strong>{actionText(currentJob.action)}</strong>
+          <strong>{actionText(currentJob.action, actionCatalog)}</strong>
           <em>{currentJob.last_step || currentJob.status}</em>
         </div>
       )}

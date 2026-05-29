@@ -1,7 +1,10 @@
 package activities
 
 import (
+	"context"
 	"strings"
+
+	"orchestrator/internal/gptsettings"
 )
 
 const (
@@ -90,6 +93,29 @@ func (c CodexOAuthConfig) withDefaults() CodexOAuthConfig {
 		c.PhoneMinReuseRemainingSeconds = defaultCodexOAuthPhoneMinReuseRemaining
 	}
 	return c
+}
+
+func (s *Server) codexOAuthSettings(ctx context.Context) CodexOAuthConfig {
+	cfg := s.codexOAuthConfig.withDefaults()
+	values := s.pluginValues(ctx, "codex_oauth")
+	cfg.ClientID = gptsettings.StringValue(values, "client_id", cfg.ClientID)
+	cfg.RedirectURI = gptsettings.StringValue(values, "redirect_uri", cfg.RedirectURI)
+	cfg.AuthURL = gptsettings.StringValue(values, "auth_url", cfg.AuthURL)
+	cfg.TokenURL = gptsettings.StringValue(values, "token_url", cfg.TokenURL)
+	cfg.TokenProxyURL = gptsettings.StringValue(values, "token_proxy_url", cfg.TokenProxyURL)
+	cfg.ProtocolProxyURL = gptsettings.StringValue(values, "protocol_proxy_url", cfg.ProtocolProxyURL)
+	cfg.ProtocolProxyRuntimeHTTPAddr = gptsettings.StringValue(values, "protocol_proxy_runtime_http_addr", cfg.ProtocolProxyRuntimeHTTPAddr)
+	cfg.ProtocolTLSProfile = gptsettings.StringValue(values, "protocol_tls_profile", cfg.ProtocolTLSProfile)
+	cfg.ProtocolSessionDumpEnabled = gptsettings.BoolValue(values, "protocol_session_dump_enabled", cfg.ProtocolSessionDumpEnabled)
+	cfg.Scope = gptsettings.StringValue(values, "scope", cfg.Scope)
+	cfg.PhoneLabel = gptsettings.StringValue(values, "phone_label", cfg.PhoneLabel)
+	cfg.PhoneProfileKey = gptsettings.StringValue(values, "phone_profile_key", cfg.PhoneProfileKey)
+	cfg.PhoneMaxReuseCount = gptsettings.IntValue(values, "phone_max_reuse_count", cfg.PhoneMaxReuseCount)
+	cfg.PhoneCountryISO2 = gptsettings.StringValue(values, "phone_country_iso2", cfg.PhoneCountryISO2)
+	cfg.PhoneCountryCallingCode = gptsettings.StringValue(values, "phone_country_calling_code", cfg.PhoneCountryCallingCode)
+	cfg.PhoneWaitSeconds = gptsettings.Int32Value(values, "phone_wait_seconds", cfg.PhoneWaitSeconds)
+	cfg.PhoneMinReuseRemainingSeconds = gptsettings.Int32Value(values, "phone_min_reuse_remaining_seconds", cfg.PhoneMinReuseRemainingSeconds)
+	return cfg.withDefaults()
 }
 
 func (c CodexOAuthConfig) label(override string) string {

@@ -24,30 +24,32 @@ import (
 	"orchestrator/db"
 	"orchestrator/internal/accountfingerprint"
 	"orchestrator/internal/accountmail"
+	"orchestrator/internal/actionregistry"
+	"orchestrator/internal/contracts"
+	"orchestrator/internal/emailotpwait"
 	"orchestrator/internal/gopayotp"
 	"orchestrator/internal/gptsettings"
 	"orchestrator/internal/jobevents"
 	"orchestrator/internal/jobprojection"
-	"orchestrator/internal/jobqueue"
 	"orchestrator/internal/mailboxevents"
 	"orchestrator/internal/otpprojection"
-	"orchestrator/internal/registerotpwait"
 	"orchestrator/internal/runtimesecrets"
 	"orchestrator/pb"
 )
 
 type orchestratorDependencies struct {
-	db                       *gorm.DB
-	jobStore                 *jobprojection.Store
-	jobEvents                *jobevents.Store
-	fingerprints             *accountfingerprint.Store
-	gptSettings              *gptsettings.Store
-	otpProjection            *otpprojection.Store
-	registerProtocolOTPWaits *registerotpwait.Store
-	mailboxState             *accountmail.Projector
-	secrets                  runtimesecrets.Store
-	platformBus              *natseventbus.Bus
-	hotStream                hotstream.Bus
+	db             *gorm.DB
+	jobStore       *jobprojection.Store
+	jobEvents      *jobevents.Store
+	fingerprints   *accountfingerprint.Store
+	gptSettings    *gptsettings.Store
+	otpProjection  *otpprojection.Store
+	emailOTPWaits  *emailotpwait.Store
+	mailboxState   *accountmail.Projector
+	secrets        runtimesecrets.Store
+	platformBus    *natseventbus.Bus
+	hotStream      hotstream.Bus
+	actionRegistry *actionregistry.Registry
 
 	accountClient           pb.GPTAccountServiceClient
 	browserAutomationClient browserautomationv1.BrowserAutomationServiceClient
@@ -62,7 +64,7 @@ type orchestratorDependencies struct {
 }
 
 func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*orchestratorDependencies, error) {
-	deps := &orchestratorDependencies{}
+	deps := &orchestratorDependencies{actionRegistry: actionregistry.NewDefault()}
 	runtimeSecretClient, err := newRequiredRedisClient(ctx, cfg.RuntimeSecretRedisURL, "GPT_RUNTIME_SECRET_REDIS_URL is required for GPT runtime secrets")
 	if err != nil {
 		return nil, err
@@ -90,16 +92,19 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 	}
 	deps.addCloser(paymentConn.Close)
 
-	gopayConn, err := newGRPCClientConn(
-		"GoPay app channel",
-		cfg.GoPayAppAddr,
-		grpc.WithDefaultServiceConfig(gopayAppGRPCRetryServiceConfig()),
-	)
-	if err != nil {
-		deps.Close()
-		return nil, err
+	var gopayConn *grpc.ClientConn
+	if deps.goPayActionsEnabled() {
+		gopayConn, err = newGRPCClientConn(
+			"GoPay app channel",
+			cfg.GoPayAppAddr,
+			grpc.WithDefaultServiceConfig(gopayAppGRPCRetryServiceConfig()),
+		)
+		if err != nil {
+			deps.Close()
+			return nil, err
+		}
+		deps.addCloser(gopayConn.Close)
 	}
-	deps.addCloser(gopayConn.Close)
 
 	smsConn, err := newGRPCClientConn("sms service", cfg.SmsAddr)
 	if err != nil {
@@ -123,12 +128,12 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 		return nil, fmt.Errorf("initialize otp projection: %w", err)
 	}
 	deps.otpProjection = otpStore
-	registerProtocolOTPWaits, err := registerotpwait.NewStore(runtimeSecretClient, "byte-v-forge:gpt:register-protocol-otp-wait")
+	emailOTPWaits, err := emailotpwait.NewStore(runtimeSecretClient, "byte-v-forge:gpt:email-otp-wait")
 	if err != nil {
 		deps.Close()
-		return nil, fmt.Errorf("initialize register protocol otp wait store: %w", err)
+		return nil, fmt.Errorf("initialize email otp wait store: %w", err)
 	}
-	deps.registerProtocolOTPWaits = registerProtocolOTPWaits
+	deps.emailOTPWaits = emailOTPWaits
 	platformEventBus, closePlatformEventBus, err := newPlatformEventBus(ctx, cfg)
 	if err != nil {
 		deps.Close()
@@ -146,8 +151,8 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 	deps.jobEvents = jobevents.NewStore(database, db.DSN()).WithHotStream(deps.hotStream)
 	deps.addCloser(deps.jobEvents.Close)
 	deps.jobStore = jobprojection.NewStore(database).
-		WithPublisher(deps.jobEvents).
-		WithActionDispatcher(jobqueue.NewOutboxDispatcher())
+		WithActionRegistry(deps.actionRegistry).
+		WithPublisher(deps.jobEvents)
 	deps.fingerprints = accountfingerprint.NewStore(database)
 	deps.gptSettings = gptsettings.NewStore(database)
 	deps.mailboxPollRequester = mailboxevents.NewRequester(database)
@@ -161,11 +166,35 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 	deps.mailboxState = accountmail.NewProjector(deps.accountClient).WithHotStream(deps.hotStream)
 	deps.browserAutomationClient = browserautomationv1.NewBrowserAutomationServiceClient(browserAutomationConn)
 	deps.paymentClient = pb.NewPaymentServiceClient(paymentConn)
-	deps.gopayClient = pb.NewGopayAppServiceClient(gopayConn)
+	if gopayConn != nil {
+		deps.gopayClient = pb.NewGopayAppServiceClient(gopayConn)
+	}
 	deps.smsClient = smsv1.NewSmsOrderServiceClient(smsConn)
 	deps.smsCatalogClient = smsv1.NewSmsCatalogServiceClient(smsConn)
 
 	return deps, nil
+}
+
+func (d *orchestratorDependencies) goPayActionsEnabled() bool {
+	return d.hasAnyAction(
+		contracts.ActionGoPayApp,
+		contracts.ActionGoPayPayment,
+		contracts.ActionGoPayQRISPaymentActivate,
+		contracts.ActionGoPayWAPayment,
+		contracts.ActionGoPayPaymentRebind,
+	)
+}
+
+func (d *orchestratorDependencies) hasAnyAction(actionIDs ...string) bool {
+	if d == nil || d.actionRegistry == nil {
+		return false
+	}
+	for _, actionID := range actionIDs {
+		if _, ok := d.actionRegistry.Action(actionID); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func newPlatformEventBus(ctx context.Context, cfg orchestratorConfig) (*natseventbus.Bus, func(), error) {

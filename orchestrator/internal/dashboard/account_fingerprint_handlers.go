@@ -17,6 +17,8 @@ type accountFingerprintRequest struct {
 type accountFingerprintResponse struct {
 	AccountID              string `json:"account_id"`
 	Generated              bool   `json:"generated,omitempty"`
+	CountryCode            string `json:"country_code"`
+	Region                 string `json:"region"`
 	BrowserProfileTemplate string `json:"browser_profile_template"`
 	BrowserFamily          string `json:"browser_family"`
 	BrowserMajorVersion    string `json:"browser_major_version"`
@@ -100,6 +102,8 @@ func fingerprintResponse(profile accountfingerprint.Profile, generated bool) acc
 	return accountFingerprintResponse{
 		AccountID:              profile.AccountID,
 		Generated:              generated,
+		CountryCode:            profile.CountryCode,
+		Region:                 profile.Region,
 		BrowserProfileTemplate: profile.BrowserProfileTemplate,
 		BrowserFamily:          profile.BrowserFamily,
 		BrowserMajorVersion:    profile.BrowserMajorVersion,

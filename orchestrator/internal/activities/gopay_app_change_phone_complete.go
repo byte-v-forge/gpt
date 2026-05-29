@@ -57,21 +57,21 @@ func (s *Server) GoPayAppChangePhoneCompleteActivity(ctx context.Context, input 
 			reason := fmt.Sprintf("ChangePhoneComplete: %s", completeResp.GetErrorMessage())
 			if err := s.recordCompletedChangePhoneFailure(ctx, input.GetActivationId(), &failures, reason); err != nil {
 				output.FailureCount = int32(failures)
-				output.MaxFailures = int32(s.changePhoneMaxFailureCount())
+				output.MaxFailures = int32(s.changePhoneMaxFailureCount(ctx))
 				output.RetryableFailure = true
 				output.ErrorMessage = err.Error()
 				data["failure_count"] = failures
-				data["max_failures"] = s.changePhoneMaxFailureCount()
+				data["max_failures"] = s.changePhoneMaxFailureCount(ctx)
 				data["retryable_failure"] = true
 				data["error_message"] = err.Error()
 				return data, err
 			}
 			output.FailureCount = int32(failures)
-			output.MaxFailures = int32(s.changePhoneMaxFailureCount())
+			output.MaxFailures = int32(s.changePhoneMaxFailureCount(ctx))
 			output.RetryableFailure = true
 			output.ErrorMessage = reason
 			data["failure_count"] = failures
-			data["max_failures"] = s.changePhoneMaxFailureCount()
+			data["max_failures"] = s.changePhoneMaxFailureCount(ctx)
 			data["retryable_failure"] = true
 			data["error_message"] = reason
 			return data, nil

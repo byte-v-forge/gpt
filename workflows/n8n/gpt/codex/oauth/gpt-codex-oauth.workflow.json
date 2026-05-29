@@ -1,0 +1,725 @@
+{
+  "id": "gpt-codex-oauth",
+  "name": "GPT Codex OAuth",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gpt/codex-oauth",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "adc21452-4abb-5c04-88e7-0869da0cd682",
+      "name": "Start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "byte-v-forge-gpt-codex-oauth"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "job_id",
+              "name": "job_id",
+              "value": "={{ $json.body.job_id }}",
+              "type": "string"
+            },
+            {
+              "id": "account_id",
+              "name": "account_id",
+              "value": "={{ $json.body.account_id }}",
+              "type": "string"
+            },
+            {
+              "id": "label",
+              "name": "label",
+              "value": "={{ $json.body.label || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "n8n_execution_id",
+              "name": "n8n_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "action_scope",
+              "name": "action_scope",
+              "value": "codex-oauth",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1cd9fbb-64ab-5592-b003-f469fafb1786",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/bind' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id } }}",
+        "options": {}
+      },
+      "id": "996a0ba9-2216-5db1-a640-49e6ac3821d8",
+      "name": "Bind Execution",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/start-browser' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label } }}",
+        "options": {}
+      },
+      "id": "c24c47a8-cbd5-55f7-81c3-ad8774ad9731",
+      "name": "Start Browser",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/detect-browser-stage' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, session: $('Start Browser').first().json.session } }}",
+        "options": {}
+      },
+      "id": "6b61e024-6a21-5bb1-b78a-0bf2268d93fa",
+      "name": "Detect Browser Stage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stage-email?",
+              "leftValue": "={{ $json.stage === 'email' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3a6f690a-3808-5866-acdd-3f9003ee9467",
+      "name": "Stage Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/submit-email' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, session: $('Start Browser').first().json.session } }}",
+        "options": {}
+      },
+      "id": "6dbd48ea-9b69-5ebf-9a0b-1b13e328ddf7",
+      "name": "Submit Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stage-password?",
+              "leftValue": "={{ $json.stage === 'password' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7d07fdff-e8bb-5051-9d3c-f996e9a62053",
+      "name": "Stage Password?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/submit-password' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, session: $('Start Browser').first().json.session } }}",
+        "options": {}
+      },
+      "id": "fd4cd939-0c94-5c09-906a-46779ba4f560",
+      "name": "Submit Password",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2560,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stage-email-otp?",
+              "leftValue": "={{ $json.stage === 'email_otp' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "204565d7-2246-587a-9f68-3d56b9de465d",
+      "name": "Stage Email OTP?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/submit-email-otp' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, session: $('Start Browser').first().json.session, issuedAfterUnix: $json.emailOtpIssuedAfterUnix || 0 } }}",
+        "options": {}
+      },
+      "id": "3edebdda-ff96-5107-a570-2edd0f28eed1",
+      "name": "Submit Email OTP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stage-add-phone?",
+              "leftValue": "={{ $json.stage === 'add_phone' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "97c97142-fa58-5320-abac-658ecc630fe0",
+      "name": "Stage Add Phone?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3520,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/add-phone-browser' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, allowAddPhone: false, session: $('Start Browser').first().json.session } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fdc8b6aa-1d24-5541-9cf4-45456483d111",
+      "name": "Mark Add Phone Required",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3840,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/fail' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_browser_add_phone', error_message: $json.errorMessage || $json.error_message || 'codex oauth add phone required', data: $json.data || $json } }}",
+        "options": {}
+      },
+      "id": "6a816265-480d-5ee0-8916-996381a01ebc",
+      "name": "Fail Add Phone Required",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4160,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stage-ready?",
+              "leftValue": "={{ ['consent', 'callback'].includes($json.stage) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a5e7158b-9927-52d2-a4c6-dffef53c6518",
+      "name": "Stage Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3840,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/complete-browser' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, markPhoneConfirmedOnSuccess: false, session: $('Start Browser').first().json.session } }}",
+        "options": {}
+      },
+      "id": "3bb0f782-9c66-5eff-ab59-b3e72c93129f",
+      "name": "Complete Browser",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/complete' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, result: { auth_secret_key: $json.authSecretKey, data: $json.data, driver: 'browser' } } }}",
+        "options": {}
+      },
+      "id": "cc956d22-999f-5a0f-a134-d0761ab59a23",
+      "name": "Complete Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/fail' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_browser_detect', error_message: 'codex oauth browser stage not ready: ' + ($json.stage || 'unknown'), data: $json } }}",
+        "options": {}
+      },
+      "id": "ae297fb6-d6da-5eff-8bcc-1111b5bb4e24",
+      "name": "Fail Unexpected Stage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4160,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth/stop-browser' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, session: $('Start Browser').first().json.session, reason: 'codex oauth browser cleanup' } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "f2b0a519-ab9f-5224-b0eb-7fbe49b26eb8",
+      "name": "Stop Browser",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4800,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Bind Execution",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bind Execution": {
+      "main": [
+        [
+          {
+            "node": "Start Browser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Browser": {
+      "main": [
+        [
+          {
+            "node": "Detect Browser Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Browser Stage": {
+      "main": [
+        [
+          {
+            "node": "Stage Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage Email?": {
+      "main": [
+        [
+          {
+            "node": "Submit Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stage Password?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Email": {
+      "main": [
+        [
+          {
+            "node": "Stage Password?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage Password?": {
+      "main": [
+        [
+          {
+            "node": "Submit Password",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stage Email OTP?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Password": {
+      "main": [
+        [
+          {
+            "node": "Stage Email OTP?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage Email OTP?": {
+      "main": [
+        [
+          {
+            "node": "Submit Email OTP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stage Add Phone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Email OTP": {
+      "main": [
+        [
+          {
+            "node": "Stage Add Phone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage Add Phone?": {
+      "main": [
+        [
+          {
+            "node": "Mark Add Phone Required",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stage Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Add Phone Required": {
+      "main": [
+        [
+          {
+            "node": "Fail Add Phone Required",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Add Phone Required": {
+      "main": [
+        [
+          {
+            "node": "Stop Browser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage Ready?": {
+      "main": [
+        [
+          {
+            "node": "Complete Browser",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Unexpected Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Browser": {
+      "main": [
+        [
+          {
+            "node": "Complete Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Job": {
+      "main": [
+        [
+          {
+            "node": "Stop Browser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Unexpected Stage": {
+      "main": [
+        [
+          {
+            "node": "Stop Browser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "tags": []
+}

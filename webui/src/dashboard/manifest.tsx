@@ -9,6 +9,7 @@ import './gopay-workflow.css';
 import './account-actions-layout.css';
 import './account-detail-actions.css';
 import './account-proxy-history.css';
+import './account-workflow-timeline.css';
 import './styles.css';
 
 registerGoPayWorkflowRenderers();

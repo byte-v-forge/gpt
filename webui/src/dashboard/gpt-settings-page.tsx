@@ -16,6 +16,7 @@ import {
 } from '@byte-v-forge/common-ui';
 import type { Control } from '@byte-v-forge/common-ui';
 import { getGPTSettings, gptSettingsQueryKey, updateGPTSettings } from './gpt-settings-api';
+import { GPTPluginSettingsSection } from './gpt-plugin-settings-section';
 import {
   defaultGPTSettingsForm,
   formFromGPTSettings,
@@ -38,8 +39,8 @@ export function GPTSettingsPage() {
   });
 
   useEffect(() => {
-    if (query.data?.settings) form.reset(formFromGPTSettings(query.data.settings));
-  }, [form, query.data?.settings]);
+    if (query.data?.settings) form.reset(formFromGPTSettings(query.data.settings, query.data.plugin_schemas));
+  }, [form, query.data?.plugin_schemas, query.data?.settings]);
   useEffect(() => {
     if (query.error) toast.showError(query.error);
   }, [query.error, toast.showError]);
@@ -58,7 +59,7 @@ export function GPTSettingsPage() {
           <section className="grid gap-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4">
             <div>
               <h3 className="m-0 text-sm font-semibold">代理预检</h3>
-              <p className="m-0 text-xs text-muted-foreground">获取动态代理后，按配置校验 IP 纯净度和 Cloudflare 可访问性。</p>
+              <p className="m-0 text-xs text-muted-foreground">获取动态代理后，按配置校验 IP 纯净度、Cloudflare 风险和目标网络连通性。</p>
             </div>
             <BooleanField control={form.control} name="enabled" label="启用预检" />
             {preflightEnabled && (
@@ -74,6 +75,7 @@ export function GPTSettingsPage() {
               </div>
             )}
           </section>
+          <GPTPluginSettingsSection form={form} schemas={query.data?.plugin_schemas || []} />
         </div>
       </form>
     </>

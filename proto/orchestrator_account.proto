@@ -18,7 +18,6 @@ service AccountWorkflowService {
   rpc CodexOAuthProtocol(CodexOAuthRequest) returns (CodexOAuthResponse);
   rpc CodexOAuthAddPhone(CodexOAuthAddPhoneRequest) returns (CodexOAuthAddPhoneResponse);
   rpc CodexOAuthBatchAddPhone(CodexOAuthBatchAddPhoneRequest) returns (CodexOAuthBatchAddPhoneResponse);
-  rpc RegisterAndActivateAccount(RegisterAndActivateAccountRequest) returns (RegisterAndActivateAccountResponse);
   rpc FetchAccountMailbox(FetchAccountMailboxRequest) returns (FetchAccountMailboxResponse);
 }
 
@@ -303,34 +302,6 @@ message CodexOAuthBatchAddPhoneResponse {
   string job_id = 1;
   bool started = 2;
   string error_message = 3;
-}
-
-message RegisterAndActivateAccountRequest {
-  reserved 1, 2, 3, 4, 5, 8, 9, 10, 12;
-  reserved "use_split_strategy";
-  string email = 6;
-  string password = 7;
-  string account_id = 11;
-  AccountEmailStrategy email_strategy = 13;
-  RegisterOTPOptions otp_options = 14;
-  string gopay_phone = 15;
-  string gopay_country_code = 16;
-  string gopay_pin = 17;
-  string country_code = 18;
-  string region = 19;
-}
-
-message RegisterAndActivateAccountResponse {
-  string job_id = 1;
-  string session_token = 2;
-  bool plus_trial_eligible = 3;
-  string checkout_url = 4;
-  bool activation_success = 5;
-  string error_message = 6;
-  string charge_ref = 7;
-  string snap_token = 8;
-  string access_token = 9;
-  bool started = 10;
 }
 
 message CodexOAuthAcquirePhoneInput {

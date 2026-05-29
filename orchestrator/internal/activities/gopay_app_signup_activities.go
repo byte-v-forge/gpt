@@ -18,7 +18,7 @@ func (s *Server) startGoPayAppSignup(ctx context.Context, input GoPayAppOTPStart
 	}
 	output := GoPayAppOTPOutput{
 		Operation:      goPayAppOTPOperationSignup,
-		TimeoutSeconds: s.paymentOtpTimeout(),
+		TimeoutSeconds: s.paymentOtpTimeout(ctx),
 		StateJson:      stateJSON,
 	}
 	otpChannel := normalizeGoPayOTPChannel(input.GetOtpChannel())

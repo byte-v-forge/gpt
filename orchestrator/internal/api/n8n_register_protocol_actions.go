@@ -13,8 +13,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"orchestrator/internal/accountmail"
+	"orchestrator/internal/emailotpwait"
 	"orchestrator/internal/jobstatus"
-	"orchestrator/internal/registerotpwait"
 	"orchestrator/pb"
 )
 
@@ -28,8 +28,6 @@ const (
 	registerProtocolOTPIssuedAfterParam     = "register_protocol_otp_issued_after_unix"
 	registerProtocolOTPTimeoutParam         = "register_protocol_otp_timeout_seconds"
 	registerProtocolOTPResumeSecretKeyParam = "register_protocol_otp_resume_url_secret_key"
-	registerProtocolOTPSourceParam          = "register_protocol_otp_source"
-	registerProtocolOTPMessageIDParam       = "register_protocol_otp_message_id"
 )
 
 type n8nRegisterProtocolStepResult struct {
@@ -80,7 +78,7 @@ func (s *Server) StartN8NRegisterProtocol(ctx context.Context, req *pb.RegisterA
 		accountID = uuid.NewString()
 	}
 	if s.activities == nil {
-		return &pb.RegisterAccountResponse{JobId: jobID, ErrorMessage: "GPT action runner is not configured"}, "", fmt.Errorf("GPT action runner is not configured")
+		return &pb.RegisterAccountResponse{JobId: jobID, ErrorMessage: "GPT action API is not configured"}, "", fmt.Errorf("GPT action API is not configured")
 	}
 	account, err := s.activities.EnsureAccountActivity(ctx, pb.EnsureAccountInput{Account: &pb.AccountSpec{
 		AccountId:     accountID,
@@ -104,7 +102,7 @@ func (s *Server) StartN8NRegisterProtocol(ctx context.Context, req *pb.RegisterA
 		registerProtocolEmailParam:  emailx.Normalize(accountRecord.GetAccount().GetEmail()),
 	}
 	putProtocolGeoParams(params, req.GetCountryCode(), req.GetRegion())
-	if _, err := s.jobStore.CreateWithIDWithoutDispatch(ctx, jobID, accountID, actionRegisterProtocol, params); err != nil {
+	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionRegisterProtocol, params); err != nil {
 		return &pb.RegisterAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, accountID, err
 	}
 	return &pb.RegisterAccountResponse{JobId: jobID, Started: true}, accountID, nil
@@ -171,8 +169,8 @@ func (s *Server) AwaitN8NRegisterProtocolOTP(ctx context.Context, jobID string, 
 	if jobID == "" || accountID == "" || flowID == "" || email == "" || resumeURL == "" {
 		return nil, fmt.Errorf("job_id, account_id, flow_id, email and resume_url are required")
 	}
-	if s.registerProtocolOTPWaits == nil {
-		return nil, fmt.Errorf("register protocol otp wait store is required")
+	if s.emailOTPWaits == nil {
+		return nil, fmt.Errorf("email otp wait store is required")
 	}
 	if timeoutSeconds <= 0 {
 		timeoutSeconds = 180
@@ -185,7 +183,7 @@ func (s *Server) AwaitN8NRegisterProtocolOTP(ctx context.Context, jobID string, 
 	if err := s.saveRuntimeSecretValueTTL(ctx, secretKey, resumeURL, ttl); err != nil {
 		return nil, err
 	}
-	entry := registerotpwait.Entry{
+	entry := emailotpwait.Entry{
 		JobID:           jobID,
 		AccountID:       accountID,
 		FlowID:          flowID,
@@ -195,7 +193,7 @@ func (s *Server) AwaitN8NRegisterProtocolOTP(ctx context.Context, jobID string, 
 		ResumeSecretKey: secretKey,
 		N8NExecutionID:  n8nExecutionID,
 	}
-	if err := s.registerProtocolOTPWaits.Register(ctx, entry, ttl); err != nil {
+	if err := s.emailOTPWaits.Register(ctx, entry, ttl); err != nil {
 		return nil, err
 	}
 	detail := map[string]any{
@@ -231,21 +229,21 @@ func (s *Server) AwaitN8NRegisterProtocolOTP(ctx context.Context, jobID string, 
 	if err := s.setJobParams(ctx, jobID, params); err != nil {
 		return nil, err
 	}
-	if message, code, ok, err := s.latestRegisterProtocolMailboxOTP(ctx, email, otpIssuedAfterUnix); err != nil {
+	if message, code, ok, err := s.latestMailboxEmailOTP(ctx, email, otpIssuedAfterUnix); err != nil {
 		return nil, err
 	} else if ok {
 		receivedAt := message.GetReceivedAtUnix()
 		if receivedAt <= 0 {
 			receivedAt = time.Now().Unix()
 		}
-		otpData, err := s.completeRegisterProtocolMailboxOTP(ctx, entry, message, code, receivedAt)
+		otpData, err := s.completeMailboxEmailOTPWait(ctx, entry, message, code, receivedAt)
 		if err != nil {
 			return nil, err
 		}
-		if err := s.markRegisterProtocolOTPResolved(ctx, jobID, time.Now().Unix()); err != nil {
+		if err := s.markEmailOTPResolved(ctx, jobID, time.Now().Unix()); err != nil {
 			return nil, err
 		}
-		_ = s.registerProtocolOTPWaits.Delete(ctx, entry)
+		_ = s.emailOTPWaits.Delete(ctx, entry)
 		for key, value := range otpData {
 			detail[key] = value
 		}
@@ -287,7 +285,7 @@ func (s *Server) AwaitN8NRegisterProtocolOTP(ctx context.Context, jobID string, 
 	}, nil
 }
 
-func (s *Server) latestRegisterProtocolMailboxOTP(ctx context.Context, email string, issuedAfterUnix int64) (*mailboxv1.EmailInboxMessage, string, bool, error) {
+func (s *Server) latestMailboxEmailOTP(ctx context.Context, email string, issuedAfterUnix int64) (*mailboxv1.EmailInboxMessage, string, bool, error) {
 	if s == nil || s.otpProjection == nil {
 		return nil, "", false, nil
 	}
@@ -342,8 +340,8 @@ func (s *Server) FinishN8NRegisterProtocol(ctx context.Context, jobID string, ac
 	if err != nil {
 		return nil, s.markActionFailed(ctx, jobID, stepRegisterAccountProtocolComplete, jobstatus.FailedRetryable, false, true, err, nil)
 	}
-	if register == nil || strings.TrimSpace(register.GetSessionToken()) == "" || strings.TrimSpace(register.GetAccessToken()) == "" {
-		err := fmt.Errorf("protocol register did not return both ChatGPT session and access tokens")
+	if register == nil || strings.TrimSpace(register.GetAccessToken()) == "" {
+		err := fmt.Errorf("protocol register did not return ChatGPT access token")
 		return nil, s.markActionFailed(ctx, jobID, stepRegisterAccountProtocolComplete, jobstatus.FailedRetryable, false, true, err, nil)
 	}
 	result := map[string]any{

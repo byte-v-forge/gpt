@@ -1,13 +1,15 @@
 package contracts
 
+import "github.com/byte-v-forge/gpt/pkg/gptplugin"
+
 const (
 	StepRegisterAccount                 = "register_account"
 	StepRegisterAccountStart            = "register_account_start"
 	StepRegisterAccountBrowser          = "register_account_browser"
-	StepProtocolUseProxy                = "protocol_use_proxy"
-	StepDynamicIPCreateSession          = "dynamic_ip_create_session"
-	StepDynamicIPExitGeo                = "dynamic_ip_exit_geo"
-	StepDynamicIPPreflight              = "dynamic_ip_preflight"
+	StepProtocolUseProxy                = gptplugin.StepProtocolUseProxy
+	StepDynamicIPCreateSession          = gptplugin.StepDynamicIPCreateSession
+	StepDynamicIPExitGeo                = gptplugin.StepDynamicIPExitGeo
+	StepDynamicIPPreflight              = gptplugin.StepDynamicIPPreflight
 	StepRegisterAccountProtocol         = "register_account_protocol"
 	StepRegisterAccountProtocolStart    = "register_account_protocol_start"
 	StepRegisterAccountProtocolOTPWait  = "register_account_protocol_otp_wait"
@@ -15,7 +17,7 @@ const (
 	StepRegisterAccountOTPRequest       = "register_account_otp_request"
 	StepRegisterAccountOTPWait          = "register_account_otp_wait"
 	StepRegisterAccountComplete         = "register_account_complete"
-	StepEnsureLogon                     = "ensure_logon"
+	StepEnsureLogon                     = gptplugin.StepEnsureLogon
 	StepGoPayAppLogin                   = "gopay_app_ensure_token_available"
 	StepGoPayAppChangePhone             = "gopay_app_change_phone"
 	StepGoPayAppChangePhoneGetNumber    = "gopay_app_change_phone_get_number"
@@ -47,32 +49,32 @@ const (
 	StepGoPayPaymentPrepareRefresh      = "gopay_payment_prepare_checkout_refresh"
 	StepGoPayPaymentPrepareLink         = "gopay_payment_prepare_link"
 	StepGoPayPayment                    = "gopay_payment"
-	StepProbePlusTrial                  = "probe_plus_trial"
-	StepProbeTier                       = "probe_tier"
-	StepLoginSession                    = "login_session"
-	StepLoginSessionStart               = "login_session_start"
-	StepLoginSessionBrowser             = "login_session_browser"
-	StepLoginSessionProtocol            = "login_session_protocol"
-	StepLoginSessionProtocolStart       = "login_session_protocol_start"
-	StepLoginSessionProtocolOTPWait     = "login_session_protocol_otp_wait"
-	StepLoginSessionProtocolComplete    = "login_session_protocol_complete"
-	StepLoginSessionOTPRequest          = "login_session_otp_request"
-	StepLoginSessionOTPWait             = "login_session_otp_wait"
-	StepLoginSessionComplete            = "login_session_complete"
-	StepCodexOAuthAcquirePhone          = "codex_oauth_acquire_phone"
-	StepCodexOAuthProtocolStart         = "codex_oauth_protocol_start"
-	StepCodexOAuthProtocolDetect        = "codex_oauth_protocol_detect"
-	StepCodexOAuthProtocolEmail         = "codex_oauth_protocol_email"
-	StepCodexOAuthProtocolPassword      = "codex_oauth_protocol_password"
-	StepCodexOAuthProtocolEmailOTP      = "codex_oauth_protocol_email_otp"
-	StepCodexOAuthProtocolAddPhone      = "codex_oauth_protocol_add_phone"
-	StepCodexOAuthProtocolComplete      = "codex_oauth_protocol_complete"
-	StepCodexOAuthBrowserStart          = "codex_oauth_browser_start"
-	StepCodexOAuthBrowserDetect         = "codex_oauth_browser_detect"
-	StepCodexOAuthBrowserEmail          = "codex_oauth_browser_email"
-	StepCodexOAuthBrowserPassword       = "codex_oauth_browser_password"
-	StepCodexOAuthBrowserEmailOTP       = "codex_oauth_browser_email_otp"
-	StepCodexOAuthBrowserAddPhone       = "codex_oauth_browser_add_phone"
-	StepCodexOAuthBrowserComplete       = "codex_oauth_browser_complete"
-	StepCodexOAuthReleasePhone          = "codex_oauth_release_phone"
+	StepProbePlusTrial                  = gptplugin.StepProbePlusTrial
+	StepProbeTier                       = gptplugin.StepProbeTier
+	StepLoginSession                    = gptplugin.StepLoginSession
+	StepLoginSessionStart               = gptplugin.StepLoginSessionStart
+	StepLoginSessionBrowser             = gptplugin.StepLoginSessionBrowser
+	StepLoginSessionProtocol            = gptplugin.StepLoginSessionProtocol
+	StepLoginSessionProtocolStart       = gptplugin.StepLoginSessionProtocolStart
+	StepLoginSessionProtocolOTPWait     = gptplugin.StepLoginSessionProtocolOTPWait
+	StepLoginSessionProtocolComplete    = gptplugin.StepLoginSessionProtocolComplete
+	StepLoginSessionOTPRequest          = gptplugin.StepLoginSessionOTPRequest
+	StepLoginSessionOTPWait             = gptplugin.StepLoginSessionOTPWait
+	StepLoginSessionComplete            = gptplugin.StepLoginSessionComplete
+	StepCodexOAuthAcquirePhone          = gptplugin.StepCodexOAuthAcquirePhone
+	StepCodexOAuthProtocolStart         = gptplugin.StepCodexOAuthProtocolStart
+	StepCodexOAuthProtocolDetect        = gptplugin.StepCodexOAuthProtocolDetect
+	StepCodexOAuthProtocolEmail         = gptplugin.StepCodexOAuthProtocolEmail
+	StepCodexOAuthProtocolPassword      = gptplugin.StepCodexOAuthProtocolPassword
+	StepCodexOAuthProtocolEmailOTP      = gptplugin.StepCodexOAuthProtocolEmailOTP
+	StepCodexOAuthProtocolAddPhone      = gptplugin.StepCodexOAuthProtocolAddPhone
+	StepCodexOAuthProtocolComplete      = gptplugin.StepCodexOAuthProtocolComplete
+	StepCodexOAuthBrowserStart          = gptplugin.StepCodexOAuthBrowserStart
+	StepCodexOAuthBrowserDetect         = gptplugin.StepCodexOAuthBrowserDetect
+	StepCodexOAuthBrowserEmail          = gptplugin.StepCodexOAuthBrowserEmail
+	StepCodexOAuthBrowserPassword       = gptplugin.StepCodexOAuthBrowserPassword
+	StepCodexOAuthBrowserEmailOTP       = gptplugin.StepCodexOAuthBrowserEmailOTP
+	StepCodexOAuthBrowserAddPhone       = gptplugin.StepCodexOAuthBrowserAddPhone
+	StepCodexOAuthBrowserComplete       = gptplugin.StepCodexOAuthBrowserComplete
+	StepCodexOAuthReleasePhone          = gptplugin.StepCodexOAuthReleasePhone
 )

@@ -24,7 +24,7 @@ func (s *Server) GoPayPaymentCompleteActivity(ctx context.Context, input GoPayPa
 		data = map[string]any{}
 	}
 	data["payment_otp"] = map[string]any{
-		"timeout_seconds":    s.paymentOtpTimeout(),
+		"timeout_seconds":    s.paymentOtpTimeout(ctx),
 		"issued_after_unix":  input.GetOtpIssuedAfterUnix(),
 		"found":              input.GetOtpSource() != "not_required",
 		"source":             input.GetOtpSource(),

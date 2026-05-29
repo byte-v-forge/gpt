@@ -231,17 +231,8 @@ func (c *GptClient) cookieValue(name string, hostHints ...string) string {
 		return ""
 	}
 	for hostKey, cookies := range c.client.CookieJar().GetAllCookies() {
-		if len(hostHints) > 0 {
-			matched := false
-			for _, hint := range hostHints {
-				if hint = strings.TrimSpace(strings.ToLower(hint)); hint != "" && strings.Contains(strings.ToLower(hostKey), hint) {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
+		if !protocolCookieHostMatches(hostKey, hostHints...) {
+			continue
 		}
 		for _, cookie := range cookies {
 			if cookie != nil && strings.EqualFold(cookie.Name, name) && strings.TrimSpace(cookie.Value) != "" {
@@ -250,6 +241,43 @@ func (c *GptClient) cookieValue(name string, hostHints ...string) string {
 		}
 	}
 	return ""
+}
+
+func (c *GptClient) sessionTokenValue(hostHints ...string) string {
+	if c == nil || c.client == nil || c.client.CookieJar() == nil {
+		return ""
+	}
+	cookies := make([]map[string]string, 0)
+	for hostKey, values := range c.client.CookieJar().GetAllCookies() {
+		if !protocolCookieHostMatches(hostKey, hostHints...) {
+			continue
+		}
+		for _, cookie := range values {
+			if cookie == nil || strings.TrimSpace(cookie.Value) == "" {
+				continue
+			}
+			cookies = append(cookies, map[string]string{
+				"name":   strings.TrimSpace(cookie.Name),
+				"value":  strings.TrimSpace(cookie.Value),
+				"domain": strings.TrimSpace(cookie.Domain),
+			})
+		}
+	}
+	return extractBrowserSessionToken(cookies)
+}
+
+func protocolCookieHostMatches(hostKey string, hostHints ...string) bool {
+	if len(hostHints) == 0 {
+		return true
+	}
+	hostKey = strings.ToLower(strings.TrimSpace(hostKey))
+	for _, hint := range hostHints {
+		hint = strings.TrimSpace(strings.ToLower(hint))
+		if hint != "" && strings.Contains(hostKey, hint) {
+			return true
+		}
+	}
+	return false
 }
 
 func codexOAuthProtocolDefaultProfile(cfg CodexOAuthConfig) fingerprinthttp.Profile {

@@ -7,19 +7,7 @@ import "google/protobuf/struct.proto";
 option go_package = "./;pb";
 
 service PaymentWorkflowService {
-  rpc ActivateAccount(ActivateAccountRequest) returns (ActivateAccountResponse);
-  rpc AutopayAccount(ActivateAccountRequest) returns (ActivateAccountResponse);
   rpc ProbeAccount(ProbeAccountRequest) returns (ProbeAccountResponse);
-}
-
-message PersistActivatedInput {
-  string account_id = 1;
-  string session_token = 2;
-  string access_token = 3;
-  string charge_ref = 4;
-  bool plus_trial_eligible = 5;
-  bool plus_trial_checked = 6;
-  bool plus_active = 7;
 }
 
 message ProbePlusTrialActivityInput {
@@ -155,24 +143,6 @@ message GoPayPaymentOTPResendOutput {
 
 message GoPayPaymentCancelInput {
   string flow_id = 1;
-}
-
-message ActivateAccountRequest {
-  string job_id = 1;
-  reserved 2, 3, 4, 5, 6, 7, 8;
-  string account_id = 9;
-  string gopay_phone = 10;
-  string gopay_country_code = 11;
-  string gopay_pin = 12;
-}
-
-message ActivateAccountResponse {
-  string job_id = 1;
-  bool success = 2;
-  string error_message = 3;
-  string charge_ref = 4;
-  string snap_token = 5;
-  bool started = 6;
 }
 
 message ProbeAccountRequest {

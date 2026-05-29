@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"strings"
 
 	"github.com/byte-v-forge/common-lib/hashx"
@@ -32,7 +31,6 @@ type proxyUsageInput struct {
 func accountProxyUsageRow(input proxyUsageInput) db.AccountProxyUsage {
 	data := input.Data
 	raw, _ := json.Marshal(data)
-	proxyProtocol, proxyHost, proxyPort := proxyURLParts(input.ProxyURL)
 	return db.AccountProxyUsage{
 		ID:             uuid.NewString(),
 		AccountID:      strings.TrimSpace(input.AccountID),
@@ -40,20 +38,11 @@ func accountProxyUsageRow(input proxyUsageInput) db.AccountProxyUsage {
 		N8NExecutionID: strings.TrimSpace(input.N8NExecutionID),
 		Purpose:        proxyUsagePurpose(input.Purpose, data),
 		ProxyURLHash:   hashx.ShortSHA256(strings.TrimSpace(input.ProxyURL), 16),
-		ProxyProtocol:  proxyProtocol,
-		ProxyHost:      proxyHost,
-		ProxyPort:      proxyPort,
 		SessionIDHash:  sessionIDHash(data),
 		ExitIP:         firstDataString(data, "exit_ip", "ip"),
 		CountryCode:    firstDataString(data, "country_code", "exit_country", "country"),
 		Region:         firstDataString(data, "region", "exit_region"),
 		City:           firstDataString(data, "city", "exit_city"),
-		NetworkKind:    firstDataString(data, "network_kind", "ip_network_kind"),
-		AnonymizerKind: firstDataString(data, "anonymizer_kind", "ip_anonymizer_kind"),
-		FraudRiskLevel: firstDataString(data, "fraud_risk_level", "ip_fraud_risk_level"),
-		FraudRiskScore: firstDataFloat(data, "fraud_risk_score", "ip_fraud_risk_score"),
-		EdgeRiskLevel:  firstDataString(data, "edge_risk_level", "cf_risk_level"),
-		EdgeRiskScore:  firstDataFloat(data, "edge_risk_score", "cf_risk_score"),
 		AttemptIndex:   uint32(firstDataFloat(data, "attempt", "attempt_index")),
 		Accepted:       firstDataBool(data, "accepted", "preflight_passed"),
 		ErrorMessage:   firstDataString(data, "error_message", "error"),
@@ -66,16 +55,6 @@ func proxyUsagePurpose(purpose string, data map[string]any) string {
 		return purpose
 	}
 	return firstDataString(data, "purpose", "proxy_purpose", "usage")
-}
-
-func proxyURLParts(raw string) (string, string, uint32) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || parsed == nil {
-		return "", "", 0
-	}
-	var port uint32
-	_, _ = fmt.Sscanf(parsed.Port(), "%d", &port)
-	return parsed.Scheme, parsed.Hostname(), port
 }
 
 func sessionIDHash(data map[string]any) string {
@@ -146,7 +125,7 @@ func dataValue(data map[string]any, key string) any {
 	if value, ok := data[key]; ok {
 		return value
 	}
-	for _, nestedKey := range []string{"ip_fraud_check", "fraud", "edge", "exit_geo", "proxy_exit_geo", "egress", "session"} {
+	for _, nestedKey := range []string{"ip_fraud_check", "edge_access_check", "exit_geo"} {
 		if nested, ok := data[nestedKey].(map[string]any); ok {
 			if value := dataValue(nested, key); value != nil {
 				return value

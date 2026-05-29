@@ -1,11 +1,12 @@
 import { useEffect } from 'react';
 import { ToastMessage, api, useToastMessage } from '@byte-v-forge/common-ui';
+import type { GptActionCatalog } from './action-catalog';
 import { useGoPayData } from './gopay-data';
 import { GoPayLabView } from './view';
 
-export function GoPayLabPage() {
+export function GoPayLabPage({ actionCatalog }: { actionCatalog?: GptActionCatalog }) {
   const toast = useToastMessage();
-  const data = useGoPayData();
+  const data = useGoPayData(actionCatalog);
 
   useEffect(() => {
     if (data.loadError) toast.showError(data.loadError);
@@ -28,6 +29,7 @@ export function GoPayLabPage() {
     <>
       <ToastMessage toast={toast.toast} />
       <GoPayLabView
+        actionCatalog={actionCatalog}
         state={data.state}
         loading={data.loading}
         currentJob={data.currentJob}

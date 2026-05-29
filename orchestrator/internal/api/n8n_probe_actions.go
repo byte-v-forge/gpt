@@ -82,7 +82,7 @@ func (s *Server) StartN8NProbeAccount(ctx context.Context, accountID string) (*p
 		return nil, fmt.Errorf("account not found")
 	}
 	jobID := uuid.NewString()
-	if _, err := s.jobStore.CreateWithIDWithoutDispatch(ctx, jobID, accountID, actionProbeAccount, map[string]string{"account_id": accountID, "engine": "n8n"}); err != nil {
+	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionProbeAccount, map[string]string{"account_id": accountID, "engine": "n8n"}); err != nil {
 		return nil, err
 	}
 	return &pb.ProbeAccountResponse{JobId: jobID, Started: true}, nil
@@ -175,7 +175,7 @@ func (s *Server) CheckN8NProbeToken(ctx context.Context, jobID string, accountID
 	return result, nil
 }
 
-func (s *Server) RunN8NProbePlusTrial(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
+func (s *Server) ProbeN8NPlusTrial(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
 	jobID = strings.TrimSpace(jobID)
 	accountID = strings.TrimSpace(accountID)
 	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
@@ -201,7 +201,7 @@ func (s *Server) RunN8NProbePlusTrial(ctx context.Context, jobID string, account
 	return result, nil
 }
 
-func (s *Server) RunN8NProbeTier(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
+func (s *Server) ProbeN8NTier(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
 	jobID = strings.TrimSpace(jobID)
 	accountID = strings.TrimSpace(accountID)
 	n8nExecutionID = strings.TrimSpace(n8nExecutionID)

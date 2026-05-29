@@ -1,6 +1,6 @@
 import { MessageSquareText, Phone, PhoneOff, QrCode } from 'lucide-react';
 import { accountSignalText, accountSignalTone } from './account-utils';
-import type { AccountCodexPhoneState } from './account-utils';
+import type { AccountCodexPhoneState } from './account-job-semantics';
 import { BrandIcon, GoPayWalletIcon } from './brand-icons';
 import type { Account, ConcreteGoPayPaymentChannel } from './types';
 

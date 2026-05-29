@@ -47,135 +47,36 @@ func (s *Server) CreateGPTAccount(ctx context.Context, req *pb.CreateGPTAccountR
 	return &pb.CreateGPTAccountResponse{Account: resp.GetAccount()}, nil
 }
 
-func (s *Server) RegisterAccount(ctx context.Context, req *pb.RegisterAccountRequest) (*pb.RegisterAccountResponse, error) {
-	jobID := uuid.NewString()
-	accountID := strings.TrimSpace(req.GetAccountId())
-	if accountID == "" {
-		accountID = uuid.NewString()
-	}
-	if s.activities == nil {
-		return &pb.RegisterAccountResponse{JobId: jobID, ErrorMessage: "GPT action runner is not configured"}, nil
-	}
-	account, err := s.activities.EnsureAccountActivity(ctx, pb.EnsureAccountInput{Account: &pb.AccountSpec{
-		AccountId:     accountID,
-		Email:         req.GetEmail(),
-		Password:      req.GetPassword(),
-		EmailStrategy: requestEmailStrategy(req.GetEmailStrategy()),
-		CountryCode:   req.GetCountryCode(),
-		Region:        req.GetRegion(),
-	}})
-	if err != nil {
-		return &pb.RegisterAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	accountID = account.GetAccountId()
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionRegister, registerAccountJobParams(accountID, req.GetOtpOptions(), req.GetCountryCode(), req.GetRegion())); err != nil {
-		return &pb.RegisterAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.RegisterAccountResponse{JobId: jobID, Started: true}, nil
+func (s *Server) RegisterAccount(context.Context, *pb.RegisterAccountRequest) (*pb.RegisterAccountResponse, error) {
+	return &pb.RegisterAccountResponse{ErrorMessage: "register is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
 func (s *Server) RegisterAccountProtocol(context.Context, *pb.RegisterAccountRequest) (*pb.RegisterAccountResponse, error) {
 	return &pb.RegisterAccountResponse{ErrorMessage: "register-protocol is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) ActivateAccount(ctx context.Context, req *pb.ActivateAccountRequest) (*pb.ActivateAccountResponse, error) {
-	jobID := uuid.NewString()
-	pinSecretKey, err := s.saveActivationPINSecret(ctx, jobID, req.GetGopayPin())
-	if err != nil {
-		return &pb.ActivateAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	params := activationJobParams(req, pinSecretKey)
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, strings.TrimSpace(req.GetAccountId()), actionActivate, params); err != nil {
-		s.deleteRuntimeSecretValue(ctx, pinSecretKey)
-		return &pb.ActivateAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.ActivateAccountResponse{JobId: jobID, Started: true}, nil
+func (s *Server) LoginAccount(context.Context, *pb.LoginAccountRequest) (*pb.LoginAccountResponse, error) {
+	return &pb.LoginAccountResponse{ErrorMessage: "login-session is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) AutopayAccount(ctx context.Context, req *pb.ActivateAccountRequest) (*pb.ActivateAccountResponse, error) {
-	jobID := uuid.NewString()
-	pinSecretKey, err := s.saveActivationPINSecret(ctx, jobID, req.GetGopayPin())
-	if err != nil {
-		return &pb.ActivateAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	params := activationJobParams(req, pinSecretKey)
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, strings.TrimSpace(req.GetAccountId()), actionAutopay, params); err != nil {
-		s.deleteRuntimeSecretValue(ctx, pinSecretKey)
-		return &pb.ActivateAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.ActivateAccountResponse{JobId: jobID, Started: true}, nil
+func (s *Server) LoginAccountProtocol(context.Context, *pb.LoginAccountRequest) (*pb.LoginAccountResponse, error) {
+	return &pb.LoginAccountResponse{ErrorMessage: "login-session-protocol is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) LoginAccount(ctx context.Context, req *pb.LoginAccountRequest) (*pb.LoginAccountResponse, error) {
-	accountID := strings.TrimSpace(req.GetAccountId())
-	if accountID == "" {
-		return &pb.LoginAccountResponse{ErrorMessage: "account_id is required"}, nil
-	}
-	jobID := uuid.NewString()
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionLoginSession, map[string]string{"account_id": accountID}); err != nil {
-		return &pb.LoginAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.LoginAccountResponse{JobId: jobID, Started: true}, nil
+func (s *Server) CodexOAuth(context.Context, *pb.CodexOAuthRequest) (*pb.CodexOAuthResponse, error) {
+	return &pb.CodexOAuthResponse{ErrorMessage: "codex-oauth is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) LoginAccountProtocol(ctx context.Context, req *pb.LoginAccountRequest) (*pb.LoginAccountResponse, error) {
-	accountID := strings.TrimSpace(req.GetAccountId())
-	if accountID == "" {
-		return &pb.LoginAccountResponse{ErrorMessage: "account_id is required"}, nil
-	}
-	jobID := uuid.NewString()
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionLoginSessionProtocol, map[string]string{"account_id": accountID}); err != nil {
-		return &pb.LoginAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.LoginAccountResponse{JobId: jobID, Started: true}, nil
+func (s *Server) CodexOAuthProtocol(context.Context, *pb.CodexOAuthRequest) (*pb.CodexOAuthResponse, error) {
+	return &pb.CodexOAuthResponse{ErrorMessage: "codex-oauth-protocol is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) CodexOAuth(ctx context.Context, req *pb.CodexOAuthRequest) (*pb.CodexOAuthResponse, error) {
-	accountID := strings.TrimSpace(req.GetAccountId())
-	if accountID == "" {
-		return &pb.CodexOAuthResponse{ErrorMessage: "account_id is required"}, nil
-	}
-	jobID := uuid.NewString()
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionCodexOAuth, codexOAuthJobParams(accountID, req.GetLabel())); err != nil {
-		return &pb.CodexOAuthResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.CodexOAuthResponse{JobId: jobID, Started: true}, nil
+func (s *Server) CodexOAuthAddPhone(context.Context, *pb.CodexOAuthAddPhoneRequest) (*pb.CodexOAuthAddPhoneResponse, error) {
+	return &pb.CodexOAuthAddPhoneResponse{ErrorMessage: "codex-oauth-add-phone is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) CodexOAuthProtocol(ctx context.Context, req *pb.CodexOAuthRequest) (*pb.CodexOAuthResponse, error) {
-	accountID := strings.TrimSpace(req.GetAccountId())
-	if accountID == "" {
-		return &pb.CodexOAuthResponse{ErrorMessage: "account_id is required"}, nil
-	}
-	jobID := uuid.NewString()
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionCodexOAuthProtocol, codexOAuthJobParams(accountID, req.GetLabel())); err != nil {
-		return &pb.CodexOAuthResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.CodexOAuthResponse{JobId: jobID, Started: true}, nil
-}
-
-func (s *Server) CodexOAuthAddPhone(ctx context.Context, req *pb.CodexOAuthAddPhoneRequest) (*pb.CodexOAuthAddPhoneResponse, error) {
-	accountID := strings.TrimSpace(req.GetAccountId())
-	if accountID == "" {
-		return &pb.CodexOAuthAddPhoneResponse{ErrorMessage: "account_id is required"}, nil
-	}
-	jobID := uuid.NewString()
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionCodexOAuthAddPhone, codexOAuthAddPhoneJobParams(accountID, req.GetLabel(), req.GetMaxReuseCount())); err != nil {
-		return &pb.CodexOAuthAddPhoneResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.CodexOAuthAddPhoneResponse{JobId: jobID, Started: true}, nil
-}
-
-func (s *Server) CodexOAuthBatchAddPhone(ctx context.Context, req *pb.CodexOAuthBatchAddPhoneRequest) (*pb.CodexOAuthBatchAddPhoneResponse, error) {
-	accountIDs := compactAccountIDs(req.GetAccountIds())
-	if len(accountIDs) == 0 {
-		return &pb.CodexOAuthBatchAddPhoneResponse{ErrorMessage: "account_ids is required"}, nil
-	}
-	jobID := uuid.NewString()
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, "", actionCodexOAuthBatchAddPhone, codexOAuthBatchAddPhoneJobParams(accountIDs, req.GetLabel(), req.GetMaxReuseCount())); err != nil {
-		return &pb.CodexOAuthBatchAddPhoneResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.CodexOAuthBatchAddPhoneResponse{JobId: jobID, Started: true}, nil
+func (s *Server) CodexOAuthBatchAddPhone(context.Context, *pb.CodexOAuthBatchAddPhoneRequest) (*pb.CodexOAuthBatchAddPhoneResponse, error) {
+	return &pb.CodexOAuthBatchAddPhoneResponse{ErrorMessage: "codex-oauth-batch-add-phone is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
 func compactAccountIDs(values []string) []string {
@@ -192,137 +93,28 @@ func compactAccountIDs(values []string) []string {
 	return out
 }
 
-func (s *Server) ProbeAccount(ctx context.Context, req *pb.ProbeAccountRequest) (*pb.ProbeAccountResponse, error) {
-	accountID := strings.TrimSpace(req.GetAccountId())
-	if accountID == "" {
-		return &pb.ProbeAccountResponse{ErrorMessage: "account_id is required"}, nil
-	}
-	jobID := uuid.NewString()
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionProbeAccount, map[string]string{"account_id": accountID}); err != nil {
-		return &pb.ProbeAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.ProbeAccountResponse{JobId: jobID, Started: true}, nil
+func (s *Server) ProbeAccount(context.Context, *pb.ProbeAccountRequest) (*pb.ProbeAccountResponse, error) {
+	return &pb.ProbeAccountResponse{ErrorMessage: "probe-account is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) RunGoPayApp(ctx context.Context, req *pb.GoPayAppRequest) (*pb.GoPayAppResponse, error) {
-	jobID := uuid.NewString()
-	pinSecretKey := ""
-	if pin := strings.TrimSpace(req.GetPin()); pin != "" {
-		pinSecretKey = goPayAppPinSecretKey + jobID
-		if err := s.saveRuntimeSecretValue(ctx, pinSecretKey, pin); err != nil {
-			return &pb.GoPayAppResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-		}
-	}
-	params := goPayAppJobParams(req, pinSecretKey)
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, "", actionGoPayApp, params); err != nil {
-		s.deleteRuntimeSecretValue(ctx, pinSecretKey)
-		return &pb.GoPayAppResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.GoPayAppResponse{JobId: jobID, Started: true}, nil
+func (s *Server) RunGoPayApp(context.Context, *pb.GoPayAppRequest) (*pb.GoPayAppResponse, error) {
+	return &pb.GoPayAppResponse{ErrorMessage: "gopay-app is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) RunGoPayPayment(ctx context.Context, req *pb.GoPayPaymentRequest) (*pb.GoPayPaymentResponse, error) {
-	jobID := uuid.NewString()
-	otpChannel := strings.TrimSpace(req.GetOtpChannel())
-	if otpChannel == "" {
-		otpChannel = "sms"
-	}
-	addBalance := cloneGoPayAddBalance(req.GetAddBalance())
-	if addBalance != nil {
-		addBalance = s.mergeDefaultGoPayAddBalance(addBalance)
-	}
-	addBalanceConfirmTimeoutSeconds := req.GetAddBalanceConfirmTimeoutSeconds()
-	if addBalanceConfirmTimeoutSeconds <= 0 {
-		addBalanceConfirmTimeoutSeconds = s.goPayAddBalanceConfirmTimeoutSeconds
-	}
-	if addBalanceConfirmTimeoutSeconds <= 0 {
-		addBalanceConfirmTimeoutSeconds = 1800
-	}
-	pinSecretKey := ""
-	if pin := strings.TrimSpace(req.GetPin()); pin != "" {
-		pinSecretKey = goPayPaymentPinSecretKey + jobID
-		if err := s.saveRuntimeSecretValue(ctx, pinSecretKey, pin); err != nil {
-			return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-		}
-	}
-	params, err := goPayPaymentJobParams(req, otpChannel, addBalance, addBalanceConfirmTimeoutSeconds, pinSecretKey)
-	if err != nil {
-		s.deleteRuntimeSecretValue(ctx, pinSecretKey)
-		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, strings.TrimSpace(req.GetAccountId()), actionGoPayPayment, params); err != nil {
-		s.deleteRuntimeSecretValue(ctx, pinSecretKey)
-		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.GoPayPaymentResponse{JobId: jobID, Started: true}, nil
+func (s *Server) RunGoPayPayment(context.Context, *pb.GoPayPaymentRequest) (*pb.GoPayPaymentResponse, error) {
+	return &pb.GoPayPaymentResponse{ErrorMessage: "gopay-payment is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) RunGoPayQRISPaymentActivate(ctx context.Context, req *pb.GoPayQRISPaymentActivateRequest) (*pb.GoPayPaymentResponse, error) {
-	jobID := uuid.NewString()
-	params := goPayQRISPaymentJobParams(req)
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, strings.TrimSpace(req.GetAccountId()), actionGoPayQRISPaymentActivate, params); err != nil {
-		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.GoPayPaymentResponse{JobId: jobID, Started: true}, nil
+func (s *Server) RunGoPayQRISPaymentActivate(context.Context, *pb.GoPayQRISPaymentActivateRequest) (*pb.GoPayPaymentResponse, error) {
+	return &pb.GoPayPaymentResponse{ErrorMessage: "gopay-qris-payment-activate is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) RunGoPayWAPayment(ctx context.Context, req *pb.GoPayWAPaymentRequest) (*pb.GoPayPaymentResponse, error) {
-	jobID := uuid.NewString()
-	pinSecretKey := ""
-	if pin := strings.TrimSpace(req.GetPin()); pin != "" {
-		pinSecretKey = goPayWAPaymentPinSecretKey + jobID
-		if err := s.saveRuntimeSecretValue(ctx, pinSecretKey, pin); err != nil {
-			return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-		}
-	}
-	accessTokenSecretKey := ""
-	if accessToken := strings.TrimSpace(req.GetAccessToken()); accessToken != "" {
-		accessTokenSecretKey = goPayWAPaymentAccessTokenSecretKey + jobID
-		if err := s.saveRuntimeSecretValue(ctx, accessTokenSecretKey, accessToken); err != nil {
-			s.deleteRuntimeSecretValue(ctx, pinSecretKey)
-			return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-		}
-	}
-	params := goPayWAPaymentJobParams(req, pinSecretKey, accessTokenSecretKey)
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, strings.TrimSpace(req.GetAccountId()), actionGoPayWAPayment, params); err != nil {
-		s.deleteRuntimeSecretValue(ctx, pinSecretKey)
-		s.deleteRuntimeSecretValue(ctx, accessTokenSecretKey)
-		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.GoPayPaymentResponse{JobId: jobID, Started: true}, nil
+func (s *Server) RunGoPayWAPayment(context.Context, *pb.GoPayWAPaymentRequest) (*pb.GoPayPaymentResponse, error) {
+	return &pb.GoPayPaymentResponse{ErrorMessage: "gopay-wa-payment is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
-func (s *Server) RetryGoPayPaymentRebind(ctx context.Context, req *pb.GoPayPaymentRebindRequest) (*pb.GoPayPaymentResponse, error) {
-	sourceJobID := strings.TrimSpace(req.GetSourceJobId())
-	if sourceJobID == "" {
-		return &pb.GoPayPaymentResponse{ErrorMessage: "source_job_id is required"}, nil
-	}
-	jobID := uuid.NewString()
-	if s.activities == nil {
-		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: "GPT action runner is not configured"}, nil
-	}
-	source, err := s.activities.GoPayPaymentRebindSourceActivity(ctx, pb.GoPayPaymentRebindSourceInput{
-		JobId:       jobID,
-		SourceJobId: sourceJobID,
-		AccountId:   strings.TrimSpace(req.GetAccountId()),
-		UserId:      strings.TrimSpace(req.GetUserId()),
-	})
-	if err != nil {
-		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	pinSecretKey := ""
-	if pin := strings.TrimSpace(req.GetPin()); pin != "" {
-		pinSecretKey = goPayPaymentRebindPinSecretKey + jobID
-		if err := s.saveRuntimeSecretValue(ctx, pinSecretKey, pin); err != nil {
-			return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-		}
-	}
-	params := goPayPaymentRebindJobParams(source, strings.TrimSpace(req.GetCountryCode()), pinSecretKey)
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, source.GetAccountId(), actionGoPayPaymentRebind, params); err != nil {
-		s.deleteRuntimeSecretValue(ctx, pinSecretKey)
-		return &pb.GoPayPaymentResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.GoPayPaymentResponse{JobId: jobID, Started: true}, nil
+func (s *Server) RetryGoPayPaymentRebind(context.Context, *pb.GoPayPaymentRebindRequest) (*pb.GoPayPaymentResponse, error) {
+	return &pb.GoPayPaymentResponse{ErrorMessage: "gopay-payment-rebind is n8n-only; use GPT dashboard BFF workflow endpoint"}, nil
 }
 
 func (s *Server) ConfirmManualAddBalance(ctx context.Context, req *pb.ConfirmManualAddBalanceRequest) (*pb.ConfirmManualAddBalanceResponse, error) {
@@ -344,7 +136,7 @@ func (s *Server) ConfirmManualAddBalance(ctx context.Context, req *pb.ConfirmMan
 		return &pb.ConfirmManualAddBalanceResponse{Success: false, JobId: jobID, ErrorMessage: "job is not waiting for ensure_balance confirmation: " + job.LastStep}, nil
 	}
 	if req.GetAddBalance() != nil {
-		addBalance := s.mergeDefaultGoPayAddBalance(cloneGoPayAddBalance(req.GetAddBalance()))
+		addBalance := s.mergeDefaultGoPayAddBalance(ctx, cloneGoPayAddBalance(req.GetAddBalance()))
 		if goPayAddBalanceMethod(addBalance) == "" {
 			return &pb.ConfirmManualAddBalanceResponse{Success: false, JobId: jobID, ErrorMessage: "add_balance method is required"}, nil
 		}
@@ -398,23 +190,12 @@ func cloneGoPayAddBalance(value *pb.GoPayAddBalance) *pb.GoPayAddBalance {
 	return cloned
 }
 
-func cloneGoPayAddBalanceMap(values map[string]*pb.GoPayAddBalance) map[string]*pb.GoPayAddBalance {
-	if len(values) == 0 {
-		return nil
-	}
-	cloned := make(map[string]*pb.GoPayAddBalance, len(values))
-	for key, value := range values {
-		cloned[strings.TrimSpace(key)] = cloneGoPayAddBalance(value)
-	}
-	return cloned
-}
-
-func (s *Server) mergeDefaultGoPayAddBalance(value *pb.GoPayAddBalance) *pb.GoPayAddBalance {
+func (s *Server) mergeDefaultGoPayAddBalance(ctx context.Context, value *pb.GoPayAddBalance) *pb.GoPayAddBalance {
 	method := goPayAddBalanceMethod(value)
 	if method == "" {
 		return cloneGoPayAddBalance(value)
 	}
-	base := cloneGoPayAddBalance(s.defaultGoPayAddBalances[method])
+	base := s.configuredGoPayAddBalanceByMethod(ctx, method)
 	if base == nil {
 		return cloneGoPayAddBalance(value)
 	}
@@ -431,9 +212,6 @@ func goPayAddBalanceMethod(value *pb.GoPayAddBalance) string {
 	}
 	if value.GetEnvelope() != nil {
 		return "envelope"
-	}
-	if value.GetRekberinaja() != nil {
-		return "rekberinaja"
 	}
 	return ""
 }
@@ -461,110 +239,7 @@ func mergeGoPayAddBalance(base *pb.GoPayAddBalance, override *pb.GoPayAddBalance
 		if strings.TrimSpace(src.GetEnvelopeRequestId()) != "" {
 			dst.EnvelopeRequestId = src.GetEnvelopeRequestId()
 		}
-	case base.GetRekberinaja() != nil && override.GetRekberinaja() != nil:
-		mergeRekberinajaAddBalance(base.GetRekberinaja(), override.GetRekberinaja())
 	}
-}
-
-func mergeRekberinajaAddBalance(dst *pb.GoPayRekberinajaAddBalance, src *pb.GoPayRekberinajaAddBalance) {
-	if strings.TrimSpace(src.GetEndpointUrl()) != "" {
-		dst.EndpointUrl = src.GetEndpointUrl()
-	}
-	if strings.TrimSpace(src.GetBearerToken()) != "" {
-		dst.BearerToken = src.GetBearerToken()
-	}
-	if strings.TrimSpace(src.GetRefreshToken()) != "" {
-		dst.RefreshToken = src.GetRefreshToken()
-	}
-	if strings.TrimSpace(src.GetDeviceId()) != "" {
-		dst.DeviceId = src.GetDeviceId()
-	}
-	if strings.TrimSpace(src.GetStore()) != "" {
-		dst.Store = src.GetStore()
-	}
-	if strings.TrimSpace(src.GetProductId()) != "" {
-		dst.ProductId = src.GetProductId()
-	}
-	if strings.TrimSpace(src.GetServiceId()) != "" {
-		dst.ServiceId = src.GetServiceId()
-	}
-	if strings.TrimSpace(src.GetPaymentMethod()) != "" {
-		dst.PaymentMethod = src.GetPaymentMethod()
-	}
-	if strings.TrimSpace(src.GetInvoiceEmail()) != "" {
-		dst.InvoiceEmail = src.GetInvoiceEmail()
-	}
-	if strings.TrimSpace(src.GetPromoCode()) != "" {
-		dst.PromoCode = src.GetPromoCode()
-	}
-	if src.GetUsePoin() {
-		dst.UsePoin = true
-	}
-	if strings.TrimSpace(src.GetUserAgent()) != "" {
-		dst.UserAgent = src.GetUserAgent()
-	}
-	if strings.TrimSpace(src.GetOrigin()) != "" {
-		dst.Origin = src.GetOrigin()
-	}
-	if strings.TrimSpace(src.GetReferer()) != "" {
-		dst.Referer = src.GetReferer()
-	}
-	if src.GetFeeTotal() > 0 {
-		dst.FeeTotal = src.GetFeeTotal()
-	}
-	if src.GetPollTimeoutSeconds() > 0 {
-		dst.PollTimeoutSeconds = src.GetPollTimeoutSeconds()
-	}
-	if src.GetPollIntervalSeconds() > 0 {
-		dst.PollIntervalSeconds = src.GetPollIntervalSeconds()
-	}
-}
-
-func (s *Server) RegisterAndActivateAccount(ctx context.Context, req *pb.RegisterAndActivateAccountRequest) (*pb.RegisterAndActivateAccountResponse, error) {
-	jobID := uuid.NewString()
-	accountID := strings.TrimSpace(req.GetAccountId())
-	if accountID == "" {
-		accountID = uuid.NewString()
-	}
-	if s.activities == nil {
-		return &pb.RegisterAndActivateAccountResponse{JobId: jobID, ErrorMessage: "GPT action runner is not configured"}, nil
-	}
-	account, err := s.activities.EnsureAccountActivity(ctx, pb.EnsureAccountInput{Account: &pb.AccountSpec{
-		AccountId:     accountID,
-		Email:         req.GetEmail(),
-		Password:      req.GetPassword(),
-		EmailStrategy: requestEmailStrategy(req.GetEmailStrategy()),
-		CountryCode:   req.GetCountryCode(),
-		Region:        req.GetRegion(),
-	}})
-	if err != nil {
-		return &pb.RegisterAndActivateAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	accountID = account.GetAccountId()
-	pinSecretKey, err := s.saveActivationPINSecret(ctx, jobID, req.GetGopayPin())
-	if err != nil {
-		return &pb.RegisterAndActivateAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	params := registerAndActivateJobParams(accountID, req, pinSecretKey)
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionRegisterAndActivate, params); err != nil {
-		s.deleteRuntimeSecretValue(ctx, pinSecretKey)
-		return &pb.RegisterAndActivateAccountResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
-	}
-	return &pb.RegisterAndActivateAccountResponse{JobId: jobID, Started: true}, nil
-}
-
-func registerAndActivateJobParams(accountID string, req *pb.RegisterAndActivateAccountRequest, pinSecretKey string) map[string]string {
-	params := registerAccountJobParams(accountID, req.GetOtpOptions(), req.GetCountryCode(), req.GetRegion())
-	if value := strings.TrimSpace(req.GetGopayPhone()); value != "" {
-		params["gopay_phone"] = value
-	}
-	if value := strings.TrimSpace(req.GetGopayCountryCode()); value != "" {
-		params["gopay_country_code"] = value
-	}
-	if pinSecretKey = strings.TrimSpace(pinSecretKey); pinSecretKey != "" {
-		params["gopay_pin_secret_key"] = pinSecretKey
-	}
-	return params
 }
 
 func registerAccountJobParams(accountID string, options *pb.RegisterOTPOptions, countryCode string, region string) map[string]string {
@@ -612,38 +287,6 @@ func codexOAuthBatchAddPhoneJobParams(accountIDs []string, label string, maxReus
 	}
 	if maxReuseCount > 0 {
 		params["max_reuse_count"] = int32String(maxReuseCount)
-	}
-	return params
-}
-
-func (s *Server) saveActivationPINSecret(ctx context.Context, jobID string, pin string) (string, error) {
-	pin = strings.TrimSpace(pin)
-	if pin == "" {
-		return "", nil
-	}
-	key := activationGoPayPinSecretKey + jobID
-	if err := s.saveRuntimeSecretValue(ctx, key, pin); err != nil {
-		return "", err
-	}
-	return key, nil
-}
-
-func activationJobParams(req *pb.ActivateAccountRequest, pinSecretKey string) map[string]string {
-	params := map[string]string{}
-	if value := strings.TrimSpace(req.GetAccountId()); value != "" {
-		params["account_id"] = value
-	}
-	if value := strings.TrimSpace(req.GetJobId()); value != "" {
-		params["source_job_id"] = value
-	}
-	if value := strings.TrimSpace(req.GetGopayPhone()); value != "" {
-		params["gopay_phone"] = value
-	}
-	if value := strings.TrimSpace(req.GetGopayCountryCode()); value != "" {
-		params["gopay_country_code"] = value
-	}
-	if pinSecretKey = strings.TrimSpace(pinSecretKey); pinSecretKey != "" {
-		params["gopay_pin_secret_key"] = pinSecretKey
 	}
 	return params
 }

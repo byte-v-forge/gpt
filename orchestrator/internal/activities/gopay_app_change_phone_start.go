@@ -33,9 +33,9 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 		if failures < 0 {
 			failures = 0
 		}
-		maxFailures := s.changePhoneMaxFailureCount()
-		otpWaitSeconds := s.paymentOtpTimeout()
-		otpRetryAttempts := s.changePhoneOTPRetryCount()
+		maxFailures := s.changePhoneMaxFailureCount(ctx)
+		otpWaitSeconds := s.paymentOtpTimeout(ctx)
+		otpRetryAttempts := s.changePhoneOTPRetryCount(ctx)
 		output.FailureCount = int32(failures)
 		output.MaxFailures = int32(maxFailures)
 		output.OtpTimeoutSeconds = otpWaitSeconds
@@ -45,8 +45,8 @@ func (s *Server) GoPayAppChangePhoneStartActivity(ctx context.Context, input GoP
 		data["otp_timeout_seconds"] = otpWaitSeconds
 		data["otp_retry_attempts"] = otpRetryAttempts
 
-		if s.changePhoneDisabled {
-			err := fmt.Errorf("gopay change phone disabled by GOPAY_CHANGE_PHONE_DISABLED")
+		if s.changePhoneDisabledValue(ctx) {
+			err := fmt.Errorf("gopay change phone disabled by gopay.change_phone_disabled")
 			return failStart(err, false)
 		}
 		if s.gopayClient == nil {

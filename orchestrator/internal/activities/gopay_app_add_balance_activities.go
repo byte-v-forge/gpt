@@ -7,9 +7,7 @@ import (
 )
 
 const (
-	goPayEnvelopeLinkSecretKey       = "gopay_add_balance_envelope_link"
-	rekberinajaAccessTokenSecretKey  = "gopay_add_balance_rekberinaja_access_token"
-	rekberinajaRefreshTokenSecretKey = "gopay_add_balance_rekberinaja_refresh_token"
+	goPayEnvelopeLinkSecretKey = "gopay_add_balance_envelope_link"
 )
 
 func (s *Server) GoPayAppAddBalanceActivity(ctx context.Context, input GoPayAppAddBalanceInput) (GoPayAppAddBalanceOutput, error) {
@@ -100,7 +98,7 @@ func (s *Server) syncGoPayBalanceCheckState(ctx context.Context, stateJSON strin
 }
 
 func goPayAddBalanceSelectionMethods() []string {
-	return []string{"manual_transfer", "envelope", "rekberinaja"}
+	return []string{"manual_transfer", "envelope"}
 }
 
 func goPayBalanceCheckDataReady(data map[string]any) bool {
@@ -194,8 +192,6 @@ func (s *Server) runGoPayAddBalance(ctx context.Context, step activityStep, inpu
 		return s.prepareManualTransferAddBalance(ctx, step, addBalance.GetManualTransfer(), output, data)
 	case addBalance.GetEnvelope() != nil:
 		return s.claimEnvelopeAddBalance(ctx, step, addBalance.GetEnvelope(), output, data)
-	case addBalance.GetRekberinaja() != nil:
-		return s.submitRekberinajaAddBalance(ctx, step, addBalance.GetRekberinaja(), input.GetTargetPhone(), output, data)
 	default:
 		err := fmt.Errorf("add_balance method is required")
 		data["error_message"] = err.Error()

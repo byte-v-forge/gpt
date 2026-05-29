@@ -18,8 +18,3 @@ pb/
 coverage/
 test-results/
 playwright-report/
-channels/gopay/payment/gopay-flow/config.json
-channels/gopay/payment/gopay-flow/*.har
-channels/gopay/payment/gopay-flow/*.mitm
-channels/gopay/payment/gopay-flow/*.sqlite
-channels/gopay/payment/gopay-flow/*.db

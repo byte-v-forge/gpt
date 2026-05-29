@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, formatUnix, mask, useQuery, useQueryClient, useToastMessage } from '@byte-v-forge/common-ui';
 import { latestOtpForEmail, maskEmail, normalizeUiEmail } from '@byte-v-forge/common-ui';
+import { GPT_ACTIONS, gptActionLabel, type GptActionCatalog, type GptActionID, useGptActionCatalog, workflowStartPath } from './action-catalog';
 import { goPayPaymentActionLabel, goPayPaymentRequestChannel, isPureGoPayWAPaymentChannel } from './gopay-utils';
 import { mailboxContextForEmail } from './account-mail-utils';
 import { isInvalidGptAccount } from './account-utils';
@@ -13,7 +14,7 @@ import type { Account, ConcreteGoPayPaymentChannel, FetchAccountMailboxResponse,
 
 const GO_PAY_USER_ID = 'local';
 
-export function useGptAccountActions(data: GptAccountData, showSecrets: boolean, setSelectedAccountID: (value: string | ((prev: string) => string)) => void) {
+export function useGptAccountActions(data: GptAccountData, showSecrets: boolean, setSelectedAccountID: (value: string | ((prev: string) => string)) => void, providedActionCatalog?: GptActionCatalog) {
   const toast = useToastMessage();
   const queryClient = useQueryClient();
   const mailboxContext = data.selected ? mailboxContextForEmail(data.mailboxes, data.allocations, data.selected) : null;
@@ -27,19 +28,31 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     refetchOnMount: 'always',
     initialData: null
   });
-  const goPayProfile = useQuery({ queryKey: ['gpt', 'gopay', 'profile', GO_PAY_USER_ID], queryFn: loadGoPayProfile });
+  const actionCatalogQuery = useGptActionCatalog();
+  const actionCatalog = providedActionCatalog ?? actionCatalogQuery.data;
   const [working, setWorking] = useState(false);
   const [inboxLoading, setInboxLoading] = useState(false);
   const [refreshing, setRefreshing] = useState<Set<string>>(new Set());
   const cleanup = useGptAccountCleanupActions(data, setSelectedAccountID, toast);
 
-  useEffect(() => { if (data.loadError) toast.showError(data.loadError); }, [data.loadError, toast.showError]);
+  useEffect(() => {
+    if (data.loadError) toast.showError(data.loadError);
+  }, [data.loadError, toast.showError]);
 
-  async function runWorkflow(label: string, path: string, account: Account, payload: Record<string, any> = {}) {
+  async function runWorkflow(actionID: GptActionID, account: Account, payload: Record<string, any> = {}) {
     if (!canMutateAccount(account)) return;
+    const path = workflowStartPath(actionCatalog, actionID);
+    if (!path) {
+      toast.showError(`动作未注册: ${actionID}`);
+      return;
+    }
     setWorking(true);
     try {
-      const resp = await api<{ job_id?: string; error_message?: string }>(path, { method: 'POST', body: JSON.stringify({ account_id: account.account_id, ...payload }) });
+      const resp = await api<{ job_id?: string; error_message?: string }>(path, {
+        method: 'POST',
+        body: JSON.stringify({ account_id: account.account_id, ...payload })
+      });
+      const label = gptActionLabel(actionCatalog, actionID, actionID);
       toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || `${label} 已提交: ${resp.job_id || 'ok'}`);
       if (!resp.error_message) await data.invalidate();
     } catch (err) {
@@ -53,12 +66,15 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     if (!canMutateAccount(account)) return;
     setWorking(true);
     try {
-      const input = goPayAppInput();
+      const input = await goPayAppInput();
       const waOnly = isPureGoPayWAPaymentChannel(otpChannel);
       const apiChannel = goPayPaymentRequestChannel(otpChannel);
       const appInput = { user_id: GO_PAY_USER_ID, wa_phone: input.phone, country_code: input.country_code, pin: input.pin };
       const body = waOnly ? { account_id: account.account_id, ...appInput } : { account_id: account.account_id, otp_channel: apiChannel, ...appInput };
-      const resp = await api<{ job_id?: string; error_message?: string }>(waOnly ? '/api/gpt/workflows/gopay-wa-payment' : '/api/gpt/workflows/gopay-payment', { method: 'POST', body: JSON.stringify(body) });
+      const actionID = waOnly ? GPT_ACTIONS.goPayWAPayment : GPT_ACTIONS.goPayPayment;
+      const path = workflowStartPath(actionCatalog, actionID);
+      if (!path) { toast.showError(`动作未注册: ${actionID}`); return; }
+      const resp = await api<{ job_id?: string; error_message?: string }>(path, { method: 'POST', body: JSON.stringify(body) });
       toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || `${goPayPaymentActionLabel(otpChannel)} 已提交: ${resp.job_id || 'ok'}`);
       if (!resp.error_message) await data.invalidate();
     } catch (err) {
@@ -76,11 +92,14 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     setWorking(true);
     try {
       const accountIds = accounts.map((account) => account.account_id).filter(Boolean);
-      const resp = await api<{ job_id?: string; error_message?: string }>('/api/gpt/workflows/codex-oauth-add-phone/batch', {
+      const path = workflowStartPath(actionCatalog, GPT_ACTIONS.codexOAuthBatchAddPhone);
+      if (!path) { toast.showError(`动作未注册: ${GPT_ACTIONS.codexOAuthBatchAddPhone}`); return; }
+      const resp = await api<{ job_id?: string; error_message?: string }>(path, {
         method: 'POST',
         body: JSON.stringify({ account_ids: accountIds })
       });
-      toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || `add phone 已提交: ${resp.job_id || 'ok'}`);
+      const label = gptActionLabel(actionCatalog, GPT_ACTIONS.codexOAuthBatchAddPhone, '批量 Add Phone');
+      toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || `${label} 已提交: ${resp.job_id || 'ok'}`);
       if (!resp.error_message) await data.invalidate();
     } catch (err) {
       toast.showError(err);
@@ -115,11 +134,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
       toast.showOK('Access Token 已自动获取');
       await data.invalidate();
     } finally {
-      setRefreshing((prev) => {
-        const next = new Set(prev);
-        next.delete(account.account_id);
-        return next;
-      });
+      setRefreshing((prev) => { const next = new Set(prev); next.delete(account.account_id); return next; });
     }
   }
 
@@ -145,12 +160,18 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     }
   }
 
+  async function goPayAppInput() {
+    const profile = await queryClient.fetchQuery({ queryKey: ['gpt', 'gopay', 'profile', GO_PAY_USER_ID], queryFn: loadGoPayProfile });
+    return { phone: profile?.wa_phone || '', country_code: '+62', pin: profile?.pin || '' };
+  }
 
-  function goPayAppInput() { return { phone: goPayProfile.data?.wa_phone || '', country_code: '+62', pin: goPayProfile.data?.pin || '' }; }
+  function canMutateAccount(account: Account) {
+    if (!isInvalidGptAccount(account)) return true;
+    toast.showError('失效账号只能删除');
+    return false;
+  }
 
-  function canMutateAccount(account: Account) { if (!isInvalidGptAccount(account)) return true; toast.showError('失效账号只能删除'); return false; }
-
-  return { toast, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, updateAccount, refreshAccessToken, fetchInbox, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
+  return { toast, actionCatalog, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, refreshing, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, updateAccount, refreshAccessToken, fetchInbox, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
 }
 
 function loadGoPayProfile() {

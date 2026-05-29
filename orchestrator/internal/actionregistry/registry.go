@@ -1,0 +1,602 @@
+package actionregistry
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"sync"
+
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
+	"orchestrator/internal/contracts"
+)
+
+type Engine = gptplugin.Engine
+
+const (
+	EngineN8N = gptplugin.EngineN8N
+)
+
+type UIButton = gptplugin.UIButton
+
+type WorkflowDefinition = gptplugin.WorkflowDefinition
+
+type ActionDefinition = gptplugin.ActionDefinition
+
+type ConfigFieldKind = gptplugin.ConfigFieldKind
+
+const (
+	ConfigFieldString          = gptplugin.ConfigFieldString
+	ConfigFieldSecret          = gptplugin.ConfigFieldSecret
+	ConfigFieldInteger         = gptplugin.ConfigFieldInteger
+	ConfigFieldBoolean         = gptplugin.ConfigFieldBoolean
+	ConfigFieldDurationSeconds = gptplugin.ConfigFieldDurationSeconds
+	ConfigFieldURL             = gptplugin.ConfigFieldURL
+)
+
+type ConfigField = gptplugin.ConfigField
+
+type ConfigSchema = gptplugin.ConfigSchema
+
+type Registry struct {
+	mu            sync.RWMutex
+	order         []string
+	actions       map[string]ActionDefinition
+	configOrder   []string
+	configSchemas map[string]ConfigSchema
+}
+
+var defaultRegistry = sync.OnceValue(NewDefault)
+
+func New() *Registry {
+	return &Registry{
+		actions:       map[string]ActionDefinition{},
+		configSchemas: map[string]ConfigSchema{},
+	}
+}
+
+func Default() *Registry {
+	return defaultRegistry()
+}
+
+func NewDefault() *Registry {
+	registry := New()
+	if err := RegisterBuiltins(registry); err != nil {
+		panic(err)
+	}
+	if err := gptplugin.ApplyRegistered(registry); err != nil {
+		panic(err)
+	}
+	return registry
+}
+
+func RegisterDefault(registry *Registry) *Registry {
+	if registry == nil {
+		return NewDefault()
+	}
+	return registry
+}
+
+func (r *Registry) Register(defs ...ActionDefinition) error {
+	if r == nil {
+		return fmt.Errorf("action registry is nil")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, def := range defs {
+		def = normalizeDefinition(def)
+		if err := r.validateDefinitionLocked(def); err != nil {
+			return err
+		}
+		r.order = append(r.order, def.ActionID)
+		r.actions[def.ActionID] = def
+	}
+	return nil
+}
+
+func (r *Registry) RegisterActions(defs ...gptplugin.ActionDefinition) error {
+	return r.Register(defs...)
+}
+
+func (r *Registry) RegisterPluginConfigs(schemas ...gptplugin.ConfigSchema) error {
+	if r == nil {
+		return fmt.Errorf("action registry is nil")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, schema := range schemas {
+		schema = normalizeConfigSchema(schema)
+		if err := r.validateConfigSchemaLocked(schema); err != nil {
+			return err
+		}
+		r.configOrder = append(r.configOrder, schema.PluginKey)
+		r.configSchemas[schema.PluginKey] = schema
+	}
+	return nil
+}
+
+func (r *Registry) Action(actionID string) (ActionDefinition, bool) {
+	if r == nil {
+		return ActionDefinition{}, false
+	}
+	actionID = normalizeActionID(actionID)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	def, ok := r.actions[actionID]
+	return cloneDefinition(def), ok
+}
+
+func (r *Registry) Actions() []ActionDefinition {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]ActionDefinition, 0, len(r.order))
+	for _, actionID := range r.order {
+		out = append(out, cloneDefinition(r.actions[actionID]))
+	}
+	return out
+}
+
+func (r *Registry) PluginConfigs() []ConfigSchema {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]ConfigSchema, 0, len(r.configOrder))
+	for _, key := range r.configOrder {
+		out = append(out, cloneConfigSchema(r.configSchemas[key]))
+	}
+	return out
+}
+
+func (r *Registry) PluginConfig(pluginKey string) (ConfigSchema, bool) {
+	if r == nil {
+		return ConfigSchema{}, false
+	}
+	pluginKey = normalizePluginKey(pluginKey)
+	if pluginKey == "" {
+		return ConfigSchema{}, false
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	schema, ok := r.configSchemas[pluginKey]
+	if !ok {
+		return ConfigSchema{}, false
+	}
+	return cloneConfigSchema(schema), true
+}
+
+func (r *Registry) PluginDefaults(pluginKey string) map[string]string {
+	schema, ok := r.PluginConfig(pluginKey)
+	if !ok || len(schema.Fields) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(schema.Fields))
+	for _, field := range schema.Fields {
+		key := strings.TrimSpace(field.Key)
+		if key == "" {
+			continue
+		}
+		out[key] = strings.TrimSpace(field.DefaultValue)
+	}
+	return out
+}
+
+func (r *Registry) JobClaimStaleSteps() []string {
+	seen := map[string]bool{}
+	out := make([]string, 0)
+	for _, def := range r.Actions() {
+		for _, step := range def.StaleSteps {
+			step = strings.TrimSpace(step)
+			if step == "" || seen[step] {
+				continue
+			}
+			seen[step] = true
+			out = append(out, step)
+		}
+	}
+	return out
+}
+
+func (r *Registry) HasCapability(capability string) bool {
+	capability = strings.TrimSpace(capability)
+	if capability == "" {
+		return false
+	}
+	for _, def := range r.Actions() {
+		for _, item := range def.Capabilities {
+			if item == capability {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (r *Registry) WorkflowID(actionID string, jobID string) (string, bool) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return "", false
+	}
+	def, ok := r.Action(actionID)
+	if !ok || strings.TrimSpace(def.Workflow.IDPrefix) == "" {
+		return "", false
+	}
+	return def.Workflow.IDPrefix + jobID, true
+}
+
+func (r *Registry) WorkflowStartRoutes() map[string]ActionDefinition {
+	routes := map[string]ActionDefinition{}
+	for _, def := range r.Actions() {
+		path := strings.TrimSpace(def.Workflow.StartPath)
+		if path == "" {
+			continue
+		}
+		routes[path] = def
+	}
+	return routes
+}
+
+func (r *Registry) validateDefinitionLocked(def ActionDefinition) error {
+	if def.ActionID == "" {
+		return fmt.Errorf("action_id is required")
+	}
+	if _, exists := r.actions[def.ActionID]; exists {
+		return fmt.Errorf("action already registered: %s", def.ActionID)
+	}
+	if def.DisplayName == "" {
+		return fmt.Errorf("display_name is required for action %s", def.ActionID)
+	}
+	if def.RequestProto == "" {
+		return fmt.Errorf("request_proto is required for action %s", def.ActionID)
+	}
+	if def.ResponseProto == "" {
+		return fmt.Errorf("response_proto is required for action %s", def.ActionID)
+	}
+	if def.Visibility == "" {
+		return fmt.Errorf("visibility is required for action %s", def.ActionID)
+	}
+	if len(def.Capabilities) == 0 {
+		return fmt.Errorf("capabilities are required for action %s", def.ActionID)
+	}
+	if len(def.UIButtons) == 0 {
+		return fmt.Errorf("ui_buttons are required for action %s", def.ActionID)
+	}
+	if def.Workflow.Key == "" {
+		return fmt.Errorf("workflow key is required for action %s", def.ActionID)
+	}
+	if def.Workflow.StartPath == "" {
+		return fmt.Errorf("workflow start_path is required for action %s", def.ActionID)
+	}
+	if def.Engine != EngineN8N {
+		return fmt.Errorf("unsupported engine %q for action %s", def.Engine, def.ActionID)
+	}
+	if def.Engine == EngineN8N {
+		if def.Workflow.N8NActionScope == "" {
+			return fmt.Errorf("n8n action scope is required for action %s", def.ActionID)
+		}
+		if def.Workflow.N8NWebhookPath == "" {
+			return fmt.Errorf("n8n webhook path is required for action %s", def.ActionID)
+		}
+	}
+	for _, button := range def.UIButtons {
+		if button.ID == "" {
+			return fmt.Errorf("ui button id is required for action %s", def.ActionID)
+		}
+		if button.Label == "" {
+			return fmt.Errorf("ui button label is required for action %s", def.ActionID)
+		}
+		if button.Placement == "" {
+			return fmt.Errorf("ui button placement is required for action %s", def.ActionID)
+		}
+	}
+	for _, existing := range r.actions {
+		if existing.Workflow.Key == def.Workflow.Key {
+			return fmt.Errorf("workflow key %q already registered by action %s", def.Workflow.Key, existing.ActionID)
+		}
+		if existing.Workflow.StartPath != "" && existing.Workflow.StartPath == def.Workflow.StartPath {
+			return fmt.Errorf("workflow start_path %q already registered by action %s", def.Workflow.StartPath, existing.ActionID)
+		}
+		if existing.Workflow.ActionPathPrefix != "" && existing.Workflow.ActionPathPrefix == def.Workflow.ActionPathPrefix {
+			return fmt.Errorf("workflow action_path_prefix %q already registered by action %s", def.Workflow.ActionPathPrefix, existing.ActionID)
+		}
+	}
+	return nil
+}
+
+func (r *Registry) validateConfigSchemaLocked(schema ConfigSchema) error {
+	if schema.PluginKey == "" {
+		return fmt.Errorf("plugin_key is required")
+	}
+	if schema.DisplayName == "" {
+		return fmt.Errorf("display_name is required for plugin config %s", schema.PluginKey)
+	}
+	if _, exists := r.configSchemas[schema.PluginKey]; exists {
+		return fmt.Errorf("plugin config already registered: %s", schema.PluginKey)
+	}
+	seen := map[string]bool{}
+	for _, field := range schema.Fields {
+		if field.Key == "" {
+			return fmt.Errorf("plugin config field key is required for plugin %s", schema.PluginKey)
+		}
+		if seen[field.Key] {
+			return fmt.Errorf("plugin config field %q is duplicated for plugin %s", field.Key, schema.PluginKey)
+		}
+		seen[field.Key] = true
+		if field.Label == "" {
+			return fmt.Errorf("plugin config field label is required for %s.%s", schema.PluginKey, field.Key)
+		}
+		if field.Kind == "" {
+			return fmt.Errorf("plugin config field kind is required for %s.%s", schema.PluginKey, field.Key)
+		}
+	}
+	return nil
+}
+
+func normalizeDefinition(def ActionDefinition) ActionDefinition {
+	def.ActionID = normalizeActionID(def.ActionID)
+	def.Owner = strings.TrimSpace(def.Owner)
+	if def.Owner == "" {
+		def.Owner = "gpt"
+	}
+	def.Engine = Engine(strings.ToUpper(strings.TrimSpace(string(def.Engine))))
+	if def.Engine == "" {
+		def.Engine = EngineN8N
+	}
+	def.Workflow.Key = strings.TrimSpace(def.Workflow.Key)
+	def.Workflow.IDPrefix = strings.TrimSpace(def.Workflow.IDPrefix)
+	def.Workflow.StartPath = normalizePath(def.Workflow.StartPath)
+	def.Workflow.N8NActionScope = strings.TrimSpace(def.Workflow.N8NActionScope)
+	def.Workflow.N8NWebhookPath = strings.Trim(strings.TrimSpace(def.Workflow.N8NWebhookPath), "/")
+	def.Workflow.ActionPathPrefix = normalizePath(def.Workflow.ActionPathPrefix)
+	def.Workflow.ActionAPIKind = normalizeActionAPIKind(def.Workflow.ActionAPIKind)
+	def.DisplayName = strings.TrimSpace(def.DisplayName)
+	def.RequestProto = strings.TrimSpace(def.RequestProto)
+	def.ResponseProto = strings.TrimSpace(def.ResponseProto)
+	def.Visibility = strings.TrimSpace(def.Visibility)
+	def.RequiredAccountStatuses = compactStrings(def.RequiredAccountStatuses)
+	def.BlockedAccountStatuses = compactStrings(def.BlockedAccountStatuses)
+	def.RequiredFields = compactStrings(def.RequiredFields)
+	def.Capabilities = compactStrings(def.Capabilities)
+	def.StaleSteps = compactStrings(def.StaleSteps)
+	for i := range def.UIButtons {
+		def.UIButtons[i].ID = strings.TrimSpace(def.UIButtons[i].ID)
+		def.UIButtons[i].Label = strings.TrimSpace(def.UIButtons[i].Label)
+		def.UIButtons[i].Placement = strings.TrimSpace(def.UIButtons[i].Placement)
+		def.UIButtons[i].Intent = strings.TrimSpace(def.UIButtons[i].Intent)
+		def.UIButtons[i].StartPath = normalizePath(def.UIButtons[i].StartPath)
+		if def.UIButtons[i].StartPath == "" {
+			def.UIButtons[i].StartPath = def.Workflow.StartPath
+		}
+	}
+	return def
+}
+
+func normalizeConfigSchema(schema ConfigSchema) ConfigSchema {
+	schema.PluginKey = strings.ToLower(strings.TrimSpace(schema.PluginKey))
+	schema.DisplayName = strings.TrimSpace(schema.DisplayName)
+	schema.Owner = strings.TrimSpace(schema.Owner)
+	if schema.Owner == "" {
+		schema.Owner = "gpt"
+	}
+	for i := range schema.Fields {
+		schema.Fields[i].Key = strings.TrimSpace(schema.Fields[i].Key)
+		schema.Fields[i].Label = strings.TrimSpace(schema.Fields[i].Label)
+		schema.Fields[i].Kind = ConfigFieldKind(strings.ToUpper(strings.TrimSpace(string(schema.Fields[i].Kind))))
+		if schema.Fields[i].Kind == "" {
+			schema.Fields[i].Kind = ConfigFieldString
+		}
+		schema.Fields[i].DefaultValue = strings.TrimSpace(schema.Fields[i].DefaultValue)
+		schema.Fields[i].HelpText = strings.TrimSpace(schema.Fields[i].HelpText)
+	}
+	return schema
+}
+
+func normalizePluginKey(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func normalizeActionAPIKind(value gptplugin.ActionAPIKind) gptplugin.ActionAPIKind {
+	switch strings.ToUpper(strings.TrimSpace(string(value))) {
+	case string(gptplugin.ActionAPIKindRawN8N):
+		return gptplugin.ActionAPIKindRawN8N
+	default:
+		return gptplugin.ActionAPIKindTyped
+	}
+}
+
+func normalizeActionID(value string) string {
+	return strings.ToUpper(strings.TrimSpace(value))
+}
+
+func normalizePath(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	if !strings.HasPrefix(value, "/") {
+		value = "/" + value
+	}
+	return value
+}
+
+func compactStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := map[string]bool{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func cloneDefinition(def ActionDefinition) ActionDefinition {
+	def.RequiredAccountStatuses = append([]string(nil), def.RequiredAccountStatuses...)
+	def.BlockedAccountStatuses = append([]string(nil), def.BlockedAccountStatuses...)
+	def.RequiredFields = append([]string(nil), def.RequiredFields...)
+	def.Capabilities = append([]string(nil), def.Capabilities...)
+	def.UIButtons = append([]UIButton(nil), def.UIButtons...)
+	def.StaleSteps = append([]string(nil), def.StaleSteps...)
+	return def
+}
+
+func cloneConfigSchema(schema ConfigSchema) ConfigSchema {
+	schema.Fields = append([]ConfigField(nil), schema.Fields...)
+	return schema
+}
+
+func BuiltinActions() []ActionDefinition {
+	return []ActionDefinition{
+		withCapabilities(withRequiredStatuses(n8nAction(contracts.ActionProbeAccount, "Probe Account", "probe-account", "probe-", "/workflows/probe", "probe-account", "gpt/probe-account", "/actions/probe-account", "orchestrator.ProbeAccountRequest", "orchestrator.ProbeAccountResponse", "探测账号", "account_header_tools"), "REGISTERED", "ACTIVATED"), contracts.CapabilityAccountProbe, contracts.CapabilityN8NWorkflow),
+		withCapabilities(withRequiredFields(n8nAction(contracts.ActionLoginSession, "Login Session", "login-session", "login-session-", "/workflows/login-session", "login-session", "gpt/login-session", "/actions/login-session", "orchestrator.LoginAccountRequest", "orchestrator.LoginAccountResponse", "浏览器登录", "account_header_browser"), "email", "password"), contracts.CapabilityLogin, contracts.CapabilityBrowserAuth, contracts.CapabilityN8NWorkflow),
+		withCapabilities(withRequiredFields(n8nAction(contracts.ActionLoginSessionProtocol, "Login Session Protocol", "login-session-protocol", "login-session-protocol-", "/workflows/login-session-protocol", "login-session-protocol", "gpt/login-session-protocol", "/actions/login-session-protocol", "orchestrator.LoginAccountRequest", "orchestrator.LoginAccountResponse", "协议登录", "account_header_protocol"), "email", "password"), contracts.CapabilityLogin, contracts.CapabilityProtocolAuth, contracts.CapabilityN8NWorkflow),
+		withCapabilities(withRequiredFields(n8nAction(contracts.ActionCodexOAuth, "Codex OAuth", "codex-oauth", "codex-oauth-", "/workflows/codex-oauth", "codex-oauth", "gpt/codex-oauth", "/actions/codex-oauth", "orchestrator.CodexOAuthRequest", "orchestrator.CodexOAuthResponse", "浏览器 auth.json", "account_header_browser"), "email", "password"), contracts.CapabilityCodexOAuth, contracts.CapabilityBrowserAuth, contracts.CapabilityN8NWorkflow),
+		withCapabilities(withRequiredFields(n8nAction(contracts.ActionCodexOAuthProtocol, "Codex OAuth Protocol", "codex-oauth-protocol", "codex-oauth-protocol-", "/workflows/codex-oauth-protocol", "codex-oauth-protocol", "gpt/codex-oauth-protocol", "/actions/codex-oauth-protocol", "orchestrator.CodexOAuthRequest", "orchestrator.CodexOAuthResponse", "协议 auth.json", "account_header_protocol"), "email", "password"), contracts.CapabilityCodexOAuth, contracts.CapabilityProtocolAuth, contracts.CapabilityN8NWorkflow),
+		withCapabilities(withRequiredFields(n8nAction(contracts.ActionCodexOAuthAddPhone, "Codex OAuth Add Phone", "codex-oauth-add-phone", "codex-oauth-add-phone-", "/workflows/codex-oauth-add-phone", "codex-oauth-add-phone", "gpt/codex-oauth-add-phone", "/actions/codex-oauth-add-phone", "orchestrator.CodexOAuthAddPhoneRequest", "orchestrator.CodexOAuthAddPhoneResponse", "Add Phone", "account_header_tools"), "email", "password"), contracts.CapabilityCodexOAuth, contracts.CapabilityPhoneBinding, contracts.CapabilityN8NWorkflow),
+		withCapabilities(n8nAction(contracts.ActionCodexOAuthBatchAddPhone, "Codex OAuth Batch Add Phone", "codex-oauth-batch-add-phone", "codex-oauth-batch-add-phone-", "/workflows/codex-oauth-add-phone/batch", "codex-oauth-batch-add-phone", "gpt/codex-oauth-batch-add-phone", "/actions/codex-oauth-batch-add-phone", "orchestrator.CodexOAuthBatchAddPhoneRequest", "orchestrator.CodexOAuthBatchAddPhoneResponse", "批量 Add Phone", "account_bulk"), contracts.CapabilityCodexOAuth, contracts.CapabilityPhoneBinding, contracts.CapabilityN8NWorkflow),
+	}
+}
+
+func BuiltinPluginConfigs() []ConfigSchema {
+	return []ConfigSchema{
+		{
+			PluginKey:   "browser_auth",
+			DisplayName: "Browser Auth",
+			Owner:       "gpt",
+			Fields: []ConfigField{
+				configField("browser_auth_proxy_ref", "Browser Auth Proxy Ref", ConfigFieldString, "register"),
+				configField("browser_auth_locale", "Browser Auth Locale", ConfigFieldString, "en-US"),
+				configField("browser_auth_accept_language", "Browser Auth Accept Language", ConfigFieldString, "en-US,en;q=0.9"),
+				configField("browser_auth_timezone", "Browser Auth Timezone", ConfigFieldString, ""),
+				configField("browser_auth_window_width", "Browser Auth Window Width", ConfigFieldInteger, "1365"),
+				configField("browser_auth_window_height", "Browser Auth Window Height", ConfigFieldInteger, "768"),
+				configField("browser_auth_session_ttl_seconds", "Browser Auth Session TTL Seconds", ConfigFieldDurationSeconds, "1800"),
+				configField("browser_auth_command_timeout_seconds", "Browser Auth Command Timeout Seconds", ConfigFieldDurationSeconds, "120"),
+				configField("browser_auth_block_images", "Browser Auth Block Images", ConfigFieldBoolean, "false"),
+				configField("browser_auth_geoip", "Browser Auth GeoIP", ConfigFieldBoolean, "true"),
+				configField("browser_auth_humanize", "Browser Auth Humanize", ConfigFieldString, "true"),
+			},
+		},
+		{
+			PluginKey:   "codex_oauth",
+			DisplayName: "Codex OAuth",
+			Owner:       "gpt",
+			Fields: []ConfigField{
+				configField("client_id", "Client ID", ConfigFieldString, "app_EMoamEEZ73f0CkXaXp7hrann"),
+				configField("redirect_uri", "Redirect URI", ConfigFieldURL, "http://localhost:1455/auth/callback"),
+				configField("auth_url", "Auth URL", ConfigFieldURL, "https://auth.openai.com/oauth/authorize"),
+				configField("token_url", "Token URL", ConfigFieldURL, "https://auth.openai.com/oauth/token"),
+				configField("token_proxy_url", "Token Proxy URL", ConfigFieldString, ""),
+				configField("protocol_proxy_url", "Protocol Proxy URL", ConfigFieldString, ""),
+				configField("protocol_proxy_runtime_http_addr", "Protocol Proxy Runtime HTTP", ConfigFieldString, ""),
+				configField("protocol_tls_profile", "Protocol TLS Profile", ConfigFieldString, "chrome_146"),
+				configField("protocol_session_dump_enabled", "Protocol Session Dump", ConfigFieldBoolean, "true"),
+				configField("scope", "Scope", ConfigFieldString, "openid profile email offline_access api.connectors.read api.connectors.invoke"),
+				configField("phone_label", "Phone Label", ConfigFieldString, "codex-oauth-add-phone"),
+				configField("phone_profile_key", "Phone Profile Key", ConfigFieldString, "openai-th"),
+				configField("phone_max_reuse_count", "Phone Max Reuse Count", ConfigFieldInteger, "3"),
+				configField("phone_country_iso2", "Phone Country ISO2", ConfigFieldString, "TH"),
+				configField("phone_country_calling_code", "Phone Country Calling Code", ConfigFieldString, "66"),
+				configField("phone_wait_seconds", "Phone Wait Seconds", ConfigFieldDurationSeconds, "120"),
+				configField("phone_min_reuse_remaining_seconds", "Phone Min Reuse Remaining Seconds", ConfigFieldDurationSeconds, "180"),
+			},
+		},
+	}
+}
+
+func configField(key string, label string, kind ConfigFieldKind, defaultValue string) ConfigField {
+	return ConfigField{Key: key, Label: label, Kind: kind, DefaultValue: defaultValue}
+}
+
+func RegisterBuiltins(registry gptplugin.ActionRegistry) error {
+	if err := registry.RegisterActions(BuiltinActions()...); err != nil {
+		return err
+	}
+	return registry.RegisterPluginConfigs(BuiltinPluginConfigs()...)
+}
+
+func baseAction(actionID string, displayName string, workflowKey string, workflowIDPrefix string, startPath string, requestProto string, responseProto string, buttonLabel string, placement string) ActionDefinition {
+	return ActionDefinition{
+		ActionID:      actionID,
+		DisplayName:   displayName,
+		Owner:         "gpt",
+		Engine:        EngineN8N,
+		RequestProto:  requestProto,
+		ResponseProto: responseProto,
+		Visibility:    "account",
+		Workflow: WorkflowDefinition{
+			Key:       workflowKey,
+			IDPrefix:  workflowIDPrefix,
+			StartPath: startPath,
+		},
+		UIButtons:  []UIButton{{ID: strings.ToLower(strings.ReplaceAll(actionID, "_", "-")), Label: buttonLabel, Placement: placement}},
+		StaleSteps: defaultJobClaimStaleSteps(),
+		BlockedAccountStatuses: []string{
+			"DEACTIVATED",
+			"EMAIL_ALREADY_EXISTS",
+			"USER_ALREADY_EXISTS",
+		},
+	}
+}
+
+func withRequiredStatuses(def ActionDefinition, statuses ...string) ActionDefinition {
+	def.RequiredAccountStatuses = append(def.RequiredAccountStatuses, statuses...)
+	return def
+}
+
+func withBlockedStatuses(def ActionDefinition, statuses ...string) ActionDefinition {
+	def.BlockedAccountStatuses = append(def.BlockedAccountStatuses, statuses...)
+	return def
+}
+
+func withRequiredFields(def ActionDefinition, fields ...string) ActionDefinition {
+	def.RequiredFields = append(def.RequiredFields, fields...)
+	return def
+}
+
+func withCapabilities(def ActionDefinition, capabilities ...string) ActionDefinition {
+	def.Capabilities = append(def.Capabilities, capabilities...)
+	return def
+}
+
+func n8nAction(actionID string, displayName string, workflowKey string, workflowIDPrefix string, startPath string, actionScope string, webhookPath string, actionPathPrefix string, requestProto string, responseProto string, buttonLabel string, placement string) ActionDefinition {
+	def := baseAction(actionID, displayName, workflowKey, workflowIDPrefix, startPath, requestProto, responseProto, buttonLabel, placement)
+	def.Workflow.N8NActionScope = actionScope
+	def.Workflow.N8NWebhookPath = webhookPath
+	def.Workflow.ActionPathPrefix = actionPathPrefix
+	return def
+}
+
+func defaultJobClaimStaleSteps() []string {
+	return []string{
+		"claimed",
+		contracts.StepProbePlusTrial,
+		contracts.StepProbeTier,
+		contracts.StepCodexOAuthAcquirePhone,
+		contracts.StepCodexOAuthProtocolStart,
+		contracts.StepCodexOAuthProtocolDetect,
+		contracts.StepCodexOAuthProtocolEmail,
+		contracts.StepCodexOAuthProtocolPassword,
+		contracts.StepCodexOAuthProtocolEmailOTP,
+		contracts.StepCodexOAuthProtocolAddPhone,
+		contracts.StepCodexOAuthProtocolComplete,
+		contracts.StepCodexOAuthBrowserStart,
+		contracts.StepCodexOAuthBrowserDetect,
+		contracts.StepCodexOAuthBrowserEmail,
+		contracts.StepCodexOAuthBrowserPassword,
+		contracts.StepCodexOAuthBrowserEmailOTP,
+		contracts.StepCodexOAuthBrowserAddPhone,
+		contracts.StepCodexOAuthBrowserComplete,
+		contracts.StepCodexOAuthReleasePhone,
+	}
+}

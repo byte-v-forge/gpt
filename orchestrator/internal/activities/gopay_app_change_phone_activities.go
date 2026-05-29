@@ -19,7 +19,7 @@ func (s *Server) GoPayAppChangePhoneGetNumberActivity(ctx context.Context, input
 			return data, err
 		}
 
-		maxFailures := s.changePhoneMaxFailureCount()
+		maxFailures := s.changePhoneMaxFailureCount(ctx)
 		failures := int(input.GetFailureCount())
 		if failures < 0 {
 			failures = 0
@@ -47,7 +47,7 @@ func (s *Server) GoPayAppChangePhoneGetNumberActivity(ctx context.Context, input
 						"failures":     failures,
 						"max_failures": maxFailures,
 					})
-					delay := s.changePhoneGetNumberRetryInterval()
+					delay := s.changePhoneGetNumberRetryInterval(ctx)
 					if delay <= 0 {
 						delay = defaultChangePhoneGetNumberRetryDelay
 					}
@@ -83,7 +83,15 @@ func (s *Server) GoPayAppChangePhoneGetNumberActivity(ctx context.Context, input
 				continue
 			}
 
-			deviceProxy, err := s.gopayClient.GenerateDeviceProxy(ctx, &pb.GenerateDeviceProxyRequest{})
+			proxyAccountID := strings.TrimSpace(input.GetAccountId())
+			if proxyAccountID == "" {
+				proxyAccountID = strings.TrimSpace(input.GetUserId())
+			}
+			deviceProxy, err := s.gopayClient.GenerateDeviceProxy(ctx, &pb.GenerateDeviceProxyRequest{
+				AccountId:   proxyAccountID,
+				CountryCode: input.GetCountryCode(),
+				ForceNew:    true,
+			})
 			if err != nil {
 				if cancelErr := s.recordChangePhoneFailure(ctx, activationID, &failures, fmt.Sprintf("GenerateDeviceProxy: %v", err)); cancelErr != nil {
 					output.FailureCount = int32(failures)
@@ -115,11 +123,13 @@ func (s *Server) GoPayAppChangePhoneGetNumberActivity(ctx context.Context, input
 				"dynamic_egress_size": deviceProxy.GetDynamicEgressSize(),
 				"proxy_hash":          deviceProxy.GetProxyHash(),
 				"device_fingerprint":  deviceProxy.GetDeviceFingerprint(),
+				"preflight":           protoDataMap(deviceProxy.GetData()),
 			}
 
 			checkResp, err := s.gopayClient.CheckPhone(ctx, &pb.CheckPhoneRequest{
-				Phone:     phone,
-				StateJson: deviceProxy.GetStateJson(),
+				Phone:       phone,
+				CountryCode: input.GetCountryCode(),
+				StateJson:   deviceProxy.GetStateJson(),
 			})
 			if err != nil {
 				if cancelErr := s.recordChangePhoneFailure(ctx, activationID, &failures, fmt.Sprintf("CheckPhone: %v", err)); cancelErr != nil {

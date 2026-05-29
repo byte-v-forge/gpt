@@ -6,25 +6,28 @@ import (
 	"net/url"
 	"strings"
 
+	"orchestrator/internal/accountfingerprint"
 	"orchestrator/internal/gptsettings"
 	"orchestrator/internal/jobstatus"
 	"orchestrator/pb"
 )
 
 type n8nDynamicProxySettings struct {
-	JobID              string         `json:"job_id"`
-	AccountID          string         `json:"account_id"`
-	N8NExecutionID     string         `json:"n8n_execution_id,omitempty"`
-	Purpose            string         `json:"purpose"`
-	CountryCode        string         `json:"country_code,omitempty"`
-	Region             string         `json:"region,omitempty"`
-	State              string         `json:"state,omitempty"`
-	PreflightEnabled   bool           `json:"preflight_enabled"`
-	RequireResidential bool           `json:"require_residential"`
-	MinIPPurityScore   float64        `json:"min_ip_purity_score"`
-	CFCanaryEnabled    bool           `json:"cf_canary_enabled"`
-	MaxProxyAttempts   uint32         `json:"max_proxy_attempts"`
-	LeaseRequest       map[string]any `json:"lease_request"`
+	JobID                  string         `json:"job_id"`
+	AccountID              string         `json:"account_id"`
+	N8NExecutionID         string         `json:"n8n_execution_id,omitempty"`
+	Purpose                string         `json:"purpose"`
+	CountryCode            string         `json:"country_code,omitempty"`
+	Region                 string         `json:"region,omitempty"`
+	State                  string         `json:"state,omitempty"`
+	GeoSource              string         `json:"geo_source,omitempty"`
+	PreflightEnabled       bool           `json:"preflight_enabled"`
+	RequireResidential     bool           `json:"require_residential"`
+	MinIPPurityScore       float64        `json:"min_ip_purity_score"`
+	CFCanaryEnabled        bool           `json:"cf_canary_enabled"`
+	MaxProxyAttempts       uint32         `json:"max_proxy_attempts"`
+	TargetConnectivityURLs []string       `json:"target_connectivity_urls"`
+	LeaseRequest           map[string]any `json:"lease_request"`
 }
 
 type n8nDynamicProxyResult struct {
@@ -65,8 +68,20 @@ func (s *Server) n8nDynamicProxySettings(ctx context.Context, jobID string, acco
 	preflight := settings.GetProxyPreflight()
 	countryCode := normalizeProtocolCountryCode(params[protocolCountryCodeParam])
 	region := normalizeProtocolRegion(countryCode, params[protocolRegionParam])
+	geoSource := "job_params"
 	if countryCode == "" || region == "" {
-		countryCode, region = s.dynamicProxyGeoFromFingerprint(ctx, accountID, countryCode, region)
+		countryCode, region, geoSource = s.dynamicProxyGeoFromFingerprint(ctx, accountID, countryCode, region)
+	}
+	if countryCode == "" || region == "" {
+		err := fmt.Errorf("account country/region is required before acquiring dynamic proxy lease")
+		data := map[string]any{
+			"account_id":       accountID,
+			"n8n_execution_id": n8nExecutionID,
+			"country_code":     countryCode,
+			"region":           region,
+			"geo_source":       geoSource,
+		}
+		return nil, s.markActionFailed(ctx, jobID, stepDynamicIPPreflight, jobstatus.FailedRetryable, false, true, err, data)
 	}
 	state := protocolProxyState(countryCode, region)
 	attempts := preflight.GetMaxProxyAttempts()
@@ -98,35 +113,39 @@ func (s *Server) n8nDynamicProxySettings(ctx context.Context, jobID string, acco
 		Recoverable: false,
 		Retryable:   true,
 		Detail: structData(map[string]any{
-			"account_id":           accountID,
-			"n8n_execution_id":     n8nExecutionID,
-			"purpose":              purpose,
-			"country_code":         countryCode,
-			"region":               region,
-			"preflight_enabled":    preflight.GetEnabled(),
-			"cf_canary_enabled":    preflight.GetCfCanaryEnabled(),
-			"require_residential":  preflight.GetRequireResidential(),
-			"min_ip_purity_score":  preflight.GetMinIpPurityScore(),
-			"max_proxy_attempts":   attempts,
-			"proxy_preflight_step": "settings_loaded",
+			"account_id":               accountID,
+			"n8n_execution_id":         n8nExecutionID,
+			"purpose":                  purpose,
+			"geo_source":               geoSource,
+			"country_code":             countryCode,
+			"region":                   region,
+			"preflight_enabled":        preflight.GetEnabled(),
+			"cf_canary_enabled":        preflight.GetCfCanaryEnabled(),
+			"require_residential":      preflight.GetRequireResidential(),
+			"min_ip_purity_score":      preflight.GetMinIpPurityScore(),
+			"max_proxy_attempts":       attempts,
+			"target_connectivity_urls": preflight.GetTargetConnectivityUrls(),
+			"proxy_preflight_step":     "settings_loaded",
 		}),
 	}); err != nil {
 		return nil, err
 	}
 	return &n8nDynamicProxySettings{
-		JobID:              jobID,
-		AccountID:          accountID,
-		N8NExecutionID:     n8nExecutionID,
-		Purpose:            purpose,
-		CountryCode:        countryCode,
-		Region:             region,
-		State:              state,
-		PreflightEnabled:   preflight.GetEnabled(),
-		RequireResidential: preflight.GetRequireResidential(),
-		MinIPPurityScore:   preflight.GetMinIpPurityScore(),
-		CFCanaryEnabled:    preflight.GetCfCanaryEnabled(),
-		MaxProxyAttempts:   attempts,
-		LeaseRequest:       request,
+		JobID:                  jobID,
+		AccountID:              accountID,
+		N8NExecutionID:         n8nExecutionID,
+		Purpose:                purpose,
+		CountryCode:            countryCode,
+		Region:                 region,
+		State:                  state,
+		GeoSource:              geoSource,
+		PreflightEnabled:       preflight.GetEnabled(),
+		RequireResidential:     preflight.GetRequireResidential(),
+		MinIPPurityScore:       preflight.GetMinIpPurityScore(),
+		CFCanaryEnabled:        preflight.GetCfCanaryEnabled(),
+		MaxProxyAttempts:       attempts,
+		TargetConnectivityURLs: preflight.GetTargetConnectivityUrls(),
+		LeaseRequest:           request,
 	}, nil
 }
 
@@ -193,41 +212,34 @@ func (s *Server) failN8NDynamicProxy(ctx context.Context, jobID string, accountI
 	return &n8nDynamicProxyResult{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Step: stepDynamicIPPreflight, Data: data}, nil
 }
 
-func (s *Server) dynamicProxyGeoFromFingerprint(ctx context.Context, accountID string, countryCode string, region string) (string, string) {
+func (s *Server) dynamicProxyGeoFromFingerprint(ctx context.Context, accountID string, countryCode string, region string) (string, string, string) {
+	source := "account_fingerprint"
 	if s.fingerprints == nil || strings.TrimSpace(accountID) == "" {
-		return countryCode, region
+		return countryCode, region, "missing"
 	}
 	profile, ok, err := s.fingerprints.Get(ctx, accountID)
 	if err != nil || !ok {
-		return countryCode, region
+		return countryCode, region, "missing"
 	}
-	inferredCountry, inferredRegion := dynamicProxyGeoFromTimezone(profile.Timezone)
 	if countryCode == "" {
-		countryCode = inferredCountry
+		countryCode = normalizeProtocolCountryCode(profile.CountryCode)
 	}
 	if region == "" {
-		region = inferredRegion
+		region = normalizeProtocolRegion(countryCode, profile.Region)
 	}
-	return countryCode, region
-}
-
-func dynamicProxyGeoFromTimezone(timezone string) (string, string) {
-	switch strings.TrimSpace(timezone) {
-	case "Asia/Tokyo":
-		return "JP", "JP-13"
-	case "Asia/Jakarta":
-		return "ID", "ID-JK"
-	case "Asia/Bangkok":
-		return "TH", "TH-10"
-	case "Asia/Singapore":
-		return "SG", "SG-01"
-	case "America/Los_Angeles":
-		return "US", "US-CA"
-	case "America/Chicago":
-		return "US", "US-TX"
-	default:
-		return "US", "US-NY"
+	if countryCode == "" || region == "" {
+		inferredCountry, inferredRegion, ok := accountfingerprint.GeoFromTimezone(profile.Timezone)
+		if ok {
+			source = "account_fingerprint_timezone"
+			if countryCode == "" {
+				countryCode = normalizeProtocolCountryCode(inferredCountry)
+			}
+			if region == "" {
+				region = normalizeProtocolRegion(countryCode, inferredRegion)
+			}
+		}
 	}
+	return countryCode, region, source
 }
 
 func protocolProxyState(countryCode string, region string) string {

@@ -8,28 +8,20 @@ import (
 	"time"
 
 	smsv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/sms/v1"
+	"orchestrator/internal/gptsettings"
 	pb "orchestrator/pb"
 )
 
-func (s *Server) changePhoneMaxFailureCount() int {
-	if s.changePhoneMaxFailures <= 0 {
-		return defaultChangePhoneMaxFailures
-	}
-	return s.changePhoneMaxFailures
+func (s *Server) changePhoneMaxFailureCount(ctx context.Context) int {
+	return gptsettings.IntValue(s.goPayPluginValues(ctx), "change_phone_max_failures", 0)
 }
 
-func (s *Server) changePhoneOTPRetryCount() int {
-	if s.changePhoneOTPRetryAttempts < 0 {
-		return defaultChangePhoneOTPRetryAttempts
-	}
-	return s.changePhoneOTPRetryAttempts
+func (s *Server) changePhoneOTPRetryCount(ctx context.Context) int {
+	return gptsettings.IntValue(s.goPayPluginValues(ctx), "change_phone_otp_retry_attempts", 0)
 }
 
-func (s *Server) changePhoneGetNumberRetryInterval() time.Duration {
-	if s.changePhoneGetNumberRetryDelay < 0 {
-		return defaultChangePhoneGetNumberRetryDelay
-	}
-	return s.changePhoneGetNumberRetryDelay
+func (s *Server) changePhoneGetNumberRetryInterval(ctx context.Context) time.Duration {
+	return gptsettings.DurationSecondsValue(s.goPayPluginValues(ctx), "change_phone_get_number_retry_seconds", 0)
 }
 
 func (s *Server) recordChangePhoneFailure(ctx context.Context, activationID string, failures *int, reason string) error {
@@ -39,7 +31,7 @@ func (s *Server) recordChangePhoneFailure(ctx context.Context, activationID stri
 		}
 	}
 	*failures++
-	maxFailures := s.changePhoneMaxFailureCount()
+	maxFailures := s.changePhoneMaxFailureCount(ctx)
 	log.Printf("[gopay-app] Change phone retryable failure %d/%d: %s", *failures, maxFailures, reason)
 	if *failures >= maxFailures {
 		return fmt.Errorf("failed to change phone after %d consecutive failures: %s", maxFailures, reason)
@@ -66,7 +58,7 @@ func (s *Server) recordCompletedChangePhoneFailure(ctx context.Context, activati
 		s.finishSMSActivation(ctx, activationID)
 	}
 	*failures++
-	maxFailures := s.changePhoneMaxFailureCount()
+	maxFailures := s.changePhoneMaxFailureCount(ctx)
 	log.Printf("[gopay-app] Change phone retryable failure %d/%d: %s", *failures, maxFailures, reason)
 	if *failures >= maxFailures {
 		return fmt.Errorf("failed to change phone after %d consecutive failures: %s", maxFailures, reason)

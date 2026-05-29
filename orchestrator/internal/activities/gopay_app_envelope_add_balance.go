@@ -25,7 +25,7 @@ func (s *Server) claimEnvelopeAddBalance(ctx context.Context, step activityStep,
 	data["envelope_link_present"] = envelopeLink != ""
 	data["envelope_request_id_present"] = envelopeRequestID != ""
 	if envelopeLink == "" && envelopeRequestID == "" {
-		err := fmt.Errorf("GOPAY_ADD_BALANCE_ENVELOPE_LINK or envelope_request_id is required")
+		err := fmt.Errorf("gopay.add_balance_envelope_link or envelope_request_id is required")
 		data["error_message"] = err.Error()
 		return data, err
 	}
@@ -90,4 +90,16 @@ func claimEnvelopeData(resp *pb.ClaimEnvelopeResponse) map[string]any {
 		"http_status":                  resp.GetHttpStatus(),
 		"raw_json":                     limitStepText(resp.GetRawJson(), 2000),
 	}
+}
+
+func limitStepText(value string, maxRunes int) string {
+	if maxRunes <= 0 {
+		return ""
+	}
+	trimmed := strings.TrimSpace(value)
+	runes := []rune(trimmed)
+	if len(runes) <= maxRunes {
+		return trimmed
+	}
+	return string(runes[:maxRunes]) + "…"
 }

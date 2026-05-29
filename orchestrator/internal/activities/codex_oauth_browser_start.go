@@ -5,7 +5,7 @@ import (
 )
 
 func (s *Server) CodexOAuthStartBrowserActivity(ctx context.Context, input CodexOAuthStartBrowserInput) (CodexOAuthStartBrowserOutput, error) {
-	cfg := s.codexOAuthConfig.withDefaults()
+	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
 	output := CodexOAuthStartBrowserOutput{PhoneLabel: label}
 	data := codexOAuthBrowserData(label, input.GetPhone())

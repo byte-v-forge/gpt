@@ -13,27 +13,40 @@ import (
 
 	"github.com/byte-v-forge/common-lib/hotstream"
 	"github.com/byte-v-forge/common-lib/httpsse"
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 	"google.golang.org/grpc"
 	"gorm.io/gorm"
 
 	"orchestrator/internal/accountfingerprint"
+	"orchestrator/internal/actionregistry"
+	"orchestrator/internal/contracts"
 	"orchestrator/internal/runtimesecrets"
 	"orchestrator/pb"
 )
 
 type Config struct {
-	ListenAddr                 string
-	N8NWebhookBaseURL          string
-	N8NProbeActions            N8NProbeActions
-	N8NRegisterProtocolActions N8NRegisterProtocolActions
-	AccountClient              pb.GPTAccountServiceClient
-	PaymentClient              pb.PaymentServiceClient
-	RuntimeSecrets             runtimesecrets.Store
-	Fingerprints               *accountfingerprint.Store
-	DB                         *gorm.DB
-	Settings                   SettingsStore
-	WorkflowConn               grpc.ClientConnInterface
-	HotStream                  hotstream.Subscriber
+	ListenAddr                     string
+	N8NWebhookBaseURL              string
+	N8NProbeActions                N8NProbeActions
+	N8NCodexOAuthActions           N8NCodexOAuthActions
+	N8NCodexOAuthProtocolActions   N8NCodexOAuthProtocolActions
+	N8NCodexOAuthAddPhoneActions   N8NCodexOAuthAddPhoneActions
+	N8NCodexOAuthBatchActions      N8NCodexOAuthBatchActions
+	N8NRegisterActions             N8NRegisterActions
+	N8NRegisterProtocolActions     N8NRegisterProtocolActions
+	N8NLoginSessionActions         N8NLoginSessionActions
+	N8NLoginSessionProtocolActions N8NLoginSessionProtocolActions
+	N8NActionInvoker               gptplugin.N8NActionInvoker
+	N8NWorkflowStarter             gptplugin.N8NWorkflowStarter
+	AccountClient                  pb.GPTAccountServiceClient
+	PaymentClient                  pb.PaymentServiceClient
+	RuntimeSecrets                 runtimesecrets.Store
+	Fingerprints                   *accountfingerprint.Store
+	DB                             *gorm.DB
+	Settings                       SettingsStore
+	WorkflowConn                   grpc.ClientConnInterface
+	HotStream                      hotstream.Subscriber
+	ActionRegistry                 *actionregistry.Registry
 }
 
 type SettingsStore interface {
@@ -42,24 +55,33 @@ type SettingsStore interface {
 }
 
 type server struct {
-	accountClient              pb.GPTAccountServiceClient
-	accountWorkflowClient      pb.AccountWorkflowServiceClient
-	paymentWorkflowClient      pb.PaymentWorkflowServiceClient
-	gopayAppClient             pb.GoPayAppWorkflowServiceClient
-	otpClient                  pb.OTPServiceClient
-	jobClient                  pb.JobServiceClient
-	paymentClient              pb.PaymentServiceClient
-	runtimeSecrets             runtimesecrets.Store
-	fingerprints               *accountfingerprint.Store
-	db                         *gorm.DB
-	settings                   SettingsStore
-	n8nProbe                   *n8nWebhookClient
-	n8nRegisterProtocol        *n8nWebhookClient
-	n8nProbeActions            N8NProbeActions
-	n8nRegisterProtocolActions N8NRegisterProtocolActions
-	proxyRuntimeProxy          http.Handler
-	hotstream                  hotstream.Subscriber
-	staticDir                  string
+	accountClient                  pb.GPTAccountServiceClient
+	accountWorkflowClient          pb.AccountWorkflowServiceClient
+	paymentWorkflowClient          pb.PaymentWorkflowServiceClient
+	gopayAppClient                 pb.GoPayAppWorkflowServiceClient
+	otpClient                      pb.OTPServiceClient
+	jobClient                      pb.JobServiceClient
+	paymentClient                  pb.PaymentServiceClient
+	runtimeSecrets                 runtimesecrets.Store
+	fingerprints                   *accountfingerprint.Store
+	db                             *gorm.DB
+	settings                       SettingsStore
+	n8nWorkflows                   map[string]*n8nWebhookClient
+	n8nProbeActions                N8NProbeActions
+	n8nCodexOAuthActions           N8NCodexOAuthActions
+	n8nCodexOAuthProtocolActions   N8NCodexOAuthProtocolActions
+	n8nCodexOAuthAddPhoneActions   N8NCodexOAuthAddPhoneActions
+	n8nCodexOAuthBatchActions      N8NCodexOAuthBatchActions
+	n8nRegisterActions             N8NRegisterActions
+	n8nRegisterProtocolActions     N8NRegisterProtocolActions
+	n8nLoginSessionActions         N8NLoginSessionActions
+	n8nLoginSessionProtocolActions N8NLoginSessionProtocolActions
+	n8nActionInvoker               gptplugin.N8NActionInvoker
+	n8nWorkflowStarter             gptplugin.N8NWorkflowStarter
+	proxyRuntimeProxy              http.Handler
+	hotstream                      hotstream.Subscriber
+	staticDir                      string
+	actionRegistry                 *actionregistry.Registry
 }
 
 const gptDashboardStaticDir = "/app/dashboard/gpt"
@@ -76,24 +98,34 @@ func Start(ctx context.Context, cfg Config) (*Server, error) {
 	if cfg.WorkflowConn == nil {
 		return nil, errors.New("workflow connection is required")
 	}
+	actionRegistry := actionregistry.RegisterDefault(cfg.ActionRegistry)
 	s := &server{
-		accountClient:              cfg.AccountClient,
-		accountWorkflowClient:      pb.NewAccountWorkflowServiceClient(cfg.WorkflowConn),
-		paymentWorkflowClient:      pb.NewPaymentWorkflowServiceClient(cfg.WorkflowConn),
-		gopayAppClient:             pb.NewGoPayAppWorkflowServiceClient(cfg.WorkflowConn),
-		otpClient:                  pb.NewOTPServiceClient(cfg.WorkflowConn),
-		jobClient:                  pb.NewJobServiceClient(cfg.WorkflowConn),
-		paymentClient:              cfg.PaymentClient,
-		runtimeSecrets:             cfg.RuntimeSecrets,
-		fingerprints:               cfg.Fingerprints,
-		db:                         cfg.DB,
-		settings:                   cfg.Settings,
-		n8nProbe:                   newN8NWebhookClient("probe-account", cfg.N8NWebhookBaseURL, "gpt/probe-account"),
-		n8nRegisterProtocol:        newN8NWebhookClient("register-protocol", cfg.N8NWebhookBaseURL, "gpt/register-protocol"),
-		n8nProbeActions:            cfg.N8NProbeActions,
-		n8nRegisterProtocolActions: cfg.N8NRegisterProtocolActions,
-		hotstream:                  cfg.HotStream,
-		staticDir:                  gptDashboardStaticDir,
+		accountClient:                  cfg.AccountClient,
+		accountWorkflowClient:          pb.NewAccountWorkflowServiceClient(cfg.WorkflowConn),
+		paymentWorkflowClient:          pb.NewPaymentWorkflowServiceClient(cfg.WorkflowConn),
+		gopayAppClient:                 pb.NewGoPayAppWorkflowServiceClient(cfg.WorkflowConn),
+		otpClient:                      pb.NewOTPServiceClient(cfg.WorkflowConn),
+		jobClient:                      pb.NewJobServiceClient(cfg.WorkflowConn),
+		paymentClient:                  cfg.PaymentClient,
+		runtimeSecrets:                 cfg.RuntimeSecrets,
+		fingerprints:                   cfg.Fingerprints,
+		db:                             cfg.DB,
+		settings:                       cfg.Settings,
+		n8nWorkflows:                   catalogN8NWebhookClients(actionRegistry, cfg.N8NWebhookBaseURL),
+		n8nProbeActions:                cfg.N8NProbeActions,
+		n8nCodexOAuthActions:           cfg.N8NCodexOAuthActions,
+		n8nCodexOAuthProtocolActions:   cfg.N8NCodexOAuthProtocolActions,
+		n8nCodexOAuthAddPhoneActions:   cfg.N8NCodexOAuthAddPhoneActions,
+		n8nCodexOAuthBatchActions:      cfg.N8NCodexOAuthBatchActions,
+		n8nRegisterActions:             cfg.N8NRegisterActions,
+		n8nRegisterProtocolActions:     cfg.N8NRegisterProtocolActions,
+		n8nLoginSessionActions:         cfg.N8NLoginSessionActions,
+		n8nLoginSessionProtocolActions: cfg.N8NLoginSessionProtocolActions,
+		n8nActionInvoker:               cfg.N8NActionInvoker,
+		n8nWorkflowStarter:             cfg.N8NWorkflowStarter,
+		hotstream:                      cfg.HotStream,
+		staticDir:                      gptDashboardStaticDir,
+		actionRegistry:                 actionRegistry,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/api/gpt/", http.StripPrefix("/api/gpt", s.routes()))
@@ -120,6 +152,35 @@ func Start(ctx context.Context, cfg Config) (*Server, error) {
 		}
 	}()
 	return result, nil
+}
+
+func newCatalogN8NWebhookClient(registry *actionregistry.Registry, actionID string, baseURL string) *n8nWebhookClient {
+	def, ok := actionregistry.RegisterDefault(registry).Action(actionID)
+	if !ok || def.Engine != actionregistry.EngineN8N {
+		return nil
+	}
+	return newN8NWebhookClient(def.Workflow.Key, baseURL, def.Workflow.N8NWebhookPath)
+}
+
+func catalogN8NWebhookClients(registry *actionregistry.Registry, baseURL string) map[string]*n8nWebhookClient {
+	out := map[string]*n8nWebhookClient{}
+	for _, def := range actionregistry.RegisterDefault(registry).Actions() {
+		if def.Engine != actionregistry.EngineN8N {
+			continue
+		}
+		client := newN8NWebhookClient(def.Workflow.Key, baseURL, def.Workflow.N8NWebhookPath)
+		if client != nil {
+			out[def.ActionID] = client
+		}
+	}
+	return out
+}
+
+func (s *server) n8nWorkflow(actionID string) *n8nWebhookClient {
+	if s == nil {
+		return nil
+	}
+	return s.n8nWorkflows[strings.ToUpper(strings.TrimSpace(actionID))]
 }
 
 func (s *Server) Close() error {
@@ -151,9 +212,10 @@ type routeBinding struct {
 }
 
 func (s *server) routeBindings() []routeBinding {
-	return []routeBinding{
+	routes := []routeBinding{
 		{"/api/health", s.handleHealth},
 		{"/settings", s.handleSettings},
+		{"/action-catalog", s.handleActionCatalog},
 		{"/accounts", s.handleAccounts},
 		{"/accounts/", s.handleAccount},
 		{"/email-allocations", s.handleGPTEmailAllocations},
@@ -161,29 +223,59 @@ func (s *server) routeBindings() []routeBinding {
 		{"/jobs", s.handleJobs},
 		{"/streams/state", s.streamState},
 		{"/jobs/", s.handleJob},
-		{"/actions/probe-account/", s.handleProbeAccountAction},
-		{"/actions/register-protocol/", s.handleRegisterProtocolAction},
-		{"/gopay/state", s.handleGoPayState},
-		{"/gopay/profile", s.handleGoPayProfile},
-		{"/gopay/user/", s.handleGoPayUserAction},
-		{"/workflows/register-protocol", s.handleRegisterProtocol},
-		{"/workflows/register", s.handleRegister},
-		{"/workflows/activate", s.handleActivate},
-		{"/workflows/autopay", s.handleAutopay},
-		{"/workflows/login-protocol", s.handleLoginProtocol},
-		{"/workflows/login", s.handleLogin},
-		{"/workflows/codex-oauth", s.handleCodexOAuth},
-		{"/workflows/codex-oauth-protocol", s.handleCodexOAuthProtocol},
-		{"/workflows/codex-oauth-add-phone/batch", s.handleCodexOAuthBatchAddPhone},
-		{"/workflows/codex-oauth-add-phone", s.handleCodexOAuthAddPhone},
-		{"/workflows/probe", s.handleProbeAccount},
-		{"/workflows/gopay-app", s.handleGoPayApp},
-		{"/workflows/gopay-qris-payment-activate", s.handleGoPayQRISPaymentActivate},
-		{"/workflows/gopay-wa-payment", s.handleGoPayWAPayment},
-		{"/workflows/gopay-payment/rebind", s.handleGoPayPaymentRebind},
-		{"/workflows/gopay-payment", s.handleGoPayPayment},
-		{"/workflows/register-and-activate", s.handleRegisterAndActivate},
 	}
+	if s.goPayActionsEnabled() {
+		routes = append(routes,
+			routeBinding{"/gopay/state", s.handleGoPayState},
+			routeBinding{"/gopay/profile", s.handleGoPayProfile},
+			routeBinding{"/gopay/user/", s.handleGoPayUserAction},
+		)
+	}
+	routes = append(routes, s.n8nActionRouteBindings()...)
+	return append(routes, s.workflowRouteBindings()...)
+}
+
+func (s *server) goPayActionsEnabled() bool {
+	if s == nil || s.actionRegistry == nil {
+		return false
+	}
+	return s.actionRegistry.HasCapability(contracts.CapabilityGoPay)
+}
+
+func (s *server) n8nActionRouteBindings() []routeBinding {
+	handlers := s.n8nActionHandlers()
+	out := make([]routeBinding, 0, len(handlers))
+	for _, def := range s.actionRegistry.Actions() {
+		handler := handlers[def.ActionID]
+		path := strings.TrimRight(strings.TrimSpace(def.Workflow.ActionPathPrefix), "/")
+		if handler == nil || path == "" {
+			continue
+		}
+		out = append(out, routeBinding{path + "/", handler})
+	}
+	return out
+}
+
+func (s *server) actionSubPath(r *http.Request, actionID string) string {
+	def, ok := s.actionRegistry.Action(actionID)
+	if !ok {
+		return ""
+	}
+	prefix := strings.TrimRight(strings.TrimSpace(def.Workflow.ActionPathPrefix), "/") + "/"
+	return strings.Trim(strings.TrimPrefix(r.URL.Path, prefix), "/")
+}
+
+func (s *server) workflowRouteBindings() []routeBinding {
+	handlers := s.workflowHandlers()
+	out := make([]routeBinding, 0, len(handlers))
+	for _, def := range s.actionRegistry.Actions() {
+		handler := handlers[def.ActionID]
+		if handler == nil || strings.TrimSpace(def.Workflow.StartPath) == "" {
+			continue
+		}
+		out = append(out, routeBinding{def.Workflow.StartPath, handler})
+	}
+	return out
 }
 
 func noCacheFileServer(dir string) http.Handler {

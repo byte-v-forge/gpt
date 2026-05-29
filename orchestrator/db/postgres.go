@@ -95,35 +95,28 @@ type CodexOAuthPhoneLease struct {
 }
 
 type AccountProxyUsage struct {
-	ID             string  `gorm:"primaryKey;column:id"`
-	AccountID      string  `gorm:"column:account_id;index"`
-	JobID          string  `gorm:"column:job_id;index"`
-	N8NExecutionID string  `gorm:"column:n8n_execution_id;index"`
-	Purpose        string  `gorm:"column:purpose;index"`
-	ProxyURLHash   string  `gorm:"column:proxy_url_hash;index"`
-	ProxyProtocol  string  `gorm:"column:proxy_protocol"`
-	ProxyHost      string  `gorm:"column:proxy_host"`
-	ProxyPort      uint32  `gorm:"column:proxy_port"`
-	SessionIDHash  string  `gorm:"column:session_id_hash;index"`
-	ExitIP         string  `gorm:"column:exit_ip;index"`
-	CountryCode    string  `gorm:"column:country_code;index"`
-	Region         string  `gorm:"column:region"`
-	City           string  `gorm:"column:city"`
-	NetworkKind    string  `gorm:"column:network_kind;index"`
-	AnonymizerKind string  `gorm:"column:anonymizer_kind;index"`
-	FraudRiskLevel string  `gorm:"column:fraud_risk_level;index"`
-	FraudRiskScore float64 `gorm:"column:fraud_risk_score"`
-	EdgeRiskLevel  string  `gorm:"column:edge_risk_level;index"`
-	EdgeRiskScore  float64 `gorm:"column:edge_risk_score"`
-	AttemptIndex   uint32  `gorm:"column:attempt_index"`
-	Accepted       bool    `gorm:"column:accepted;index"`
-	ErrorMessage   string  `gorm:"column:error_message"`
-	RawJSON        string  `gorm:"column:raw_json"`
-	CreatedAt      int64   `gorm:"autoCreateTime"`
+	ID             string `gorm:"primaryKey;column:id"`
+	AccountID      string `gorm:"column:account_id;index"`
+	JobID          string `gorm:"column:job_id;index"`
+	N8NExecutionID string `gorm:"column:n8n_execution_id;index"`
+	Purpose        string `gorm:"column:purpose;index"`
+	ProxyURLHash   string `gorm:"column:proxy_url_hash;index"`
+	SessionIDHash  string `gorm:"column:session_id_hash;index"`
+	ExitIP         string `gorm:"column:exit_ip;index"`
+	CountryCode    string `gorm:"column:country_code;index"`
+	Region         string `gorm:"column:region"`
+	City           string `gorm:"column:city"`
+	AttemptIndex   uint32 `gorm:"column:attempt_index"`
+	Accepted       bool   `gorm:"column:accepted;index"`
+	ErrorMessage   string `gorm:"column:error_message"`
+	RawJSON        string `gorm:"column:raw_json"`
+	CreatedAt      int64  `gorm:"autoCreateTime"`
 }
 
 type AccountBrowserFingerprint struct {
 	AccountID              string `gorm:"primaryKey;column:account_id"`
+	CountryCode            string `gorm:"column:country_code;index"`
+	Region                 string `gorm:"column:region"`
 	BrowserProfileTemplate string `gorm:"column:browser_profile_template;index"`
 	BrowserFamily          string `gorm:"column:browser_family"`
 	BrowserMajorVersion    string `gorm:"column:browser_major_version"`

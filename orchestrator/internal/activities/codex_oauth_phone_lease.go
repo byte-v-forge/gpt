@@ -76,7 +76,7 @@ func (s *Server) releaseCodexPhone(ctx context.Context, phone *CodexOAuthPhoneLe
 		}
 		return s.db.WithContext(ctx).Save(&row).Error
 	}
-	if row.ExpiresAt > 0 && row.ExpiresAt <= time.Now().Unix()+int64(codexOAuthPhoneMinRemainingSeconds(s.codexOAuthConfig.withDefaults())) {
+	if row.ExpiresAt > 0 && row.ExpiresAt <= time.Now().Unix()+int64(codexOAuthPhoneMinRemainingSeconds(s.codexOAuthSettings(ctx))) {
 		row.Status = codexOAuthLeaseExpired
 		row.LastFailureKind = codexOAuthFirstNonEmpty(row.LastFailureKind, "phone_expired")
 		if !phoneUsed {

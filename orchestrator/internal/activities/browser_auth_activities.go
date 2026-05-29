@@ -76,7 +76,7 @@ func (s *Server) BrowserAuthStartActivity(ctx context.Context, input BrowserAuth
 	output.OtpIssuedAfterUnix = startResp.GetOtpIssuedAfterUnix()
 	output.OtpWaitStartedAtUnix = startResp.GetOtpWaitStartedAtUnix()
 	output.OtpRequestActionStartedAtUnix = startResp.GetOtpRequestActionStartedAtUnix()
-	output.OtpTimeoutSeconds = s.registrationOtpTimeout()
+	output.OtpTimeoutSeconds = s.registrationOtpTimeout(ctx)
 	if output.GetOtpRequired() && otpKind != "" {
 		if err := s.setJobParams(ctx, input.GetJobId(), map[string]string{browserAuthOTPKindParam: otpKind}); err != nil {
 			output.Data = protoData(data)

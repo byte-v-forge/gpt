@@ -49,7 +49,7 @@ func (s *Server) ResendOTP(ctx context.Context, req *pb.ResendOTPRequest) (*pb.R
 	if err != nil {
 		return &pb.ResendOTPResponse{Success: false, JobId: jobID, ErrorMessage: err.Error()}, nil
 	}
-	if job.Action != actionRegister && job.Action != actionRegisterAndActivate {
+	if job.Action != actionRegister {
 		return &pb.ResendOTPResponse{Success: false, JobId: jobID, ErrorMessage: "otp resend is not supported for job action: " + job.Action}, nil
 	}
 	if err := s.setJobParams(ctx, jobID, map[string]string{registrationOTPResendRequestedAtParam: strconv.FormatInt(time.Now().Unix(), 10)}); err != nil {
@@ -68,7 +68,7 @@ func (s *Server) signalManualOTP(ctx context.Context, jobID, otpKind string) err
 		return err
 	}
 	if job.Action == actionRegisterProtocol && job.LastStep == stepRegisterAccountProtocolOTPWait {
-		return s.ResumeN8NRegisterProtocolManualOTP(ctx, nil, jobID)
+		return s.ResumeN8NEmailManualOTP(ctx, nil, jobID)
 	}
 	return nil
 }
@@ -86,7 +86,7 @@ func (s *Server) resolveManualOTPJob(ctx context.Context, jobID, accountID strin
 		if job.Status != statusRunning {
 			return "", "", "", "", fmt.Errorf("job is not running: %s", job.Status)
 		}
-		otpParam, submittedAtParam, otpKind, err := s.manualOTPParamsForJob(ctx, &job)
+		otpParam, submittedAtParam, otpKind, err := manualOTPParamsForJobSnapshot(&job)
 		if err != nil {
 			return "", "", "", "", err
 		}
@@ -98,7 +98,7 @@ func (s *Server) resolveManualOTPJob(ctx context.Context, jobID, accountID strin
 
 	var job db.Job
 	err := s.db.WithContext(ctx).
-		Where("account_id = ? AND action IN ? AND status = ?", accountID, []string{actionRegister, actionRegisterProtocol, actionLoginSession, actionLoginSessionProtocol, actionActivate, actionAutopay, actionGoPayApp, actionGoPayPayment, actionGoPayQRISPaymentActivate, actionGoPayWAPayment, actionGoPayPaymentRebind, actionRegisterAndActivate}, statusRunning).
+		Where("account_id = ? AND action IN ? AND status = ?", accountID, []string{actionRegister, actionRegisterProtocol, actionLoginSession, actionLoginSessionProtocol, actionGoPayApp, actionGoPayPayment, actionGoPayQRISPaymentActivate, actionGoPayWAPayment, actionGoPayPaymentRebind}, statusRunning).
 		Order("updated_at DESC").
 		First(&job).Error
 	if err != nil {
@@ -107,25 +107,11 @@ func (s *Server) resolveManualOTPJob(ctx context.Context, jobID, accountID strin
 		}
 		return "", "", "", "", err
 	}
-	otpParam, submittedAtParam, otpKind, err := s.manualOTPParamsForJob(ctx, &job)
+	otpParam, submittedAtParam, otpKind, err := manualOTPParamsForJobSnapshot(&job)
 	if err != nil {
 		return "", "", "", "", err
 	}
 	return job.ID, otpParam, submittedAtParam, otpKind, nil
-}
-
-func (s *Server) manualOTPParamsForJob(ctx context.Context, job *db.Job) (string, string, string, error) {
-	if job != nil && job.Action == actionRegisterAndActivate && job.LastStep == stepRegisterAccount && job.ID != "" && s != nil && s.db != nil {
-		var step db.JobStep
-		err := s.db.WithContext(ctx).First(&step, "job_id = ? AND step_name = ?", job.ID, stepRegisterAccount).Error
-		if err == nil && step.Status == statusSucceeded {
-			return paymentOTPParam, paymentOTPSubmittedAtParam, "payment", nil
-		}
-		if err != nil && err != gorm.ErrRecordNotFound {
-			return "", "", "", err
-		}
-	}
-	return manualOTPParamsForJobSnapshot(job)
 }
 
 func manualOTPParamsForJobSnapshot(job *db.Job) (string, string, string, error) {
@@ -135,13 +121,8 @@ func manualOTPParamsForJobSnapshot(job *db.Job) (string, string, string, error) 
 	switch job.Action {
 	case actionRegister, actionRegisterProtocol, actionLoginSession, actionLoginSessionProtocol:
 		return registrationOTPParam, registrationOTPSubmittedAtParam, "registration", nil
-	case actionActivate, actionAutopay, actionGoPayApp, actionGoPayPayment, actionGoPayQRISPaymentActivate, actionGoPayWAPayment, actionGoPayPaymentRebind:
+	case actionGoPayApp, actionGoPayPayment, actionGoPayQRISPaymentActivate, actionGoPayWAPayment, actionGoPayPaymentRebind:
 		return paymentOTPParam, paymentOTPSubmittedAtParam, "payment", nil
-	case actionRegisterAndActivate:
-		if job.LastStep == stepEnsureLogon || job.LastStep == stepGoPayPayment {
-			return paymentOTPParam, paymentOTPSubmittedAtParam, "payment", nil
-		}
-		return registrationOTPParam, registrationOTPSubmittedAtParam, "registration", nil
 	default:
 		return "", "", "", fmt.Errorf("job does not accept otp: %s", job.Action)
 	}

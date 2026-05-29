@@ -7,8 +7,6 @@ import (
 
 const (
 	actionRegister                 = contracts.ActionRegister
-	actionActivate                 = contracts.ActionActivate
-	actionAutopay                  = contracts.ActionAutopay
 	actionGoPayApp                 = contracts.ActionGoPayApp
 	actionGoPayPayment             = contracts.ActionGoPayPayment
 	actionGoPayQRISPaymentActivate = contracts.ActionGoPayQRISPaymentActivate
@@ -25,6 +23,7 @@ const (
 
 	statusRunning           = jobstatus.Running
 	statusSucceeded         = jobstatus.Succeeded
+	statusCanceled          = jobstatus.Canceled
 	statusFailedRecoverable = jobstatus.FailedRecoverable
 	statusFailedRetryable   = jobstatus.FailedRetryable
 	statusFailedFinal       = jobstatus.FailedFinal

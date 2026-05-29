@@ -11,7 +11,7 @@ import (
 func (s *Server) GoPayAppDeactivateStartActivity(ctx context.Context, input GoPayAppDeactivateStartInput) (GoPayAppDeactivateStartOutput, error) {
 	output := GoPayAppDeactivateStartOutput{
 		ActivationId:   input.GetActivationId(),
-		TimeoutSeconds: s.paymentOtpTimeout(),
+		TimeoutSeconds: s.paymentOtpTimeout(ctx),
 		StateJson:      normalizeGoPayWorkflowStateJSON(input.GetStateJson()),
 	}
 	data := map[string]any{"activation_id": input.GetActivationId()}

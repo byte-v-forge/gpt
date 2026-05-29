@@ -1,0 +1,671 @@
+{
+  "id": "gpt-probe-account",
+  "name": "GPT Probe Account",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gpt/probe-account",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "3c1c4d88-b1ec-4527-bf2d-a2fd61173f32",
+      "name": "Start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "byte-v-forge-gpt-probe-account"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "job-id",
+              "name": "job_id",
+              "value": "={{ $json.body.job_id }}",
+              "type": "string"
+            },
+            {
+              "id": "account-id",
+              "name": "account_id",
+              "value": "={{ $json.body.account_id }}",
+              "type": "string"
+            },
+            {
+              "id": "n8n-execution-id",
+              "name": "n8n_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "action-scope",
+              "name": "action_scope",
+              "value": "probe-account",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4032c0ac-a8bc-4520-a4a9-dcebd13c2447",
+      "name": "Normalize Probe Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/probe-account/check-token' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url || $('Record Dynamic Proxy').first().json.proxy_url || $('Run Dynamic IP Preflight').first().json.proxy_url || '' } }}",
+        "options": {}
+      },
+      "id": "5efc36d3-19a1-4d5c-9137-6b25b014a35a",
+      "name": "Check Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "token-valid",
+              "leftValue": "={{ $json.token_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3fed6426-eac8-4c2b-bc55-e58f8548186f",
+      "name": "Token Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/probe-account/fail' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, error_message: $json.reason || 'token invalid', data: $json } }}",
+        "options": {}
+      },
+      "id": "99720810-df93-47f4-9a07-f834576a2b0d",
+      "name": "Fail Probe Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "plus-trial-needed",
+              "leftValue": "={{ !$json.account?.plus_active && String($json.account?.tier || '').toLowerCase() !== 'plus' && $json.account?.plus_trial_known !== true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fdbf4bbb-cc03-4340-9dc6-eb4f00a9073d",
+      "name": "Plus Trial Needed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/probe-account/plus-trial' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url || $('Record Dynamic Proxy').first().json.proxy_url || $('Run Dynamic IP Preflight').first().json.proxy_url || '' } }}",
+        "options": {}
+      },
+      "id": "f75a2023-0a9e-44f9-a653-fc6f9b302daf",
+      "name": "Probe Plus Trial",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2560,
+        -180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "job-id",
+              "name": "job_id",
+              "value": "={{ $('Normalize Probe Input').first().json.job_id }}",
+              "type": "string"
+            },
+            {
+              "id": "account-id",
+              "name": "account_id",
+              "value": "={{ $('Normalize Probe Input').first().json.account_id }}",
+              "type": "string"
+            },
+            {
+              "id": "n8n-execution-id",
+              "name": "n8n_execution_id",
+              "value": "={{ $('Normalize Probe Input').first().json.n8n_execution_id }}",
+              "type": "string"
+            },
+            {
+              "id": "step",
+              "name": "step",
+              "value": "probe_plus_trial",
+              "type": "string"
+            },
+            {
+              "id": "success",
+              "name": "success",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "data",
+              "name": "data",
+              "value": "={{ { success: true, checked: true, skipped: true, reason: $('Check Token').first().json.account?.plus_active ? 'plus_active' : (String($('Check Token').first().json.account?.tier || '').toLowerCase() === 'plus' ? 'tier_plus' : 'plus_trial_known'), tier: $('Check Token').first().json.account?.tier || '', plus_active: $('Check Token').first().json.account?.plus_active === true, plus_trial_eligible: $('Check Token').first().json.account?.plus_trial_eligible === true } }}",
+              "type": "object"
+            },
+            {
+              "id": "proxy-url",
+              "name": "proxy_url",
+              "value": "={{ $('Record Dynamic Proxy').first().json.proxy_url }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0add9f76-e6e1-4afd-b9e7-d77fcefdc641",
+      "name": "Skip Plus Trial",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/probe-account/tier' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url || $('Record Dynamic Proxy').first().json.proxy_url || $('Run Dynamic IP Preflight').first().json.proxy_url || '' } }}",
+        "options": {}
+      },
+      "id": "4213157e-5ab8-4a14-a94a-0d25f5112dc2",
+      "name": "Probe Tier After Plus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        -180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/probe-account/tier' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url || $('Record Dynamic Proxy').first().json.proxy_url || $('Run Dynamic IP Preflight').first().json.proxy_url || '' } }}",
+        "options": {}
+      },
+      "id": "9df8e5c5-d5c5-44df-8494-e366e36f4e76",
+      "name": "Probe Tier After Skip",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/probe-account/complete' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, plus_trial: $('Probe Plus Trial').first().json, tier: $json } }}",
+        "options": {}
+      },
+      "id": "5a444c70-2965-4c29-85c4-193858262d2e",
+      "name": "Complete Probe After Plus",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        -180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/probe-account/complete' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, plus_trial: $('Skip Plus Trial').first().json, tier: $json } }}",
+        "options": {}
+      },
+      "id": "0f2010ff-4d0e-4f8b-a221-0bf93ee534c0",
+      "name": "Complete Probe After Skip",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "workflowId": "gpt-dynamic-ip-preflight"
+      },
+      "id": "probe-run-dynamic-ip-preflight",
+      "name": "Run Dynamic IP Preflight",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "proxy-accepted",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "probe-proxy-accepted",
+      "name": "Proxy Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/probe-account/record-proxy' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data || $json } }}",
+        "options": {}
+      },
+      "id": "probe-record-dynamic-proxy",
+      "name": "Record Dynamic Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/probe-account/fail-proxy' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, error_message: $json.error_message || $json.data?.error_message || 'dynamic proxy preflight failed', data: $json.data || $json } }}",
+        "options": {}
+      },
+      "id": "probe-fail-dynamic-proxy",
+      "name": "Fail Probe Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Normalize Probe Input').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "probe-release-accepted-dynamic-lease",
+      "name": "Release Accepted Dynamic Lease",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        0
+      ],
+      "notes": "Best-effort cleanup for dynamic IP leases after probe workflow terminal states."
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Normalize Probe Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Probe Input": {
+      "main": [
+        [
+          {
+            "node": "Run Dynamic IP Preflight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Token": {
+      "main": [
+        [
+          {
+            "node": "Token Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Token Valid?": {
+      "main": [
+        [
+          {
+            "node": "Plus Trial Needed?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Probe Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plus Trial Needed?": {
+      "main": [
+        [
+          {
+            "node": "Probe Plus Trial",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Plus Trial",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Plus Trial": {
+      "main": [
+        [
+          {
+            "node": "Probe Tier After Plus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Plus Trial": {
+      "main": [
+        [
+          {
+            "node": "Probe Tier After Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Tier After Plus": {
+      "main": [
+        [
+          {
+            "node": "Complete Probe After Plus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Tier After Skip": {
+      "main": [
+        [
+          {
+            "node": "Complete Probe After Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Dynamic IP Preflight": {
+      "main": [
+        [
+          {
+            "node": "Proxy Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proxy Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Record Dynamic Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Probe Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Dynamic Proxy": {
+      "main": [
+        [
+          {
+            "node": "Check Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Probe Proxy": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Probe Job": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Probe After Plus": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Probe After Skip": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "tags": []
+}

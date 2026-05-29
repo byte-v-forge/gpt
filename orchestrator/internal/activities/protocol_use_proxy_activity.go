@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) ProtocolUseProxyActivity(ctx context.Context, input ProtocolAuthStartInput) (ProtocolAuthStartOutput, error) {
-	cfg := s.codexOAuthConfig.withDefaults()
+	cfg := s.codexOAuthSettings(ctx)
 	mode := strings.TrimSpace(input.GetMode())
 	if mode == "" {
 		mode = "protocol"

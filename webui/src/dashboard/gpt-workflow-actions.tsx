@@ -7,11 +7,6 @@ import { GoPayAddBalanceActions, hasGoPayAddBalanceActions } from './gopay-add-b
 import { addBalanceMethodLabel, canConfirmManualGoPayPayment, goPayAddBalancePayload, manualGoPayPaymentView } from './gopay-utils';
 import type { ConcreteGoPayAddBalanceMethod } from './types';
 
-const GPT_WORKFLOW_ACTIONS = [
-  'REGISTER', 'REGISTER_PROTOCOL', 'LOGIN_SESSION', 'LOGIN_SESSION_PROTOCOL',
-  'REGISTER_AND_ACTIVATE', 'GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE',
-  'GOPAY_APP', 'GOPAY_WA_PAYMENT', 'GOPAY_PAYMENT_REBIND'
-];
 const OTP_WAIT_STEPS = new Set([
   'register_account_otp_wait', 'register_account_protocol_otp_wait',
   'login_session_otp_wait', 'login_session_protocol_otp_wait',
@@ -24,7 +19,6 @@ export function registerGptWorkflowActionRenderers() {
   registered = true;
   registerWorkflowJobActionRenderers([{
     id: 'gpt.workflow.actions',
-    jobActions: GPT_WORKFLOW_ACTIONS,
     statuses: ['RUNNING'],
     render: (props) => <GptWorkflowActions {...props} />
   }]);
@@ -84,7 +78,7 @@ function GptWorkflowActions(props: WorkflowJobActionRendererProps) {
 }
 
 function canResendOTP(job: { action?: string; last_step?: string }) {
-  return job.last_step === 'register_account_otp_wait' && ['REGISTER', 'REGISTER_AND_ACTIVATE'].includes(job.action || '');
+  return job.last_step === 'register_account_otp_wait';
 }
 
 function ManualQRISPaymentActions({ payment, busy, onConfirm }: {

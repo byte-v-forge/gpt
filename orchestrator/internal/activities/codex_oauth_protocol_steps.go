@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) CodexOAuthStartProtocolActivity(ctx context.Context, input CodexOAuthStartBrowserInput) (CodexOAuthStartBrowserOutput, error) {
-	cfg := s.codexOAuthConfig.withDefaults()
+	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
 	output := CodexOAuthStartBrowserOutput{PhoneLabel: label}
 	data := codexOAuthProtocolData(label)
@@ -151,7 +151,7 @@ func (s *Server) CodexOAuthSubmitProtocolEmailOTPActivity(ctx context.Context, i
 }
 
 func (s *Server) codexOAuthProtocolStageStep(ctx context.Context, input CodexOAuthBrowserStepInput, stepName, heartbeat string, fn func(context.Context, *GptClient, *codexOAuthProtocolState, *pb.Account, map[string]any) (string, int64, error)) (CodexOAuthBrowserStageOutput, error) {
-	cfg := s.codexOAuthConfig.withDefaults()
+	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
 	output := CodexOAuthBrowserStageOutput{}
 	data := codexOAuthProtocolData(label)

@@ -20,17 +20,17 @@ func (s *Server) GoPayAppSMSCancelBeforeRotationActivity(ctx context.Context, in
 		}
 		if err := s.recordChangePhoneFailure(ctx, input.GetActivationId(), &failures, reason); err != nil {
 			output.FailureCount = int32(failures)
-			output.MaxFailures = int32(s.changePhoneMaxFailureCount())
+			output.MaxFailures = int32(s.changePhoneMaxFailureCount(ctx))
 			output.ErrorMessage = err.Error()
 			data["failure_count"] = failures
-			data["max_failures"] = s.changePhoneMaxFailureCount()
+			data["max_failures"] = s.changePhoneMaxFailureCount(ctx)
 			data["error_message"] = err.Error()
 			return data, err
 		}
 		output.FailureCount = int32(failures)
-		output.MaxFailures = int32(s.changePhoneMaxFailureCount())
+		output.MaxFailures = int32(s.changePhoneMaxFailureCount(ctx))
 		data["failure_count"] = failures
-		data["max_failures"] = s.changePhoneMaxFailureCount()
+		data["max_failures"] = s.changePhoneMaxFailureCount(ctx)
 		return data, nil
 	})
 	output.Data = protoData(data)

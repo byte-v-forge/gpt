@@ -7,7 +7,7 @@ import (
 )
 
 func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input CodexOAuthCompleteBrowserInput) (CodexOAuthCompleteBrowserOutput, error) {
-	cfg := s.codexOAuthConfig.withDefaults()
+	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
 	output := CodexOAuthCompleteBrowserOutput{}
 	data := codexOAuthProtocolData(label)

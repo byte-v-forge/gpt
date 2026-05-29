@@ -25,7 +25,7 @@ func (s *Server) waitPaymentWebhookOTP(ctx context.Context, input OTPWaitInput) 
 	}
 	timeoutSeconds := input.GetTimeoutSeconds()
 	if timeoutSeconds <= 0 {
-		timeoutSeconds = s.paymentOtpTimeout()
+		timeoutSeconds = s.paymentOtpTimeout(ctx)
 	}
 
 	type otpServiceResult struct {

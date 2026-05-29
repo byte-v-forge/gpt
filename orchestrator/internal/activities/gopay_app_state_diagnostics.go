@@ -33,6 +33,22 @@ func goPayAppStateDiagnostics(raw string) map[string]any {
 	if endpoints := intFromAny(state["_proxy_runtime_pool_endpoints"]); endpoints > 0 {
 		data["proxy_runtime_pool_endpoints"] = endpoints
 	}
+	for _, key := range []string{
+		"_gopay_account_id",
+		"_gopay_country_code",
+		"_proxy_runtime_chain_route",
+		"_proxy_runtime_exit_ip_hash",
+		"_proxy_runtime_exit_country_code",
+		"_proxy_runtime_exit_region",
+		"_proxy_runtime_ip_fraud_risk_level",
+		"_proxy_runtime_ip_fraud_risk_score",
+		"_proxy_runtime_connectivity_reachable",
+		"_proxy_runtime_preflight_attempts",
+	} {
+		if value, ok := state[key]; ok {
+			data[strings.TrimPrefix(key, "_")] = value
+		}
+	}
 	if scope := stringFromAny(state["_signup_rate_limit_scope"]); scope != "" {
 		data["signup_rate_limit_scope"] = scope
 		data["signup_rate_limited_at"] = intFromAny(state["_signup_rate_limited_at"])

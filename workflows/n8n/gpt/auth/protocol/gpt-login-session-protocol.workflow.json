@@ -1,0 +1,939 @@
+{
+  "id": "gpt-login-session-protocol",
+  "name": "GPT Login Session Protocol",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gpt/login-session-protocol",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "2b0f8f5d-0a1f-4e8d-9f70-6d9b6f76a201",
+      "name": "Start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "byte-v-forge-gpt-login-session-protocol"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "job-id",
+              "name": "job_id",
+              "value": "={{ $json.body.job_id }}",
+              "type": "string"
+            },
+            {
+              "id": "account-id",
+              "name": "account_id",
+              "value": "={{ $json.body.account_id }}",
+              "type": "string"
+            },
+            {
+              "id": "n8n-execution-id",
+              "name": "n8n_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "action-scope",
+              "name": "action_scope",
+              "value": "login-session-protocol",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8af83db0-d7dd-470c-91a9-d8ee210fd13f",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "gpt-dynamic-ip-preflight"
+      },
+      "id": "1f7f8088-f541-42ee-bde8-9c9c72ab45b0",
+      "name": "Run Dynamic IP Preflight",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "dynamic-proxy-success",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f544dc45-4775-43ca-b19b-83132737a0b8",
+      "name": "Proxy Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/record-proxy' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data } }}",
+        "options": {}
+      },
+      "id": "39e81851-a9df-42c2-8c0f-66360afe5ec6",
+      "name": "Record Dynamic Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        -180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/fail-proxy' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, error_message: $json.error_message || 'dynamic proxy preflight failed', data: $json.data || $json } }}",
+        "options": {}
+      },
+      "id": "88eed32b-169e-4389-9006-005187b6f474",
+      "name": "Fail Dynamic Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/use-proxy' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id } }}",
+        "options": {}
+      },
+      "id": "7da2cf81-3aa0-4e2d-809f-4c44fdd8a67a",
+      "name": "Use Checked Protocol Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        -180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/start' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id } }}",
+        "options": {}
+      },
+      "id": "7c52ced1-9940-4edb-a1ab-15792e40f4be",
+      "name": "Start Protocol Auth",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        -180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "start-result-ready",
+              "leftValue": "={{ $json.result_ready }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4f3a5cc4-a222-4310-9dd7-dceea678b570",
+      "name": "Result Ready After Start?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2240,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/finish' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, result_ref: $json.result_ref } }}",
+        "options": {}
+      },
+      "id": "686e8a19-cf14-492f-97de-58dafd8311c8",
+      "name": "Finish After Start",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2560,
+        -180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/wait' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Start Protocol Auth').first().json.flow_id, email: $('Start Protocol Auth').first().json.email } }}",
+        "options": {}
+      },
+      "id": "3f890421-6b52-47aa-b5cc-ae3ab4cc347c",
+      "name": "Advance Protocol Auth",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2560,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "wait-result-ready",
+              "leftValue": "={{ $json.result_ready }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a2e718d3-4999-4f85-8b65-27414f56971c",
+      "name": "Result Ready After Advance?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/finish' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, result_ref: $json.result_ref } }}",
+        "options": {}
+      },
+      "id": "6dbdc19c-08d7-40f3-a831-f85f3a28effe",
+      "name": "Finish After Advance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        -180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "otp-required",
+              "leftValue": "={{ $json.otp_required }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f8b7e519-b4db-42d2-90ea-d1f62e8ed2f0",
+      "name": "OTP Required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3200,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/await-otp' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $json.flow_id, email: $json.email, timeout_seconds: $json.otp_timeout_seconds || 300, otp_issued_after_unix: $json.otp_issued_after_unix || 0, resume_url: $execution.resumeUrl } }}",
+        "options": {}
+      },
+      "id": "ab744337-6f54-4988-83d4-05665c1e7fbf",
+      "name": "Login OTP Resume URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "limitWaitTime": true,
+        "limitType": "afterTimeInterval",
+        "resumeAmount": 5,
+        "resumeUnit": "minutes",
+        "options": {}
+      },
+      "id": "515b7552-96e9-451a-9f74-177ec29b098d",
+      "name": "Wait For OTP Event",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4160,
+        180
+      ],
+      "webhookId": "byte-v-forge-gpt-login-session-protocol-otp"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "otp-resumed",
+              "leftValue": "={{ Boolean($json.body?.otp_source || $json.otp_source) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "91df8a77-8c4e-4706-b40f-9c98c16b9e5d",
+      "name": "OTP Event Received?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4480,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/complete' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $json.body?.flow_id || $json.flow_id || $('Advance Protocol Auth').first().json.flow_id, otp_source: $json.body?.otp_source || $json.otp_source || $json.data?.otp_source || 'mailbox', otp_issued_after_unix: $json.body?.otp_issued_after_unix || $json.otp_issued_after_unix || $json.data?.issued_after_unix || $('Advance Protocol Auth').first().json.otp_issued_after_unix || 0 } }}",
+        "options": {}
+      },
+      "id": "0cad7584-73a3-4acb-b64e-67620f1efb8d",
+      "name": "Complete Protocol Auth",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4800,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/finish' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, result_ref: $json.result_ref } }}",
+        "options": {}
+      },
+      "id": "fb3089e2-367f-4236-813e-9c580bf911b2",
+      "name": "Finish After OTP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5440,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/fail' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Advance Protocol Auth').first().json.flow_id, error_message: 'login session protocol OTP wait timed out', data: { reason: 'otp_wait_timeout' } } }}",
+        "options": {}
+      },
+      "id": "b170b723-6e93-469d-9f3c-e8046c4af01b",
+      "name": "Fail OTP Timeout",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4800,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/login-session-protocol/fail' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Advance Protocol Auth').first().json.flow_id, error_message: 'login session protocol did not reach terminal or OTP state', data: $json } }}",
+        "options": {}
+      },
+      "id": "c58912f7-b95b-4c80-a993-ddd703d1b6d1",
+      "name": "Fail Unexpected State",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        180
+      ],
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "otp-already-available",
+              "leftValue": "={{ Boolean($json.otp_source || $json.data?.otp_source || $json.body?.otp_source) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "7c7ef97f-f6ff-401a-8a1f-7e5f8e4f8501",
+      "name": "OTP Already Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3840,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Normalize Input').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "release-accepted-dynamic-lease",
+      "name": "Release Accepted Dynamic Lease",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5760,
+        0
+      ],
+      "notes": "Best-effort cleanup for dynamic IP leases after register workflow terminal states."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "complete-result-ready",
+              "leftValue": "={{ Boolean($json.result_ready && $json.result_ref) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "result-ready-after-otp",
+      "name": "Result Ready After OTP?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5120,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Run Dynamic IP Preflight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Protocol Auth": {
+      "main": [
+        [
+          {
+            "node": "Result Ready After Start?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result Ready After Start?": {
+      "main": [
+        [
+          {
+            "node": "Finish After Start",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Advance Protocol Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Advance Protocol Auth": {
+      "main": [
+        [
+          {
+            "node": "Result Ready After Advance?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result Ready After Advance?": {
+      "main": [
+        [
+          {
+            "node": "Finish After Advance",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OTP Required?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OTP Required?": {
+      "main": [
+        [
+          {
+            "node": "Login OTP Resume URL",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Unexpected State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Login OTP Resume URL": {
+      "main": [
+        [
+          {
+            "node": "OTP Already Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait For OTP Event": {
+      "main": [
+        [
+          {
+            "node": "OTP Event Received?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OTP Event Received?": {
+      "main": [
+        [
+          {
+            "node": "Complete Protocol Auth",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail OTP Timeout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Protocol Auth": {
+      "main": [
+        [
+          {
+            "node": "Result Ready After OTP?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Dynamic IP Preflight": {
+      "main": [
+        [
+          {
+            "node": "Proxy Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proxy Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Record Dynamic Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Dynamic Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Dynamic Proxy": {
+      "main": [
+        [
+          {
+            "node": "Use Checked Protocol Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Checked Protocol Proxy": {
+      "main": [
+        [
+          {
+            "node": "Start Protocol Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OTP Already Available?": {
+      "main": [
+        [
+          {
+            "node": "Complete Protocol Auth",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait For OTP Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish After Start": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish After Advance": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finish After OTP": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail OTP Timeout": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Unexpected State": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Dynamic Proxy": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Result Ready After OTP?": {
+      "main": [
+        [
+          {
+            "node": "Finish After OTP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Unexpected State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "tags": []
+}

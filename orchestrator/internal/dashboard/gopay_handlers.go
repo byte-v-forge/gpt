@@ -7,24 +7,6 @@ import (
 	"orchestrator/pb"
 )
 
-func (s *server) handleGoPayApp(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		return
-	}
-	var req pb.GoPayAppRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err)
-		return
-	}
-	resp, err := s.gopayAppClient.RunGoPayApp(r.Context(), &req)
-	if err != nil {
-		writeError(w, http.StatusBadGateway, err)
-		return
-	}
-	writeStartedJSON(w, resp)
-}
-
 func (s *server) handleGoPayState(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)

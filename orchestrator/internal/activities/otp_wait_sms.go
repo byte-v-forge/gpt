@@ -39,7 +39,7 @@ func (s *Server) waitSMSOTP(ctx context.Context, input OTPWaitInput) (OTPWaitOut
 		}
 		timeoutSeconds := input.GetTimeoutSeconds()
 		if timeoutSeconds <= 0 {
-			timeoutSeconds = s.paymentOtpTimeout()
+			timeoutSeconds = s.paymentOtpTimeout(ctx)
 		}
 		data["timeout_seconds"] = timeoutSeconds
 		step.progress("waiting for sms otp", data)

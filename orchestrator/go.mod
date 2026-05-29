@@ -3,6 +3,7 @@ module orchestrator
 go 1.26.2
 
 require (
+	github.com/byte-v-forge/gpt/pkg/gptplugin v0.0.0
 	github.com/bogdanfinn/fhttp v0.6.8
 	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/google/uuid v1.6.0
@@ -49,3 +50,4 @@ require (
 )
 
 replace github.com/byte-v-forge/common-lib => ../../common-lib
+replace github.com/byte-v-forge/gpt/pkg/gptplugin => ../pkg/gptplugin

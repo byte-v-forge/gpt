@@ -57,7 +57,7 @@ func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.C
 		return &pb.CancelJobResponse{JobId: jobID, ErrorMessage: "job is not running: " + job.Status}, nil
 	}
 	cancelData := map[string]any{"canceled": true, "reason": strings.TrimSpace(req.GetReason())}
-	cancelData["runner"] = "gpt-job-action-worker"
+	cancelData["engine"] = "n8n"
 	reason := strings.TrimSpace(req.GetReason())
 	if reason == "" {
 		reason = "manual job cancel"

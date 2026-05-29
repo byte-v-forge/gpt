@@ -1,0 +1,176 @@
+{
+  "id": "gpt-codex-oauth-batch-add-phone",
+  "name": "GPT Codex OAuth Batch Add Phone",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gpt/codex-oauth-batch-add-phone",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "2846fa64-05c4-5462-8e64-24a564b8db13",
+      "name": "Start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "byte-v-forge-gpt-codex-oauth-batch-add-phone"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json.body || $input.first().json;\nconst accountIds = Array.isArray(input.account_ids) ? input.account_ids : String(input.account_ids || '').split(',');\nconst clean = [...new Set(accountIds.map(v => String(v || '').trim()).filter(Boolean))];\nif (!clean.length) throw new Error('account_ids is required');\nreturn clean.map((account_id, index) => ({ json: {\n  parent_job_id: String(input.job_id || '').trim(),\n  account_id,\n  label: String(input.label || '').trim(),\n  max_reuse_count: Number(input.max_reuse_count || 0),\n  n8n_execution_id: $execution.id,\n  item_index: index,\n  total_count: clean.length,\n}}));"
+      },
+      "id": "ad6e2b8b-7abc-5925-9004-9bad18e0bf8b",
+      "name": "Build Account Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "e0c3ed16-8aa7-5231-a4d8-4938349602ee",
+      "name": "Loop Accounts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-batch-add-phone/create-child' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { parent_job_id: $json.parent_job_id, account_id: $json.account_id, label: $json.label, max_reuse_count: $json.max_reuse_count, n8n_execution_id: $json.n8n_execution_id } }}",
+        "options": {}
+      },
+      "id": "86b693b1-b994-5681-b5e5-c000ea53eec3",
+      "name": "Create Add Phone Child Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "gpt-codex-oauth-add-phone"
+      },
+      "id": "eaa61d97-6e76-51f3-a7ba-9a6505df7b39",
+      "name": "Run Add Phone Child Workflow",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        1280,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-batch-add-phone/complete' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Build Account Items').first().json.parent_job_id, n8n_execution_id: $execution.id, result: { total_count: $('Build Account Items').all().length, mode: 'child_workflows' } } }}",
+        "options": {}
+      },
+      "id": "07a57e61-84cc-5a8e-b3d3-006ce6282700",
+      "name": "Complete Batch Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        180
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Build Account Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Account Items": {
+      "main": [
+        [
+          {
+            "node": "Loop Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Accounts": {
+      "main": [
+        [
+          {
+            "node": "Complete Batch Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Add Phone Child Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Add Phone Child Job": {
+      "main": [
+        [
+          {
+            "node": "Run Add Phone Child Workflow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Add Phone Child Workflow": {
+      "main": [
+        [
+          {
+            "node": "Loop Accounts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "tags": []
+}

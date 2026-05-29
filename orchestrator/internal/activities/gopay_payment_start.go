@@ -45,7 +45,7 @@ func (s *Server) startGoPayPayment(ctx context.Context, step activityStep, input
 	}
 	output = GoPayPaymentStartOutput{
 		FlowId:            preparedFlowID,
-		OtpTimeoutSeconds: s.paymentOtpTimeout(),
+		OtpTimeoutSeconds: s.paymentOtpTimeout(ctx),
 		UseAccountToken:   useAccountToken,
 		StateJson:         stateJSON,
 	}

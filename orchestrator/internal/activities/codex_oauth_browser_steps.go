@@ -47,7 +47,7 @@ func (s *Server) CodexOAuthSubmitEmailOTPActivity(ctx context.Context, input Cod
 }
 
 func (s *Server) codexOAuthBrowserStageStep(ctx context.Context, input CodexOAuthBrowserStepInput, stepName, heartbeat string, fn func(*codexOAuthBrowserFlow, string) (string, int64, error)) (CodexOAuthBrowserStageOutput, error) {
-	cfg := s.codexOAuthConfig.withDefaults()
+	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
 	output := CodexOAuthBrowserStageOutput{}
 	data := codexOAuthBrowserData(label, nil)

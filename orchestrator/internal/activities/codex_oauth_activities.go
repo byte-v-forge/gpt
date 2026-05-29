@@ -19,7 +19,7 @@ func codexOAuthAuthSecretKey(accountID string) string {
 }
 
 func (s *Server) CodexOAuthAcquirePhoneActivity(ctx context.Context, input CodexOAuthAcquirePhoneInput) (*CodexOAuthPhoneLease, error) {
-	cfg := s.codexOAuthConfig.withDefaults()
+	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
 	reuseLimit := input.GetMaxReuseCount()
 	if reuseLimit <= 0 {

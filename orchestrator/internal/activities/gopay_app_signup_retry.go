@@ -12,7 +12,7 @@ func (s *Server) retryGoPayAppSignupOTP(ctx context.Context, input GoPayAppOTPSt
 	stepName := stepGoPayAppSignupRetry
 	output := GoPayAppOTPOutput{
 		Operation:      goPayAppOTPOperationSignup,
-		TimeoutSeconds: s.paymentOtpTimeout(),
+		TimeoutSeconds: s.paymentOtpTimeout(ctx),
 		StateJson:      normalizeGoPayWorkflowStateJSON(input.GetStateJson()),
 	}
 	otpChannel := normalizeGoPayOTPChannel(input.GetOtpChannel())

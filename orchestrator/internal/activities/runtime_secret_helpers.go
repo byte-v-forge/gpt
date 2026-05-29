@@ -7,25 +7,6 @@ import (
 	"time"
 )
 
-func (s *Server) loadRekberinajaTokens(ctx context.Context, fallbackAccessToken string, fallbackRefreshToken string) (string, string) {
-	if s == nil || s.runtimeSecrets == nil {
-		return fallbackAccessToken, fallbackRefreshToken
-	}
-	accessToken := fallbackAccessToken
-	refreshToken := fallbackRefreshToken
-	values, err := s.runtimeSecrets.LoadMany(ctx, rekberinajaAccessTokenSecretKey, rekberinajaRefreshTokenSecretKey)
-	if err != nil {
-		return accessToken, refreshToken
-	}
-	if value := strings.TrimSpace(values[rekberinajaAccessTokenSecretKey]); value != "" {
-		accessToken = value
-	}
-	if value := strings.TrimSpace(values[rekberinajaRefreshTokenSecretKey]); value != "" {
-		refreshToken = value
-	}
-	return accessToken, refreshToken
-}
-
 func (s *Server) loadRuntimeSecret(ctx context.Context, key string) string {
 	if s == nil || s.runtimeSecrets == nil || strings.TrimSpace(key) == "" {
 		return ""
@@ -35,23 +16,6 @@ func (s *Server) loadRuntimeSecret(ctx context.Context, key string) string {
 		return ""
 	}
 	return strings.TrimSpace(value)
-}
-
-func (s *Server) saveRekberinajaTokens(ctx context.Context, accessToken string, refreshToken string) error {
-	if s == nil || s.runtimeSecrets == nil {
-		return nil
-	}
-	if strings.TrimSpace(accessToken) != "" {
-		if err := s.saveRuntimeSecret(ctx, rekberinajaAccessTokenSecretKey, accessToken); err != nil {
-			return err
-		}
-	}
-	if strings.TrimSpace(refreshToken) != "" {
-		if err := s.saveRuntimeSecret(ctx, rekberinajaRefreshTokenSecretKey, refreshToken); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (s *Server) saveRuntimeSecret(ctx context.Context, key string, value string) error {

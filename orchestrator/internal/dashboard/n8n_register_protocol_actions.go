@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
+	"orchestrator/internal/contracts"
 	"orchestrator/pb"
 )
 
@@ -24,7 +24,7 @@ type N8NRegisterProtocolActions interface {
 	FailN8NRegisterProtocol(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error)
 }
 
-type registerProtocolStepRequest struct {
+type protocolAuthStepRequest struct {
 	JobID          string `json:"job_id"`
 	AccountID      string `json:"account_id"`
 	N8NExecutionID string `json:"n8n_execution_id"`
@@ -33,32 +33,32 @@ type registerProtocolStepRequest struct {
 	ProxyURL       string `json:"proxy_url"`
 }
 
-type registerProtocolOTPWaitRequest struct {
-	registerProtocolStepRequest
+type protocolAuthOTPWaitRequest struct {
+	protocolAuthStepRequest
 	TimeoutSeconds     int32  `json:"timeout_seconds"`
 	OtpIssuedAfterUnix int64  `json:"otp_issued_after_unix"`
 	ResumeURL          string `json:"resume_url"`
 }
 
-type registerProtocolCompleteRequest struct {
-	registerProtocolStepRequest
+type protocolAuthCompleteRequest struct {
+	protocolAuthStepRequest
 	OtpSource          string `json:"otp_source"`
 	OtpIssuedAfterUnix int64  `json:"otp_issued_after_unix"`
 }
 
-type registerProtocolFinishRequest struct {
-	registerProtocolStepRequest
+type protocolAuthFinishRequest struct {
+	protocolAuthStepRequest
 	ResultRef string `json:"result_ref"`
 }
 
-type registerProtocolFailRequest struct {
-	registerProtocolStepRequest
+type protocolAuthFailRequest struct {
+	protocolAuthStepRequest
 	ErrorMessage string         `json:"error_message"`
 	Data         map[string]any `json:"data"`
 }
 
-type registerProtocolProxyRecordRequest struct {
-	registerProtocolStepRequest
+type protocolAuthProxyRecordRequest struct {
+	protocolAuthStepRequest
 	Data map[string]any `json:"data"`
 }
 
@@ -68,10 +68,10 @@ func (s *server) handleRegisterProtocolAction(w http.ResponseWriter, r *http.Req
 		return
 	}
 	if s.n8nRegisterProtocolActions == nil {
-		writeError(w, http.StatusBadGateway, errors.New("n8n register-protocol action runner is not configured"))
+		writeError(w, http.StatusBadGateway, errors.New("n8n register-protocol action API is not configured"))
 		return
 	}
-	action := strings.Trim(strings.TrimPrefix(r.URL.Path, "/actions/register-protocol/"), "/")
+	action := s.actionSubPath(r, contracts.ActionRegisterProtocol)
 	switch action {
 	case "proxy-settings":
 		s.proxySettingsRegisterProtocol(w, r)
@@ -99,7 +99,7 @@ func (s *server) handleRegisterProtocolAction(w http.ResponseWriter, r *http.Req
 }
 
 func (s *server) proxySettingsRegisterProtocol(w http.ResponseWriter, r *http.Request) {
-	var req registerProtocolStepRequest
+	var req protocolAuthStepRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -109,7 +109,7 @@ func (s *server) proxySettingsRegisterProtocol(w http.ResponseWriter, r *http.Re
 }
 
 func (s *server) recordRegisterProtocolProxy(w http.ResponseWriter, r *http.Request) {
-	var req registerProtocolProxyRecordRequest
+	var req protocolAuthProxyRecordRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -119,7 +119,7 @@ func (s *server) recordRegisterProtocolProxy(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *server) failRegisterProtocolProxy(w http.ResponseWriter, r *http.Request) {
-	var req registerProtocolFailRequest
+	var req protocolAuthFailRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -129,7 +129,7 @@ func (s *server) failRegisterProtocolProxy(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *server) useRegisterProtocolProxy(w http.ResponseWriter, r *http.Request) {
-	var req registerProtocolStepRequest
+	var req protocolAuthStepRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -139,7 +139,7 @@ func (s *server) useRegisterProtocolProxy(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) startRegisterProtocolAuth(w http.ResponseWriter, r *http.Request) {
-	var req registerProtocolStepRequest
+	var req protocolAuthStepRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -149,7 +149,7 @@ func (s *server) startRegisterProtocolAuth(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *server) waitRegisterProtocolAuth(w http.ResponseWriter, r *http.Request) {
-	var req registerProtocolStepRequest
+	var req protocolAuthStepRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -159,7 +159,7 @@ func (s *server) waitRegisterProtocolAuth(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) awaitRegisterProtocolOTP(w http.ResponseWriter, r *http.Request) {
-	var req registerProtocolOTPWaitRequest
+	var req protocolAuthOTPWaitRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -169,7 +169,7 @@ func (s *server) awaitRegisterProtocolOTP(w http.ResponseWriter, r *http.Request
 }
 
 func (s *server) completeRegisterProtocolAuth(w http.ResponseWriter, r *http.Request) {
-	var req registerProtocolCompleteRequest
+	var req protocolAuthCompleteRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -179,7 +179,7 @@ func (s *server) completeRegisterProtocolAuth(w http.ResponseWriter, r *http.Req
 }
 
 func (s *server) finishRegisterProtocol(w http.ResponseWriter, r *http.Request) {
-	var req registerProtocolFinishRequest
+	var req protocolAuthFinishRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
@@ -189,7 +189,7 @@ func (s *server) finishRegisterProtocol(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *server) failRegisterProtocol(w http.ResponseWriter, r *http.Request) {
-	var req registerProtocolFailRequest
+	var req protocolAuthFailRequest
 	if err := readJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return

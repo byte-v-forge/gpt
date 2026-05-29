@@ -7,28 +7,20 @@ import (
 	"strings"
 	"time"
 
+	"orchestrator/internal/gptsettings"
 	pb "orchestrator/pb"
 )
 
-func (s *Server) gopayAppStepResponseBodyLimit() int32 {
-	if s.gopayAppStepBodyLimit <= 0 {
-		return 6000
-	}
-	return s.gopayAppStepBodyLimit
+func (s *Server) gopayAppStepResponseBodyLimit(ctx context.Context) int32 {
+	return gptsettings.Int32Value(s.goPayPluginValues(ctx), "app_step_body_limit", 0)
 }
 
-func (s *Server) gopayAppLinkPaymentWaitTimeout() time.Duration {
-	if s.gopayAppLinkPaymentTimeout <= 0 {
-		return 180 * time.Second
-	}
-	return s.gopayAppLinkPaymentTimeout
+func (s *Server) gopayAppLinkPaymentWaitTimeout(ctx context.Context) time.Duration {
+	return gptsettings.DurationSecondsValue(s.goPayPluginValues(ctx), "app_link_payment_timeout_seconds", 0)
 }
 
-func (s *Server) gopayAppUnlinkWaitTimeout() time.Duration {
-	if s.gopayAppUnlinkTimeout <= 0 {
-		return 15 * time.Second
-	}
-	return s.gopayAppUnlinkTimeout
+func (s *Server) gopayAppUnlinkWaitTimeout(ctx context.Context) time.Duration {
+	return gptsettings.DurationSecondsValue(s.goPayPluginValues(ctx), "app_unlink_timeout_seconds", 0)
 }
 
 func (s *Server) readyGoPayAccountToken(ctx context.Context, stateJSON string) (string, string, string, error) {
@@ -77,14 +69,14 @@ func (s *Server) replayGoPayPaymentLink(ctx context.Context, stateJSON string, p
 	if pin == "" {
 		return nil, normalizeGoPayWorkflowStateJSON(stateJSON), fmt.Errorf("gopay pin is required")
 	}
-	timeout := s.gopayAppLinkPaymentWaitTimeout()
+	timeout := s.gopayAppLinkPaymentWaitTimeout(ctx)
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	resp, err := s.gopayClient.ReplayLinkPayment(reqCtx, &pb.ReplayLinkPaymentRequest{
 		StateJson:   stateJSON,
 		PaymentLink: paymentLink,
 		Pin:         pin,
-		BodyLimit:   s.gopayAppStepResponseBodyLimit(),
+		BodyLimit:   s.gopayAppStepResponseBodyLimit(ctx),
 	})
 	nextStateJSON := goPayWorkflowStateAfter(stateJSON, responseStateJSON(resp))
 	if err != nil {
@@ -111,7 +103,7 @@ func (s *Server) unlinkGoPayAccountToken(ctx context.Context, stateJSON string) 
 	if s.gopayClient == nil {
 		return normalizeGoPayWorkflowStateJSON(stateJSON), fmt.Errorf("gopay-app client not configured")
 	}
-	timeout := s.gopayAppUnlinkWaitTimeout()
+	timeout := s.gopayAppUnlinkWaitTimeout(ctx)
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	resp, err := s.gopayClient.Unlink(reqCtx, &pb.UnlinkRequest{StateJson: stateJSON})

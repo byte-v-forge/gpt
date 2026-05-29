@@ -9,7 +9,8 @@ import (
 )
 
 func (s *Server) GoPayUserCheckPhone(ctx context.Context, req *pb.GoPayUserCheckPhoneRequest) (*pb.GoPayUserCheckPhoneResponse, error) {
-	if _, err := normalizeGoPayUserID(req.GetUserId()); err != nil {
+	userID, err := normalizeGoPayUserID(req.GetUserId())
+	if err != nil {
 		return &pb.GoPayUserCheckPhoneResponse{ErrorMessage: err.Error()}, nil
 	}
 	if strings.TrimSpace(req.GetPhone()) == "" {
@@ -18,7 +19,13 @@ func (s *Server) GoPayUserCheckPhone(ctx context.Context, req *pb.GoPayUserCheck
 	if s.gopayClient == nil {
 		return &pb.GoPayUserCheckPhoneResponse{ErrorMessage: "gopay-app client not configured"}, nil
 	}
-	deviceProxy, err := s.gopayClient.GenerateDeviceProxy(ctx, &pb.GenerateDeviceProxyRequest{})
+	deviceProxy, err := s.gopayClient.GenerateDeviceProxy(ctx, &pb.GenerateDeviceProxyRequest{
+		AccountId:        userID,
+		CountryCode:      "ID",
+		ForceNew:         true,
+		SkipPreflight:    true,
+		EphemeralProfile: true,
+	})
 	if err != nil {
 		return &pb.GoPayUserCheckPhoneResponse{ErrorMessage: fmt.Sprintf("GenerateDeviceProxy: %v", err)}, nil
 	}

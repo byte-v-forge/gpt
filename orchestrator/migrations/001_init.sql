@@ -50,6 +50,8 @@ CREATE INDEX IF NOT EXISTS idx_codex_oauth_phone_leases_last_account_id ON codex
 
 CREATE TABLE IF NOT EXISTS account_browser_fingerprints (
   account_id text PRIMARY KEY,
+  country_code text NOT NULL DEFAULT '',
+  region text NOT NULL DEFAULT '',
   browser_profile_template text NOT NULL DEFAULT '',
   browser_family text NOT NULL DEFAULT '',
   browser_major_version text NOT NULL DEFAULT '',
@@ -65,6 +67,8 @@ CREATE TABLE IF NOT EXISTS account_browser_fingerprints (
   created_at bigint NOT NULL DEFAULT 0,
   updated_at bigint NOT NULL DEFAULT 0
 );
+ALTER TABLE account_browser_fingerprints ADD COLUMN IF NOT EXISTS country_code text NOT NULL DEFAULT '';
+ALTER TABLE account_browser_fingerprints ADD COLUMN IF NOT EXISTS region text NOT NULL DEFAULT '';
 ALTER TABLE account_browser_fingerprints ADD COLUMN IF NOT EXISTS browser_profile_template text NOT NULL DEFAULT '';
 ALTER TABLE account_browser_fingerprints ADD COLUMN IF NOT EXISTS browser_family text NOT NULL DEFAULT '';
 ALTER TABLE account_browser_fingerprints ADD COLUMN IF NOT EXISTS browser_major_version text NOT NULL DEFAULT '';
@@ -95,6 +99,30 @@ DROP INDEX IF EXISTS idx_account_browser_fingerprints_selector;
 CREATE INDEX IF NOT EXISTS idx_account_browser_fingerprints_template ON account_browser_fingerprints(browser_profile_template);
 CREATE INDEX IF NOT EXISTS idx_account_browser_fingerprints_tls_family ON account_browser_fingerprints(tls_profile_family);
 CREATE INDEX IF NOT EXISTS idx_account_browser_fingerprints_tls_variant ON account_browser_fingerprints(tls_fingerprint_variant);
+CREATE INDEX IF NOT EXISTS idx_account_browser_fingerprints_country_code ON account_browser_fingerprints(country_code);
+
+UPDATE account_browser_fingerprints
+SET country_code = CASE timezone
+  WHEN 'Asia/Tokyo' THEN 'JP'
+  WHEN 'Asia/Jakarta' THEN 'ID'
+  WHEN 'Asia/Bangkok' THEN 'TH'
+  WHEN 'Asia/Singapore' THEN 'SG'
+  WHEN 'America/Los_Angeles' THEN 'US'
+  WHEN 'America/Chicago' THEN 'US'
+  WHEN 'America/New_York' THEN 'US'
+  ELSE country_code
+END,
+region = CASE timezone
+  WHEN 'Asia/Tokyo' THEN 'JP-13'
+  WHEN 'Asia/Jakarta' THEN 'ID-JK'
+  WHEN 'Asia/Bangkok' THEN 'TH-10'
+  WHEN 'Asia/Singapore' THEN 'SG-01'
+  WHEN 'America/Los_Angeles' THEN 'US-CA'
+  WHEN 'America/Chicago' THEN 'US-TX'
+  WHEN 'America/New_York' THEN 'US-NY'
+  ELSE region
+END
+WHERE country_code = '' OR region = '';
 
 UPDATE account_browser_fingerprints
 SET locale = 'en-US',
@@ -117,20 +145,11 @@ CREATE TABLE IF NOT EXISTS account_proxy_usages (
   n8n_execution_id text NOT NULL DEFAULT '',
   purpose text NOT NULL DEFAULT '',
   proxy_url_hash text NOT NULL DEFAULT '',
-  proxy_protocol text NOT NULL DEFAULT '',
-  proxy_host text NOT NULL DEFAULT '',
-  proxy_port integer NOT NULL DEFAULT 0,
   session_id_hash text NOT NULL DEFAULT '',
   exit_ip text NOT NULL DEFAULT '',
   country_code text NOT NULL DEFAULT '',
   region text NOT NULL DEFAULT '',
   city text NOT NULL DEFAULT '',
-  network_kind text NOT NULL DEFAULT '',
-  anonymizer_kind text NOT NULL DEFAULT '',
-  fraud_risk_level text NOT NULL DEFAULT '',
-  fraud_risk_score double precision NOT NULL DEFAULT 0,
-  edge_risk_level text NOT NULL DEFAULT '',
-  edge_risk_score double precision NOT NULL DEFAULT 0,
   attempt_index integer NOT NULL DEFAULT 0,
   accepted boolean NOT NULL DEFAULT false,
   error_message text NOT NULL DEFAULT '',
@@ -145,8 +164,9 @@ CREATE INDEX IF NOT EXISTS idx_account_proxy_usages_proxy_url_hash ON account_pr
 CREATE INDEX IF NOT EXISTS idx_account_proxy_usages_session_id_hash ON account_proxy_usages(session_id_hash);
 CREATE INDEX IF NOT EXISTS idx_account_proxy_usages_exit_ip ON account_proxy_usages(exit_ip);
 CREATE INDEX IF NOT EXISTS idx_account_proxy_usages_country_code ON account_proxy_usages(country_code);
-CREATE INDEX IF NOT EXISTS idx_account_proxy_usages_network_kind ON account_proxy_usages(network_kind);
-CREATE INDEX IF NOT EXISTS idx_account_proxy_usages_anonymizer_kind ON account_proxy_usages(anonymizer_kind);
-CREATE INDEX IF NOT EXISTS idx_account_proxy_usages_fraud_risk_level ON account_proxy_usages(fraud_risk_level);
-CREATE INDEX IF NOT EXISTS idx_account_proxy_usages_edge_risk_level ON account_proxy_usages(edge_risk_level);
 CREATE INDEX IF NOT EXISTS idx_account_proxy_usages_accepted ON account_proxy_usages(accepted);
+DROP INDEX IF EXISTS idx_account_proxy_usages_network_kind;
+DROP INDEX IF EXISTS idx_account_proxy_usages_anonymizer_kind;
+DROP INDEX IF EXISTS idx_account_proxy_usages_fraud_risk_level;
+DROP INDEX IF EXISTS idx_account_proxy_usages_edge_risk_level;
+ALTER TABLE account_proxy_usages DROP COLUMN IF EXISTS network_kind, DROP COLUMN IF EXISTS anonymizer_kind, DROP COLUMN IF EXISTS fraud_risk_level, DROP COLUMN IF EXISTS fraud_risk_score, DROP COLUMN IF EXISTS edge_risk_level, DROP COLUMN IF EXISTS edge_risk_score, DROP COLUMN IF EXISTS proxy_protocol, DROP COLUMN IF EXISTS proxy_host, DROP COLUMN IF EXISTS proxy_port;

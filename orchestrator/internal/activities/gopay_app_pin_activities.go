@@ -27,7 +27,7 @@ func (s *Server) startGoPayAppCreatePin(ctx context.Context, input GoPayAppCreat
 	stepName := stepGoPayAppEnsurePINSetup
 	output := GoPayAppOTPOutput{
 		Operation:      goPayAppEnsurePINSetupOperation,
-		TimeoutSeconds: s.paymentOtpTimeout(),
+		TimeoutSeconds: s.paymentOtpTimeout(ctx),
 		StateJson:      normalizeGoPayWorkflowStateJSON(input.GetStateJson()),
 	}
 	otpChannel := normalizeGoPayOTPChannel(input.GetOtpChannel())
@@ -122,7 +122,7 @@ func (s *Server) retryGoPayAppCreatePin(ctx context.Context, input GoPayAppCreat
 	stepName := stepGoPayAppEnsurePINSetup
 	output := GoPayAppOTPOutput{
 		Operation:      goPayAppEnsurePINSetupOperation,
-		TimeoutSeconds: s.paymentOtpTimeout(),
+		TimeoutSeconds: s.paymentOtpTimeout(ctx),
 		StateJson:      normalizeGoPayWorkflowStateJSON(input.GetStateJson()),
 	}
 	output.OtpChannel = normalizeGoPayOTPChannel(input.GetOtpChannel())
@@ -182,7 +182,7 @@ func (s *Server) completeGoPayAppCreatePin(ctx context.Context, input GoPayAppCr
 	stepName := stepGoPayAppEnsurePINSetup
 	output := GoPayAppOTPOutput{
 		Operation:      goPayAppEnsurePINSetupOperation,
-		TimeoutSeconds: s.paymentOtpTimeout(),
+		TimeoutSeconds: s.paymentOtpTimeout(ctx),
 		StateJson:      normalizeGoPayWorkflowStateJSON(input.GetStateJson()),
 	}
 	output.OtpChannel = normalizeGoPayOTPChannel(input.GetOtpChannel())

@@ -2,7 +2,6 @@ package jobqueue
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"time"
 
@@ -12,27 +11,6 @@ import (
 
 	"orchestrator/db"
 )
-
-type OutboxDispatcher struct{}
-
-func NewOutboxDispatcher() *OutboxDispatcher {
-	return &OutboxDispatcher{}
-}
-
-func (d *OutboxDispatcher) EnqueueJobAction(ctx context.Context, tx *gorm.DB, jobID string, action string, accountID string, reason string) error {
-	if tx == nil {
-		return fmt.Errorf("job action outbox transaction is required")
-	}
-	message, ok := ActionRequestedMessage(jobID, action, accountID, reason)
-	if !ok {
-		return nil
-	}
-	record, err := eventoutbox.NewRecord(message)
-	if err != nil {
-		return err
-	}
-	return eventoutbox.InsertRecordGORM(ctx, tx, db.PlatformEventOutboxTable, record, time.Now().Unix())
-}
 
 type OutboxWorker struct {
 	db        *gorm.DB

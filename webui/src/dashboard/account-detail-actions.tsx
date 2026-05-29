@@ -2,13 +2,15 @@ import { Bug, Copy, RefreshCw, Trash2 } from 'lucide-react';
 import { ActionButtonGroup, Button, buttonHint, formatUnix, mask } from '@byte-v-forge/common-ui';
 import type { ActionButtonDescriptor } from '@byte-v-forge/common-ui';
 import { PaymentChannelIcon } from './account-badges';
+import { GPT_ACTIONS, gptActionAvailability, type GptActionCatalog } from './action-catalog';
 import { accountInboxHint } from './account-mail-utils';
 import { canGoPayPayment } from './account-utils';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, AccountMailboxContext, ConcreteGoPayPaymentChannel, LatestOtp } from './types';
 
-export function AccountDetailActions({ account, showSecrets, busy, inboxLoading, mailboxContext, latestOtp, canFetchOTP, onCopy, onFetchInbox, onGoPayPayment }: {
+export function AccountDetailActions({ account, actionCatalog, showSecrets, busy, inboxLoading, mailboxContext, latestOtp, canFetchOTP, onCopy, onFetchInbox, onGoPayPayment }: {
   account: Account;
+  actionCatalog?: GptActionCatalog;
   showSecrets: boolean;
   busy: boolean;
   inboxLoading: boolean;
@@ -19,7 +21,7 @@ export function AccountDetailActions({ account, showSecrets, busy, inboxLoading,
   onFetchInbox: (account: Account) => Promise<void>;
   onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void;
 }) {
-  const channelRow = channelActions(account, busy, onGoPayPayment);
+  const channelRow = channelActions(actionCatalog, account, busy, onGoPayPayment);
   return (
     <div className="detailActionRows">
       {(canFetchOTP || latestOtp) && (
@@ -87,17 +89,20 @@ function hasVisibleAction(actions: ActionButtonDescriptor[]) {
   return actions.some((action) => action.visible !== false);
 }
 
-function channelActions(account: Account, busy: boolean, onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void): ActionButtonDescriptor[] {
-  if (!canGoPayPayment(account)) return [];
-  return GO_PAY_PAYMENT_CHANNELS.map((channel) => ({
-    id: `gopay-payment-${channel}`,
-    label: goPayPaymentActionLabel(channel),
-    hint: channel === 'wa' ? 'Debug：只走 GoPay WA 链接支付' : 'GoPay 激活支付渠道',
-    icon: channel === 'wa' ? <Bug size={14} /> : <span className="activationPaymentIcon"><PaymentChannelIcon channel={channel} /></span>,
-    className: channel === 'wa' ? 'debugAction' : 'activationAction',
-    disabled: busy,
-    onClick: () => onGoPayPayment(account, channel),
-  }));
+function channelActions(catalog: GptActionCatalog | undefined, account: Account, busy: boolean, onGoPayPayment: (account: Account, channel: ConcreteGoPayPaymentChannel) => void): ActionButtonDescriptor[] {
+  return GO_PAY_PAYMENT_CHANNELS.map((channel) => {
+    const availability = gptActionAvailability(catalog, channel === 'wa' ? GPT_ACTIONS.goPayWAPayment : GPT_ACTIONS.goPayPayment, account, 'account_detail');
+    return {
+      id: `gopay-payment-${channel}`,
+      visible: availability.visible,
+      label: goPayPaymentActionLabel(channel),
+      hint: availability.reason || (canGoPayPayment(account) ? (channel === 'wa' ? 'Debug：只走 GoPay WA 链接支付' : 'GoPay 激活支付渠道') : '需要已注册且未激活账号'),
+      icon: channel === 'wa' ? <Bug size={14} /> : <span className="activationPaymentIcon"><PaymentChannelIcon channel={channel} /></span>,
+      className: channel === 'wa' ? 'debugAction' : 'activationAction',
+      disabled: busy || !availability.enabled || !canGoPayPayment(account),
+      onClick: () => onGoPayPayment(account, channel),
+    };
+  });
 }
 
 function dangerActions(account: Account, busy: boolean, onDelete: (account: Account) => Promise<void>): ActionButtonDescriptor[] {

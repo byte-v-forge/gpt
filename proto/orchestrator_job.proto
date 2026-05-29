@@ -12,6 +12,51 @@ service JobService {
   rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
 }
 
+enum GPTActionEngine {
+  reserved 1;
+  reserved "GPT_ACTION_ENGINE_INTERNAL";
+  GPT_ACTION_ENGINE_UNSPECIFIED = 0;
+  GPT_ACTION_ENGINE_N8N = 2;
+}
+
+message GPTActionButton {
+  string id = 1;
+  string label = 2;
+  string placement = 3;
+  string intent = 4;
+  string start_path = 5;
+}
+
+message GPTWorkflowDefinition {
+  string key = 1;
+  string start_path = 2;
+  string n8n_action_scope = 3;
+  string n8n_webhook_path = 4;
+  string action_path_prefix = 5;
+}
+
+message GPTActionDefinition {
+  string action_id = 1;
+  string display_name = 2;
+  string owner = 3;
+  GPTActionEngine engine = 4;
+  string request_proto = 5;
+  string response_proto = 6;
+  repeated string required_account_statuses = 7;
+  repeated string required_fields = 8;
+  repeated string capabilities = 9;
+  string visibility = 10;
+  GPTWorkflowDefinition workflow = 11;
+  repeated GPTActionButton ui_buttons = 12;
+  reserved 13;
+  reserved "worker_runnable";
+  repeated string blocked_account_statuses = 14;
+}
+
+message GPTActionCatalogResponse {
+  repeated GPTActionDefinition actions = 1;
+}
+
 message CreateJobInput {
   string job_id = 1;
   string account_id = 2;
@@ -143,30 +188,4 @@ message CancelJobResponse {
   string job_id = 2;
   JobSnapshot snapshot = 3;
   string error_message = 4;
-}
-
-message GPTJobActionRequest {
-  string job_id = 1;
-  string action = 2;
-  string account_id = 3;
-  string run_id = 4;
-  string correlation_id = 5;
-  string idempotency_key = 6;
-  map<string, string> params = 7;
-}
-
-message GPTJobActionRunRequest {
-  string job_id = 1;
-  string action = 2;
-  string account_id = 3;
-  string reason = 4;
-}
-
-message GPTJobActionResponse {
-  string job_id = 1;
-  string action = 2;
-  bool success = 3;
-  string status = 4;
-  string error_message = 5;
-  JobSnapshot snapshot = 6;
 }

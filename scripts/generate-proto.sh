@@ -29,4 +29,3 @@ orchestrator_protos=("${ROOT}"/proto/*.proto)
 
 gen_go gpt-account "$(root_proto gpt_account.proto)"
 gen_go orchestrator "${orchestrator_protos[@]}"
-gen_go gopay "$(root_proto gopay_app.proto)" "$(root_proto payment.proto)"

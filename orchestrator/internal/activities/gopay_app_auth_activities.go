@@ -13,7 +13,7 @@ func (s *Server) startGoPayAppAuth(ctx context.Context, input GoPayAppOTPStartIn
 	stepName := gopayAppOTPStepName(input)
 	output := GoPayAppOTPOutput{
 		Operation:      goPayAppOTPOperationAuth,
-		TimeoutSeconds: s.paymentOtpTimeout(),
+		TimeoutSeconds: s.paymentOtpTimeout(ctx),
 		StateJson:      normalizeGoPayWorkflowStateJSON(input.GetStateJson()),
 	}
 	otpChannel := normalizeGoPayOTPChannel(input.GetOtpChannel())
@@ -133,7 +133,7 @@ func (s *Server) completeGoPayAppAuth(ctx context.Context, input GoPayAppOTPComp
 	stepName := stepGoPayAppLogin
 	output := GoPayAppOTPOutput{
 		Operation:      goPayAppOTPOperationAuth,
-		TimeoutSeconds: s.paymentOtpTimeout(),
+		TimeoutSeconds: s.paymentOtpTimeout(ctx),
 		StateJson:      normalizeGoPayWorkflowStateJSON(input.GetStateJson()),
 	}
 	output.OtpChannel = normalizeGoPayOTPChannel(input.GetOtpChannel())

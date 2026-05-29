@@ -128,10 +128,12 @@ message GoPayPaymentRebindRequest {
 }
 
 message GoPayAddBalance {
+  reserved 3;
+  reserved "rekberinaja";
+
   oneof method {
     GoPayEnvelopeAddBalance envelope = 1;
     GoPayManualTransferAddBalance manual_transfer = 2;
-    GoPayRekberinajaAddBalance rekberinaja = 3;
   }
 }
 
@@ -145,27 +147,6 @@ message GoPayManualTransferAddBalance {
   int64 amount = 4;
   string currency = 5;
 }
-
-message GoPayRekberinajaAddBalance {
-  string endpoint_url = 1;
-  string bearer_token = 2;
-  string device_id = 3;
-  string store = 4;
-  string product_id = 5;
-  string service_id = 6;
-  string payment_method = 7;
-  string invoice_email = 8;
-  string promo_code = 9;
-  bool use_poin = 10;
-  string user_agent = 11;
-  string origin = 12;
-  string referer = 13;
-  string refresh_token = 14;
-  int64 fee_total = 15;
-  int32 poll_timeout_seconds = 16;
-  int32 poll_interval_seconds = 17;
-}
-
 
 message ConfirmManualAddBalanceRequest {
   string job_id = 1;
@@ -427,6 +408,9 @@ message GoPayAppChangePhoneStartOutput {
 message GoPayAppChangePhoneGetNumberInput {
   string job_id = 1;
   int32 failure_count = 2;
+  string account_id = 3;
+  string user_id = 4;
+  string country_code = 5;
 }
 
 message GoPayAppChangePhoneGetNumberOutput {
@@ -454,6 +438,8 @@ message GoPayAppAcquireSignupPhoneOutput {
 
 message GoPayAppGenerateDeviceProxyInput {
   string job_id = 1;
+  string account_id = 2;
+  string country_code = 3;
 }
 
 message GoPayAppGenerateDeviceProxyOutput {

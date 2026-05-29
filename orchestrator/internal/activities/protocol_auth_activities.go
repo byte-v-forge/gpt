@@ -22,8 +22,8 @@ const (
 )
 
 func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input ProtocolAuthStartInput) (ProtocolAuthStartOutput, error) {
-	cfg := codexOAuthConfigWithInputProxy(s.codexOAuthConfig, input)
-	output := ProtocolAuthStartOutput{AccountId: input.GetAccountId(), OtpTimeoutSeconds: s.registrationOtpTimeout()}
+	cfg := codexOAuthConfigWithInputProxy(s.codexOAuthSettings(ctx), input)
+	output := ProtocolAuthStartOutput{AccountId: input.GetAccountId(), OtpTimeoutSeconds: s.registrationOtpTimeout(ctx)}
 	account, err := s.protocolAuthAccount(ctx, input.GetAccountId(), input.GetMode())
 	if err != nil {
 		return output, err
@@ -99,7 +99,7 @@ func (s *Server) ProtocolAuthWaitActivity(ctx context.Context, input ProtocolAut
 		AccountId:          input.GetAccountId(),
 		FlowId:             input.GetFlowId(),
 		Email:              input.GetEmail(),
-		OtpTimeoutSeconds:  s.registrationOtpTimeout(),
+		OtpTimeoutSeconds:  s.registrationOtpTimeout(ctx),
 		OtpIssuedAfterUnix: time.Now().Add(-time.Second).Unix(),
 	}
 	if strings.TrimSpace(input.GetFlowId()) == "" {
@@ -503,12 +503,12 @@ func protocolAuthSession(ctx context.Context, client *GptClient, state *codexOAu
 	if err := codexOAuthProtocolRequireOK(resp, "chatgpt auth session"); err != nil {
 		return RegisterActivityOutput{Data: protoData(data)}, err
 	}
-	sessionToken := client.cookieValue("__Secure-next-auth.session-token", "chatgpt.com")
+	sessionToken := client.sessionTokenValue("chatgpt.com")
 	accessToken := strings.TrimSpace(stringAny(codexOAuthProtocolResponseJSON(resp)["accessToken"]))
 	data["session_token_present"] = sessionToken != ""
 	data["access_token_present"] = accessToken != ""
-	if sessionToken == "" && accessToken == "" {
-		return RegisterActivityOutput{Data: protoData(data)}, fmt.Errorf("protocol auth session missing credentials")
+	if accessToken == "" {
+		return RegisterActivityOutput{Data: protoData(data)}, fmt.Errorf("protocol auth session missing access token")
 	}
 	return RegisterActivityOutput{
 		SessionToken: sessionToken,
@@ -523,7 +523,7 @@ func (s *Server) protocolAuthStateClient(ctx context.Context, jobID, flowID, acc
 	if err != nil {
 		return nil, nil, err
 	}
-	cfg := s.codexOAuthConfig.withDefaults()
+	cfg := s.codexOAuthSettings(ctx)
 	if proxyURL = strings.TrimSpace(proxyURL); proxyURL != "" {
 		cfg.ProtocolProxyURL = proxyURL
 	}

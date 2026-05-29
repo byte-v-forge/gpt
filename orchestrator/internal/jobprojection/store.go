@@ -3,55 +3,29 @@ package jobprojection
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"log"
 	"strings"
 	"time"
 
-	"github.com/byte-v-forge/common-lib/dbclaim"
 	"github.com/byte-v-forge/common-lib/gormx"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gorm.io/gorm"
 
 	"orchestrator/db"
-	"orchestrator/internal/contracts"
+	"orchestrator/internal/actionregistry"
 	"orchestrator/internal/jobstatus"
 	"orchestrator/pb"
 )
 
 type Store struct {
-	db               *gorm.DB
-	publisher        EventPublisher
-	actionDispatcher ActionDispatcher
+	db             *gorm.DB
+	publisher      EventPublisher
+	actionRegistry *actionregistry.Registry
 }
 
 type EventPublisher interface {
 	PublishSnapshot(ctx context.Context, eventType string, snapshot *pb.JobSnapshot) (*pb.JobEvent, error)
-}
-
-type ActionDispatcher interface {
-	EnqueueJobAction(ctx context.Context, tx *gorm.DB, jobID string, action string, accountID string, reason string) error
-}
-
-const (
-	defaultClaimLeaseSeconds int32 = 300
-	maxClaimLeaseSeconds     int32 = 1800
-	actionRunLeaseSeconds    int32 = 2 * 60 * 60
-)
-
-var (
-	ErrJobNotClaimed     = errors.New("job is not claimed")
-	ErrJobAlreadyRunning = errors.New("job is already running")
-	ErrJobStaleClaim     = errors.New("job claim is stale")
-	ErrJobUnsupported    = errors.New("job action is not supported")
-)
-
-type Claim struct {
-	Job          *db.Job
-	Params       map[string]string
-	AttemptCount int32
 }
 
 type StepFailure struct {
@@ -74,7 +48,7 @@ type ListFilter struct {
 }
 
 func NewStore(db *gorm.DB) *Store {
-	return &Store{db: db}
+	return &Store{db: db, actionRegistry: actionregistry.Default()}
 }
 
 func (s *Store) WithPublisher(publisher EventPublisher) *Store {
@@ -82,8 +56,10 @@ func (s *Store) WithPublisher(publisher EventPublisher) *Store {
 	return s
 }
 
-func (s *Store) WithActionDispatcher(dispatcher ActionDispatcher) *Store {
-	s.actionDispatcher = dispatcher
+func (s *Store) WithActionRegistry(registry *actionregistry.Registry) *Store {
+	if registry != nil {
+		s.actionRegistry = registry
+	}
 	return s
 }
 
@@ -92,14 +68,10 @@ func (s *Store) Create(ctx context.Context, accountID, action string, params map
 }
 
 func (s *Store) CreateWithID(ctx context.Context, jobID, accountID, action string, params map[string]string) (*db.Job, error) {
-	return s.createWithID(ctx, jobID, accountID, action, params, true)
+	return s.createWithID(ctx, jobID, accountID, action, params)
 }
 
-func (s *Store) CreateWithIDWithoutDispatch(ctx context.Context, jobID, accountID, action string, params map[string]string) (*db.Job, error) {
-	return s.createWithID(ctx, jobID, accountID, action, params, false)
-}
-
-func (s *Store) createWithID(ctx context.Context, jobID, accountID, action string, params map[string]string, dispatch bool) (*db.Job, error) {
+func (s *Store) createWithID(ctx context.Context, jobID, accountID, action string, params map[string]string) (*db.Job, error) {
 	job := &db.Job{
 		ID:        jobID,
 		AccountID: accountID,
@@ -117,10 +89,7 @@ func (s *Store) createWithID(ctx context.Context, jobID, accountID, action strin
 		if err := tx.First(job, "id = ?", jobID).Error; err != nil {
 			return err
 		}
-		if !dispatch || s.actionDispatcher == nil {
-			return nil
-		}
-		return s.actionDispatcher.EnqueueJobAction(ctx, tx, job.ID, job.Action, job.AccountID, "job_created")
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -199,165 +168,6 @@ func (s *Store) Params(ctx context.Context, jobID string) (map[string]string, er
 		params[rows[i].Key] = rows[i].Value
 	}
 	return params, nil
-}
-
-func (s *Store) ClaimJob(ctx context.Context, jobID string, workerID string, leaseSeconds int32, actions []string, staleSteps []string) (*Claim, bool, error) {
-	jobID = strings.TrimSpace(jobID)
-	if jobID == "" {
-		return nil, false, fmt.Errorf("job_id is required")
-	}
-	workerID = strings.TrimSpace(workerID)
-	if workerID == "" {
-		workerID = "gpt-job-action-worker"
-	}
-	leaseSeconds = dbclaim.NormalizeLeaseSeconds(leaseSeconds, defaultClaimLeaseSeconds, maxClaimLeaseSeconds)
-	actions = normalizeActions(actions)
-	if len(actions) == 0 {
-		return nil, false, ErrJobUnsupported
-	}
-	staleSteps = normalizeSteps(staleSteps)
-	if len(staleSteps) == 0 {
-		staleSteps = []string{"claimed"}
-	}
-	staleStepSet := map[string]struct{}{}
-	for _, step := range staleSteps {
-		staleStepSet[step] = struct{}{}
-	}
-	now := time.Now().Unix()
-	claimUntil := dbclaim.Until(now, leaseSeconds)
-
-	var job db.Job
-	terminal := false
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(dbclaim.ForUpdate()).First(&job, "id = ?", jobID).Error; err != nil {
-			return err
-		}
-		if !actionAllowed(job.Action, actions) {
-			return ErrJobUnsupported
-		}
-		switch strings.TrimSpace(job.Status) {
-		case jobstatus.Succeeded, jobstatus.Canceled, jobstatus.FailedFinal, jobstatus.FailedRecoverable, jobstatus.FailedRetryable:
-			terminal = true
-			return nil
-		case jobstatus.Created:
-		case jobstatus.Running:
-			if job.ClaimUntil > now {
-				return ErrJobAlreadyRunning
-			}
-			if _, ok := staleStepSet[strings.TrimSpace(job.LastStep)]; !ok {
-				return ErrJobAlreadyRunning
-			}
-		default:
-			return ErrJobNotClaimed
-		}
-		if err := tx.Model(&db.Job{}).Where("id = ?", job.ID).Updates(
-			dbclaim.ClaimUpdates(jobstatus.Running, "claimed", "", workerID, claimUntil),
-		).Error; err != nil {
-			return err
-		}
-		return tx.First(&job, "id = ?", job.ID).Error
-	})
-	if err != nil {
-		return nil, false, err
-	}
-	params, err := s.Params(ctx, job.ID)
-	if err != nil {
-		return nil, false, err
-	}
-	if !terminal {
-		s.publish(ctx, "job_claimed", job.ID)
-	}
-	return &Claim{Job: &job, Params: params, AttemptCount: job.AttemptCount}, terminal, nil
-}
-
-func (s *Store) StartClaimedRun(ctx context.Context, jobID string, idempotencyKey string) (*db.Job, bool, error) {
-	jobID = strings.TrimSpace(jobID)
-	if jobID == "" {
-		return nil, false, fmt.Errorf("job_id is required")
-	}
-	now := time.Now().Unix()
-	runLeaseUntil := dbclaim.Until(now, actionRunLeaseSeconds)
-	var job db.Job
-	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Clauses(dbclaim.ForUpdate()).First(&job, "id = ?", jobID).Error; err != nil {
-			return err
-		}
-		switch strings.TrimSpace(job.Status) {
-		case jobstatus.Succeeded, jobstatus.Canceled, jobstatus.FailedFinal, jobstatus.FailedRecoverable, jobstatus.FailedRetryable:
-			return nil
-		case jobstatus.Running:
-			expected := IdempotencyKey(job.ID, job.AttemptCount)
-			if strings.TrimSpace(idempotencyKey) != expected {
-				return ErrJobStaleClaim
-			}
-			if strings.TrimSpace(job.LastStep) != "claimed" {
-				return ErrJobAlreadyRunning
-			}
-		default:
-			return ErrJobNotClaimed
-		}
-		if err := tx.Model(&db.Job{}).Where("id = ?", job.ID).Updates(dbclaim.ExtendUpdates(runLeaseUntil)).Error; err != nil {
-			return err
-		}
-		return tx.First(&job, "id = ?", job.ID).Error
-	})
-	if err != nil {
-		return nil, false, err
-	}
-	terminal := job.Status == jobstatus.Succeeded ||
-		job.Status == jobstatus.Canceled ||
-		job.Status == jobstatus.FailedFinal ||
-		job.Status == jobstatus.FailedRecoverable ||
-		job.Status == jobstatus.FailedRetryable
-	return &job, terminal, nil
-}
-
-func IdempotencyKey(jobID string, attemptCount int32) string {
-	return strings.TrimSpace(jobID) + "-" + fmt.Sprintf("%d", attemptCount)
-}
-
-func normalizeActions(values []string) []string {
-	out := make([]string, 0, len(values))
-	seen := map[string]struct{}{}
-	for _, value := range values {
-		value = strings.ToUpper(strings.TrimSpace(value))
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
-
-func normalizeSteps(values []string) []string {
-	out := make([]string, 0, len(values))
-	seen := map[string]struct{}{}
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
-
-func actionAllowed(action string, actions []string) bool {
-	action = strings.ToUpper(strings.TrimSpace(action))
-	for _, candidate := range actions {
-		if action == candidate {
-			return true
-		}
-	}
-	return false
 }
 
 func (s *Store) Update(ctx context.Context, jobID, statusValue, errorMessage string, result any) {
@@ -481,7 +291,7 @@ func (s *Store) GetSnapshot(ctx context.Context, jobID string) (*pb.JobSnapshot,
 	if err != nil {
 		return nil, err
 	}
-	return BuildSnapshot(job, steps), nil
+	return s.buildSnapshot(job, steps), nil
 }
 
 func (s *Store) ListSnapshots(ctx context.Context, filter ListFilter) ([]*pb.JobSnapshot, *pb.JobListCursor, bool, error) {
@@ -514,7 +324,7 @@ func (s *Store) ListSnapshots(ctx context.Context, filter ListFilter) ([]*pb.Job
 	snapshots := make([]*pb.JobSnapshot, 0, len(jobs))
 	for i := range jobs {
 		job := jobs[i]
-		snapshots = append(snapshots, BuildSnapshot(&job, stepsByJob[job.ID]))
+		snapshots = append(snapshots, s.buildSnapshot(&job, stepsByJob[job.ID]))
 	}
 	return snapshots, next, hasMore, nil
 }
@@ -627,6 +437,7 @@ func (s *Store) MarkStepFailed(ctx context.Context, input StepFailure) error {
 		Recoverable:  input.Recoverable,
 		Retryable:    input.Retryable,
 		ErrorMessage: input.ErrorMessage,
+		StartedAt:    now,
 		CompletedAt:  now,
 	}
 	updates := map[string]any{
@@ -710,11 +521,11 @@ func MarshalStepResult(jobID, stepName string, result any) string {
 	return string(b)
 }
 
-func BuildSnapshot(job *db.Job, steps []db.JobStep) *pb.JobSnapshot {
+func (s *Store) buildSnapshot(job *db.Job, steps []db.JobStep) *pb.JobSnapshot {
 	if job == nil {
 		return nil
 	}
-	progress := ProgressFromJob(job)
+	progress := progressFromJob(s.actionRegistry, job)
 	return &pb.JobSnapshot{
 		Job:      ToProto(job, steps),
 		Progress: progress,
@@ -746,11 +557,11 @@ func ApplyProgress(snapshot *pb.JobSnapshot, progress *pb.WorkflowProgress) {
 	}
 }
 
-func ProgressFromJob(job *db.Job) *pb.WorkflowProgress {
+func progressFromJob(registry *actionregistry.Registry, job *db.Job) *pb.WorkflowProgress {
 	if job == nil {
 		return nil
 	}
-	workflowID, _ := contracts.WorkflowID(job.Action, job.ID)
+	workflowID, _ := actionregistry.RegisterDefault(registry).WorkflowID(job.Action, job.ID)
 	stepName := strings.TrimSpace(job.LastStep)
 	if stepName == "" {
 		stepName = "created"

@@ -3,6 +3,7 @@ import type { FetchAccountMailboxResponse as ProtoFetchAccountMailboxResponse } 
 import type { InboxMessage, InboxResponse, InboxResult, LatestOtp, Mailbox, MailboxDomain, MailboxProviderCapability } from '@byte-v-forge/common-ui';
 import type { Job, JobSnapshot, WorkflowProgress } from '../proto/orchestrator_job';
 import type { GoPayUserStatusResponse } from '../proto/orchestrator_gopay_app';
+import type { ProxyEdgeAccessCheck, ProxyIPFraudCheck } from '@byte-v-forge/common-ui/proto/byte/v/forge/contracts/proxyruntime/v1/proxy_runtime';
 
 export type FetchAccountMailboxResponse = Omit<ProtoFetchAccountMailboxResponse, 'inbox'> & { inbox?: InboxResponse };
 
@@ -25,12 +26,14 @@ export type AccountMailboxContext = {
 export type GoPayOTPChannel = '' | 'sms' | 'wa';
 export type GoPayPaymentChannel = GoPayOTPChannel | 'app_wa';
 export type ConcreteGoPayPaymentChannel = Exclude<GoPayPaymentChannel, ''>;
-export type GoPayAddBalanceMethod = '' | 'manual_transfer' | 'envelope' | 'rekberinaja';
+export type GoPayAddBalanceMethod = '' | 'manual_transfer' | 'envelope';
 export type ConcreteGoPayAddBalanceMethod = Exclude<GoPayAddBalanceMethod, ''>;
 export type DisplayLabelMap = Record<string, string>;
 
 export type AccountBrowserFingerprint = {
   account_id: string;
+  country_code: string;
+  region: string;
   browser_profile_template: string;
   browser_family: string;
   browser_major_version: string;
@@ -48,15 +51,29 @@ export type AccountBrowserFingerprint = {
 };
 
 
+export type AccountProxyChainHop = {
+  hop_id: string;
+  order: number;
+  role: string;
+  source_kind: string;
+  source_id: string;
+  source_display_name: string;
+  node_id: string;
+  node_display_name: string;
+  provider_id: string;
+  gateway_id: string;
+  gateway_display_name: string;
+  observed_ip: string;
+  country_code: string;
+  region: string;
+  city: string;
+  status: string;
+  delay_ms: number;
+};
+
 export type AccountProxyChain = {
   chain_id: string;
-  line_source_id: string;
-  line_node_id: string;
-  line_display_name: string;
-  dynamic_provider_account_id: string;
-  dynamic_provider_id: string;
-  dynamic_gateway_id: string;
-  dynamic_gateway_name: string;
+  hops: AccountProxyChainHop[];
 };
 
 export type AccountProxyUsage = {
@@ -65,20 +82,14 @@ export type AccountProxyUsage = {
   n8n_execution_id: string;
   purpose: string;
   proxy_url_hash: string;
-  proxy_protocol: string;
-  proxy_host: string;
-  proxy_port: number;
   session_id_hash: string;
   exit_ip: string;
   country_code: string;
   region: string;
   city: string;
-  network_kind: string;
-  anonymizer_kind: string;
-  fraud_risk_level: string;
-  fraud_risk_score: number;
-  edge_risk_level: string;
-  edge_risk_score: number;
+  ip_fraud_check?: Partial<ProxyIPFraudCheck>;
+  edge_access_check?: Partial<ProxyEdgeAccessCheck>;
+  target_reachable: boolean;
   attempt_index: number;
   accepted: boolean;
   error_message: string;

@@ -12,7 +12,7 @@ import (
 func (s *Server) BrowserAuthResendOTPActivity(ctx context.Context, input BrowserAuthResendOTPInput) (BrowserAuthResendOTPOutput, error) {
 	output := BrowserAuthResendOTPOutput{
 		BrowserSessionId:  input.GetBrowserSessionId(),
-		OtpTimeoutSeconds: s.registrationOtpTimeout(),
+		OtpTimeoutSeconds: s.registrationOtpTimeout(ctx),
 	}
 	stepName, err := browserAuthOTPRequestStepName(input.GetMode())
 	if err != nil {
@@ -70,7 +70,7 @@ func (s *Server) BrowserAuthResendOTPActivity(ctx context.Context, input Browser
 	output.Success = true
 	output.OtpIssuedAfterUnix = resp.GetOtpIssuedAfterUnix()
 	output.OtpRequestStartedAtUnixMs = resp.GetOtpRequestStartedAtUnixMs()
-	output.OtpTimeoutSeconds = s.registrationOtpTimeout()
+	output.OtpTimeoutSeconds = s.registrationOtpTimeout(ctx)
 	data["otp_issued_after_unix"] = output.GetOtpIssuedAfterUnix()
 	data["otp_request_started_at_unix_ms"] = output.GetOtpRequestStartedAtUnixMs()
 	output.Data = protoData(data)

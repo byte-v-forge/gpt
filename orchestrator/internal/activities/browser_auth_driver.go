@@ -124,7 +124,7 @@ func (s *Server) browserAuthComplete(ctx context.Context, mode, jobID string, ac
 	flow := newBrowserAuthSessionFlow(ctx, mode, jobID, account, flowID)
 	flow.setTaskScope("complete")
 	defer flow.stopSession(s.browserAutomationClient)
-	if err := flow.completeFromCheckpoint(s.browserAutomationClient, s.browserAuthConfig, otp, otpKind); err != nil {
+	if err := flow.completeFromCheckpoint(s.browserAutomationClient, s.browserAuthSettings(ctx), otp, otpKind); err != nil {
 		flow.fail(err)
 		return flow.registerResponse(), err
 	}
@@ -148,7 +148,7 @@ func (s *Server) browserAuthResendOTP(ctx context.Context, mode, jobID string, a
 	}
 	flow := newBrowserAuthSessionFlow(ctx, mode, jobID, account, flowID)
 	flow.setTaskScope(fmt.Sprintf("resend-%d", time.Now().UnixMilli()))
-	return flow.resendEmailOTP(s.browserAutomationClient, s.browserAuthConfig)
+	return flow.resendEmailOTP(s.browserAutomationClient, s.browserAuthSettings(ctx))
 }
 
 func (s *Server) browserAuthCancel(ctx context.Context, mode, flowID string) (*pb.CancelRegisterResponse, error) {

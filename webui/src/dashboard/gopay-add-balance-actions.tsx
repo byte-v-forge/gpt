@@ -5,7 +5,7 @@ import { Button, Card, buttonHint } from '@byte-v-forge/common-ui';
 import { addBalanceMethodLabel, canConfirmManualAddBalance, canSelectGoPayAddBalance, manualAddBalanceView } from './gopay-utils';
 import type { ConcreteGoPayAddBalanceMethod, Job, WorkflowProgress } from './types';
 
-const ADD_BALANCE_METHODS: ConcreteGoPayAddBalanceMethod[] = ['manual_transfer', 'envelope', 'rekberinaja'];
+const ADD_BALANCE_METHODS: ConcreteGoPayAddBalanceMethod[] = ['manual_transfer', 'envelope'];
 
 export function hasGoPayAddBalanceActions(job?: Job, progress?: WorkflowProgress | null) {
   if (!job) return false;

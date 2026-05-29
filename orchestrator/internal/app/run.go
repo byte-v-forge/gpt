@@ -31,12 +31,14 @@ func Run() {
 		log.Fatalf("Failed to initialize GPT service dependencies: %v", err)
 	}
 	defer deps.Close()
-	otpWebhookServer, err := startGoPayOTPWebhookServer(cfg.GoPayOTPWebhookListenAddr, deps.otpRelay)
-	if err != nil {
-		log.Fatalf("Failed to start GoPay OTP webhook: %v", err)
-	}
-	if otpWebhookServer != nil {
-		defer otpWebhookServer.Close()
+	if deps.goPayActionsEnabled() {
+		otpWebhookServer, err := startGoPayOTPWebhookServer(cfg.GoPayOTPWebhookListenAddr, deps.otpRelay)
+		if err != nil {
+			log.Fatalf("Failed to start GoPay OTP webhook: %v", err)
+		}
+		if otpWebhookServer != nil {
+			defer otpWebhookServer.Close()
+		}
 	}
 
 	lis, err := net.Listen("tcp", cfg.ListenAddr)
@@ -52,37 +54,45 @@ func Run() {
 
 	activityServer := newActivityServer(cfg, deps)
 	apiServer := api.NewServer(api.Config{
-		DB:                                   deps.db,
-		JobStore:                             deps.jobStore,
-		JobEvents:                            deps.jobEvents,
-		RuntimeSecrets:                       deps.secrets,
-		Fingerprints:                         deps.fingerprints,
-		GPTSettings:                          deps.gptSettings,
-		Activities:                           activityServer,
-		AccountClient:                        deps.accountClient,
-		PaymentClient:                        deps.paymentClient,
-		MailboxPollRequester:                 deps.mailboxPollRequester,
-		OTPProjection:                        deps.otpProjection,
-		RegisterProtocolOTPWaits:             deps.registerProtocolOTPWaits,
-		GoPayClient:                          deps.gopayClient,
-		DefaultGoPayAddBalance:               defaultGoPayAddBalance(cfg),
-		DefaultGoPayAddBalances:              defaultGoPayAddBalances(cfg),
-		GoPayAddBalanceConfirmTimeoutSeconds: cfg.GoPayAddBalanceConfirmTimeoutSeconds,
+		DB:                   deps.db,
+		JobStore:             deps.jobStore,
+		JobEvents:            deps.jobEvents,
+		RuntimeSecrets:       deps.secrets,
+		Fingerprints:         deps.fingerprints,
+		GPTSettings:          deps.gptSettings,
+		Activities:           activityServer,
+		AccountClient:        deps.accountClient,
+		PaymentClient:        deps.paymentClient,
+		MailboxPollRequester: deps.mailboxPollRequester,
+		OTPProjection:        deps.otpProjection,
+		EmailOTPWaits:        deps.emailOTPWaits,
+		GoPayClient:          deps.gopayClient,
+		ActionRegistry:       deps.actionRegistry,
 	})
 
 	dashboardServer, err := dashboard.Start(rootCtx, dashboard.Config{
-		ListenAddr:                 cfg.DashboardHTTPAddr,
-		N8NWebhookBaseURL:          cfg.N8NWebhookBaseURL,
-		N8NProbeActions:            apiServer,
-		N8NRegisterProtocolActions: apiServer,
-		AccountClient:              deps.accountClient,
-		PaymentClient:              deps.paymentClient,
-		RuntimeSecrets:             deps.secrets,
-		Fingerprints:               deps.fingerprints,
-		DB:                         deps.db,
-		Settings:                   deps.gptSettings,
-		WorkflowConn:               dashboardWorkflowConn,
-		HotStream:                  deps.hotStream,
+		ListenAddr:                     cfg.DashboardHTTPAddr,
+		N8NWebhookBaseURL:              cfg.N8NWebhookBaseURL,
+		N8NProbeActions:                apiServer,
+		N8NCodexOAuthActions:           apiServer,
+		N8NCodexOAuthProtocolActions:   apiServer,
+		N8NCodexOAuthAddPhoneActions:   apiServer,
+		N8NCodexOAuthBatchActions:      apiServer,
+		N8NRegisterActions:             apiServer,
+		N8NRegisterProtocolActions:     apiServer,
+		N8NLoginSessionActions:         apiServer,
+		N8NLoginSessionProtocolActions: apiServer,
+		N8NActionInvoker:               apiServer,
+		N8NWorkflowStarter:             apiServer,
+		AccountClient:                  deps.accountClient,
+		PaymentClient:                  deps.paymentClient,
+		RuntimeSecrets:                 deps.secrets,
+		Fingerprints:                   deps.fingerprints,
+		DB:                             deps.db,
+		Settings:                       deps.gptSettings,
+		WorkflowConn:                   dashboardWorkflowConn,
+		HotStream:                      deps.hotStream,
+		ActionRegistry:                 deps.actionRegistry,
 	})
 	if err != nil {
 		log.Fatalf("failed to start GPT dashboard BFF: %v", err)
@@ -102,8 +112,7 @@ func Run() {
 	group.Go(func() error {
 		return startOTPProjectionConsumers(groupCtx, deps.platformBus, cfg, deps.otpProjection, deps.mailboxState)
 	})
-	group.Go(func() error { return runRegisterProtocolOTPResumeWorker(groupCtx, cfg, deps, apiServer) })
-	group.Go(func() error { return runJobActionWorker(groupCtx, cfg, deps, apiServer) })
+	group.Go(func() error { return runEmailOTPResumeWorker(groupCtx, cfg, deps, apiServer) })
 	go func() {
 		<-groupCtx.Done()
 		grpcServer.GracefulStop()
@@ -122,26 +131,18 @@ func Run() {
 	}
 }
 
-func runJobActionWorker(ctx context.Context, cfg orchestratorConfig, deps *orchestratorDependencies, apiServer *api.Server) error {
-	consumer, err := deps.platformBus.PullWorkerConsumer(cfg.EventStreamName, eventcatalog.GPTJobActionRequested.Subject, eventcatalog.GPTJobActionRequested.ConsumerDurable, 1, 2*time.Hour)
-	if err != nil {
-		return err
-	}
-	return api.RunJobActionWorker(ctx, consumer, apiServer)
-}
-
-func runRegisterProtocolOTPResumeWorker(ctx context.Context, cfg orchestratorConfig, deps *orchestratorDependencies, apiServer *api.Server) error {
+func runEmailOTPResumeWorker(ctx context.Context, cfg orchestratorConfig, deps *orchestratorDependencies, apiServer *api.Server) error {
 	consumer, err := deps.platformBus.PullWorkerConsumer(
 		cfg.EventStreamName,
 		eventcatalog.MailboxEmailReceived.Subject,
-		api.N8NRegisterProtocolOTPResumeConsumerDurable,
+		api.N8NEmailOTPResumeConsumerDurable,
 		10,
 		30*time.Second,
 	)
 	if err != nil {
 		return err
 	}
-	return api.RunN8NRegisterProtocolOTPResumeWorker(ctx, consumer, apiServer)
+	return api.StartN8NEmailOTPResumeWorker(ctx, consumer, apiServer)
 }
 
 func dashboardSelfTarget(listenAddr string) string {

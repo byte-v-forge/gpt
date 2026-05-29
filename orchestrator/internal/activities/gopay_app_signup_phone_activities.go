@@ -23,7 +23,7 @@ func (s *Server) GoPayAppAcquireSignupPhoneActivity(ctx context.Context, input G
 		if failures < 0 {
 			failures = 0
 		}
-		otpWaitSeconds := s.paymentOtpTimeout()
+		otpWaitSeconds := s.paymentOtpTimeout(ctx)
 		data["failure_count"] = failures
 		data["otp_timeout_seconds"] = otpWaitSeconds
 
@@ -74,7 +74,11 @@ func (s *Server) GoPayAppGenerateDeviceProxyActivity(ctx context.Context, input 
 			data["error_message"] = err.Error()
 			return data, err
 		}
-		resp, err := s.gopayClient.GenerateDeviceProxy(ctx, &pb.GenerateDeviceProxyRequest{})
+		resp, err := s.gopayClient.GenerateDeviceProxy(ctx, &pb.GenerateDeviceProxyRequest{
+			AccountId:   input.GetAccountId(),
+			CountryCode: input.GetCountryCode(),
+			ForceNew:    true,
+		})
 		if err != nil {
 			data["error_message"] = err.Error()
 			return data, err
@@ -89,6 +93,9 @@ func (s *Server) GoPayAppGenerateDeviceProxyActivity(ctx context.Context, input 
 		output.DynamicEgressSize = resp.GetDynamicEgressSize()
 		output.ProxyHash = resp.GetProxyHash()
 		output.DeviceFingerprint = resp.GetDeviceFingerprint()
+		for key, value := range protoDataMap(resp.GetData()) {
+			data[key] = value
+		}
 		data["proxy_slot"] = output.GetProxySlot()
 		data["dynamic_egress_size"] = output.GetDynamicEgressSize()
 		data["proxy_hash"] = output.GetProxyHash()

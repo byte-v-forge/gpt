@@ -23,6 +23,7 @@ export function AccountFingerprintPanel({ accountID, onCopy }: {
 
 function fingerprintFields(item: AccountBrowserFingerprint): KVDescriptor[] {
   return [
+    field('geo', '账号地区', [item.country_code, item.region].filter(Boolean).join(' / ')),
     field('browser-template', '浏览器模板', item.browser_profile_template),
     field('browser', '浏览器', [item.browser_family, item.browser_major_version].filter(Boolean).join(' ')),
     field('os', '系统', item.os_family),

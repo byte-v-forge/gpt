@@ -57,12 +57,6 @@ const ADD_BALANCE_METHODS: AddBalanceDescriptor[] = [{
   aliases: ['envelope', 'claim_envelope'],
   payload: { envelope: {} },
   match: (value) => value.includes('envelope') || value.includes('红包')
-}, {
-  value: 'rekberinaja',
-  label: 'R平台',
-  aliases: ['rekberinaja', 'r_platform'],
-  payload: { rekberinaja: {} },
-  match: (value) => value.includes('rekberinaja') || value.includes('r平台')
 }];
 
 export const GO_PAY_PAYMENT_CHANNELS: ConcreteGoPayPaymentChannel[] = PAYMENT_CHANNELS.map((item) => item.value);
@@ -101,17 +95,6 @@ export function addBalanceMethodValue(value: string) {
 
 export function addBalanceMethodLabel(value: string) {
   return addBalanceDescriptor(value)?.label || '';
-}
-
-export function canRetryGoPayPaymentRebind(job: Job) {
-  const result = objectValue(job.result);
-  if (job.action === 'GOPAY_PAYMENT_REBIND') return job.status === 'FAILED_RETRYABLE' || job.status === 'FAILED_RECOVERABLE';
-  if (job.action !== 'GOPAY_PAYMENT') return false;
-  const paymentCompleted = result.payment_completed === true || String(result.payment_completed || '').toLowerCase() === 'true';
-  const hasPayment = !!(stringValue(result.charge_ref) || stringValue(result.snap_token));
-  const changePhone = objectValue(result.change_phone);
-  const changeComplete = result.change_phone_complete === true || changePhone.change_phone_complete === true;
-  return paymentCompleted && hasPayment && !changeComplete && ['SUCCEEDED', 'FAILED_RECOVERABLE', 'FAILED_RETRYABLE'].includes(job.status);
 }
 
 export function goPayPaymentUserId(job: Job) {
@@ -154,17 +137,17 @@ export function manualGoPayPaymentView(job: Job) {
 }
 
 export function canConfirmManualGoPayPayment(job: Job, progress: WorkflowProgress | null, payment: ReturnType<typeof manualGoPayPaymentView>) {
-  return !!payment && !payment.confirmed && job.status === 'RUNNING' && ['GOPAY_QRIS_PAYMENT_ACTIVATE', 'GOPAY_PAYMENT'].includes(job.action || '') &&
+  return !!payment && !payment.confirmed && job.status === 'RUNNING' &&
     (progress?.step_name === 'gopay_payment' || job.last_step === 'gopay_payment');
 }
 
 export function canConfirmManualAddBalance(job: Job, progress: WorkflowProgress | null, balance: ReturnType<typeof manualAddBalanceView>) {
-  return !!balance && job.status === 'RUNNING' && ['GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE'].includes(job.action || '') && balance.method === 'manual_transfer' &&
+  return !!balance && job.status === 'RUNNING' && balance.method === 'manual_transfer' &&
     (progress?.step_name === 'gopay_app_ensure_balance_confirm' || progress?.step_name === 'gopay_app_ensure_balance');
 }
 
 export function canSelectGoPayAddBalance(job: Job, progress: WorkflowProgress | null, balance: ReturnType<typeof manualAddBalanceView>) {
-  return job.status === 'RUNNING' && ['GOPAY_PAYMENT', 'GOPAY_QRIS_PAYMENT_ACTIVATE'].includes(job.action || '') &&
+  return job.status === 'RUNNING' &&
     (progress?.step_name === 'gopay_app_ensure_balance' || job.last_step === 'gopay_app_ensure_balance') &&
     (!balance?.method || balance.status === 'awaiting_selection');
 }

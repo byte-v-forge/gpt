@@ -1,0 +1,861 @@
+{
+  "id": "gpt-codex-oauth-protocol",
+  "name": "GPT Codex OAuth Protocol",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "gpt/codex-oauth-protocol",
+        "responseMode": "onReceived",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "0d2b9d2f-b40b-5cc8-9ae3-54259ebed355",
+      "name": "Start",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "byte-v-forge-gpt-codex-oauth-protocol"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "job_id",
+              "name": "job_id",
+              "value": "={{ $json.body.job_id }}",
+              "type": "string"
+            },
+            {
+              "id": "account_id",
+              "name": "account_id",
+              "value": "={{ $json.body.account_id }}",
+              "type": "string"
+            },
+            {
+              "id": "label",
+              "name": "label",
+              "value": "={{ $json.body.label || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "n8n_execution_id",
+              "name": "n8n_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "action_scope",
+              "name": "action_scope",
+              "value": "codex-oauth-protocol",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3ef62129-5ec9-5c30-9324-d706f7e984ba",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "gpt-dynamic-ip-preflight"
+      },
+      "id": "cc646dbb-047b-5605-ad11-cb665de850c3",
+      "name": "Run Dynamic IP Preflight",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "proxy-accepted?",
+              "leftValue": "={{ $json.success === true }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "61f9dca0-0595-5b1c-ab7e-a86cf0964399",
+      "name": "Proxy Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/record-proxy' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data } }}",
+        "options": {}
+      },
+      "id": "4760aa6e-4f8d-5d90-b326-966fdab811c9",
+      "name": "Record Dynamic Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/fail-proxy' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, error_message: $json.error_message || 'dynamic proxy preflight failed', data: $json.data || $json } }}",
+        "options": {}
+      },
+      "id": "250ee550-df6f-5bf8-a036-80d9aea4c739",
+      "name": "Fail Dynamic Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/use-proxy' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id } }}",
+        "options": {}
+      },
+      "id": "8950bf38-9272-59ff-b1ed-a6d2d2fce3f8",
+      "name": "Use Checked Protocol Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1600,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/start' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label } }}",
+        "options": {}
+      },
+      "id": "f7cac448-91fb-5b94-bc73-01f03c0addb5",
+      "name": "Start Protocol",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/detect' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, session: $('Start Protocol').first().json.session } }}",
+        "options": {}
+      },
+      "id": "4609217e-6f78-5d2b-9afd-fa2fbb74cc2b",
+      "name": "Detect Protocol Stage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stage-email?",
+              "leftValue": "={{ $json.stage === 'email' || !$json.stage }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4b1d9375-efb4-5157-871c-10c0f4190551",
+      "name": "Stage Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2560,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/submit-email' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, session: $('Start Protocol').first().json.session } }}",
+        "options": {}
+      },
+      "id": "4214f83f-97c0-579f-a5df-607e317546f8",
+      "name": "Submit Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stage-password?",
+              "leftValue": "={{ $json.stage === 'password' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "fc0d5bb4-2452-5370-8182-958a5b1adea1",
+      "name": "Stage Password?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3200,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/submit-password' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, session: $('Start Protocol').first().json.session } }}",
+        "options": {}
+      },
+      "id": "beec56c9-2219-55e7-a4b7-a07d087bf0b7",
+      "name": "Submit Password",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stage-email-otp?",
+              "leftValue": "={{ $json.stage === 'email_otp' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "15d3a73b-93a6-5cbe-b30e-0293cb4d34ca",
+      "name": "Stage Email OTP?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3840,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/submit-email-otp' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, session: $('Start Protocol').first().json.session, issuedAfterUnix: $json.emailOtpIssuedAfterUnix || 0 } }}",
+        "options": {}
+      },
+      "id": "0efabc20-a7ed-5494-aa97-1ca00165deac",
+      "name": "Submit Email OTP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4160,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stage-add-phone?",
+              "leftValue": "={{ $json.stage === 'add_phone' }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d0b5e4d7-8579-512f-a4d9-aaa15bc85fe9",
+      "name": "Stage Add Phone?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4480,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/fail' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_add_phone', error_message: 'codex oauth add phone required', data: $json } }}",
+        "options": {}
+      },
+      "id": "cd441603-3e82-5f28-a3f0-9593b63ba9d2",
+      "name": "Fail Add Phone Required",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4800,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "stage-ready?",
+              "leftValue": "={{ ['consent', 'callback'].includes($json.stage) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c03bc7d0-7956-57ea-ba42-2df01bc0c332",
+      "name": "Stage Ready?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/complete-protocol' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, markPhoneConfirmedOnSuccess: false, session: $('Start Protocol').first().json.session } }}",
+        "options": {}
+      },
+      "id": "2988b8dd-e84b-5462-9a33-99d2caf98264",
+      "name": "Complete Protocol",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/complete' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, result: { auth_secret_key: $json.authSecretKey, data: $json.data, driver: 'protocol' } } }}",
+        "options": {}
+      },
+      "id": "f3de9b65-fd05-5e6d-98b0-2f6b9286921a",
+      "name": "Complete Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/fail' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_detect', error_message: 'codex oauth protocol stage not ready: ' + ($json.stage || 'unknown'), data: $json } }}",
+        "options": {}
+      },
+      "id": "a10d780e-3fa8-5b85-812e-4ad7444d5d36",
+      "name": "Fail Unexpected Stage",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5120,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-protocol/stop-protocol' }",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, session: $('Start Protocol').first().json.session, reason: 'codex oauth protocol cleanup' } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "a3921475-b527-5b5f-9398-13576f90084d",
+      "name": "Stop Protocol",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5760,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Normalize Input').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "56e65ad5-01fe-5ee7-aa06-c1ccd59a9939",
+      "name": "Release Accepted Dynamic Lease",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6080,
+        -180
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Run Dynamic IP Preflight",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Dynamic IP Preflight": {
+      "main": [
+        [
+          {
+            "node": "Proxy Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proxy Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Record Dynamic Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Dynamic Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Dynamic Proxy": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record Dynamic Proxy": {
+      "main": [
+        [
+          {
+            "node": "Use Checked Protocol Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Checked Protocol Proxy": {
+      "main": [
+        [
+          {
+            "node": "Start Protocol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Protocol": {
+      "main": [
+        [
+          {
+            "node": "Detect Protocol Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Protocol Stage": {
+      "main": [
+        [
+          {
+            "node": "Stage Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage Email?": {
+      "main": [
+        [
+          {
+            "node": "Submit Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stage Password?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Email": {
+      "main": [
+        [
+          {
+            "node": "Stage Password?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage Password?": {
+      "main": [
+        [
+          {
+            "node": "Submit Password",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stage Email OTP?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Password": {
+      "main": [
+        [
+          {
+            "node": "Stage Email OTP?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage Email OTP?": {
+      "main": [
+        [
+          {
+            "node": "Submit Email OTP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stage Add Phone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Submit Email OTP": {
+      "main": [
+        [
+          {
+            "node": "Stage Add Phone?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage Add Phone?": {
+      "main": [
+        [
+          {
+            "node": "Fail Add Phone Required",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stage Ready?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Add Phone Required": {
+      "main": [
+        [
+          {
+            "node": "Stop Protocol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stage Ready?": {
+      "main": [
+        [
+          {
+            "node": "Complete Protocol",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Unexpected Stage",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Protocol": {
+      "main": [
+        [
+          {
+            "node": "Complete Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Complete Job": {
+      "main": [
+        [
+          {
+            "node": "Stop Protocol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Unexpected Stage": {
+      "main": [
+        [
+          {
+            "node": "Stop Protocol",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stop Protocol": {
+      "main": [
+        [
+          {
+            "node": "Release Accepted Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "tags": []
+}

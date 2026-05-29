@@ -93,7 +93,6 @@ type ProbeTierActivityOutput = pb.ProbeTierActivityOutput
 type LoginSessionActivityOutput = pb.LoginSessionActivityOutput
 
 type PersistRegisteredInput = pb.PersistRegisteredInput
-type PersistActivatedInput = pb.PersistActivatedInput
 type JobFailureInput = pb.JobFailureInput
 type JobSuccessInput = pb.JobSuccessInput
 type WorkflowProgress = pb.WorkflowProgress

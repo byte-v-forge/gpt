@@ -6,91 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"orchestrator/internal/jobstatus"
 	"orchestrator/pb"
 )
 
 const protocolLoginMode = "login"
-
-func (s *Server) runLoginSessionProtocolAction(ctx context.Context, jobID string, accountID string) error {
-	account, err := s.activities.ResolveAccountFromJobActivity(ctx, pb.ResolveAccountInput{AccountId: strings.TrimSpace(accountID)})
-	if err != nil {
-		return s.markActionFailed(ctx, jobID, "resolve_account", jobstatus.FailedRetryable, false, true, err, nil)
-	}
-	accountID = account.GetAccountId()
-	combined := map[string]any{"account_id": accountID, "driver": "protocol", "mode": protocolLoginMode}
-
-	proxy, err := s.activities.ProtocolUseProxyActivity(ctx, s.protocolAuthStartInput(ctx, jobID, accountID, protocolLoginMode))
-	mergeActionData(combined, stepProtocolUseProxy, structMap(proxy.GetData()))
-	if err != nil {
-		return s.markActionFailed(ctx, jobID, stepProtocolUseProxy, jobstatus.FailedRetryable, false, true, err, combined)
-	}
-
-	start, err := s.activities.ProtocolAuthStartActivity(ctx, s.protocolAuthStartInput(ctx, jobID, accountID, protocolLoginMode))
-	mergeActionData(combined, stepLoginSessionProtocolStart, structMap(start.GetData()))
-	if err != nil {
-		return s.markActionFailed(ctx, jobID, stepLoginSessionProtocolStart, jobstatus.FailedRetryable, false, true, err, combined)
-	}
-	login := start.GetResult()
-	flowID := start.GetFlowId()
-	email := start.GetEmail()
-
-	var wait *pb.ProtocolAuthWaitOutput
-	if login == nil {
-		out, err := s.activities.ProtocolAuthWaitActivity(ctx, pb.ProtocolAuthWaitInput{JobId: jobID, AccountId: accountID, FlowId: flowID, Mode: protocolLoginMode, Email: email})
-		wait = &out
-		mergeActionData(combined, stepLoginSessionProtocol, structMap(out.GetData()))
-		if err != nil {
-			_ = s.activities.ProtocolAuthCancelActivity(ctx, pb.ProtocolAuthCancelInput{JobId: jobID, FlowId: flowID, Mode: protocolLoginMode})
-			return s.markActionFailed(ctx, jobID, stepLoginSessionProtocol, jobstatus.FailedRetryable, false, true, err, combined)
-		}
-		if out.GetResult() != nil {
-			login = out.GetResult()
-		}
-		if out.GetEmail() != "" {
-			email = out.GetEmail()
-		}
-	}
-
-	if wait != nil && wait.GetOtpRequired() {
-		otp, err := s.waitLoginSessionProtocolEmailOTP(ctx, jobID, email, wait.GetOtpTimeoutSeconds(), wait.GetOtpIssuedAfterUnix())
-		mergeActionData(combined, stepLoginSessionProtocolOTPWait, otpWaitData(email, wait.GetOtpTimeoutSeconds(), wait.GetOtpIssuedAfterUnix(), otp))
-		if err != nil {
-			_ = s.activities.ProtocolAuthCancelActivity(ctx, pb.ProtocolAuthCancelInput{JobId: jobID, FlowId: flowID, Mode: protocolLoginMode})
-			return s.markActionFailed(ctx, jobID, stepLoginSessionProtocolOTPWait, jobstatus.FailedRetryable, false, true, err, combined)
-		}
-		completed, err := s.activities.ProtocolAuthCompleteActivity(ctx, pb.ProtocolAuthCompleteInput{
-			JobId:              jobID,
-			AccountId:          accountID,
-			FlowId:             flowID,
-			Mode:               protocolLoginMode,
-			OtpParam:           registrationOTPParam,
-			SubmittedAtParam:   registrationOTPSubmittedAtParam,
-			OtpIssuedAfterUnix: wait.GetOtpIssuedAfterUnix(),
-			OtpSource:          otp.GetSource(),
-		})
-		mergeActionData(combined, stepLoginSessionProtocolComplete, structMap(completed.GetData()))
-		if err != nil {
-			_ = s.activities.ProtocolAuthCancelActivity(ctx, pb.ProtocolAuthCancelInput{JobId: jobID, FlowId: flowID, Mode: protocolLoginMode})
-			return s.markActionFailed(ctx, jobID, stepLoginSessionProtocolComplete, jobstatus.FailedRetryable, false, true, err, combined)
-		}
-		login = &completed
-	}
-
-	if login == nil || (strings.TrimSpace(login.GetSessionToken()) == "" && strings.TrimSpace(login.GetAccessToken()) == "") {
-		err := fmt.Errorf("protocol login did not return ChatGPT credentials")
-		return s.markActionFailed(ctx, jobID, stepLoginSessionProtocolComplete, jobstatus.FailedRetryable, false, true, err, combined)
-	}
-	mergeActionData(combined, "login_session", structMap(login.GetData()))
-	if err := s.activities.PersistRegisteredActivity(ctx, pb.PersistRegisteredInput{AccountId: accountID, SessionToken: login.GetSessionToken(), AccessToken: login.GetAccessToken()}); err != nil {
-		return s.markActionFailed(ctx, jobID, "persist_registered", jobstatus.FailedRecoverable, true, false, err, combined)
-	}
-	return s.activities.MarkJobSucceededActivity(ctx, pb.JobSuccessInput{JobId: jobID, Result: structData(combined)})
-}
-
-func (s *Server) waitLoginSessionProtocolEmailOTP(ctx context.Context, jobID string, email string, timeoutSeconds int32, issuedAfterUnix int64) (pb.OTPWaitOutput, error) {
-	return s.waitProtocolEmailOTP(ctx, jobID, stepLoginSessionProtocolOTPWait, email, timeoutSeconds, issuedAfterUnix)
-}
 
 func (s *Server) waitProtocolEmailOTP(ctx context.Context, jobID string, stepName string, email string, timeoutSeconds int32, issuedAfterUnix int64) (pb.OTPWaitOutput, error) {
 	if timeoutSeconds <= 0 {

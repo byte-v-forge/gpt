@@ -3,6 +3,7 @@ import type React from 'react';
 import { CheckCircle2, KeyRound, LogIn, RefreshCcw, Repeat, Save, Send, UserPlus, WalletCards, XCircle } from 'lucide-react';
 import { Button, DashboardField, Input, api, useQuery } from '@byte-v-forge/common-ui';
 import type { GoPayUserWAPhoneResponse } from '../proto/orchestrator_gopay_app';
+import { GPT_ACTIONS, gptActionAvailability, gptActionLabel, type GptActionCatalog, workflowStartPath } from './action-catalog';
 import { GoPayPhoneCheck } from './gopay-phone-check';
 import type { Job } from './types';
 
@@ -20,6 +21,7 @@ type WorkflowResult = {
 };
 
 type Props = {
+  actionCatalog?: GptActionCatalog;
   currentJob?: Job;
   onDone: (message: string, error?: boolean) => void;
   onCancelWorkflow: (jobId: string) => Promise<void>;
@@ -27,7 +29,7 @@ type Props = {
   onRefreshJobs: () => Promise<void> | void;
 };
 
-export function GoPayActionsPanel({ currentJob, onDone, onCancelWorkflow, onRefreshState, onRefreshJobs }: Props) {
+export function GoPayActionsPanel({ actionCatalog, currentJob, onDone, onCancelWorkflow, onRefreshState, onRefreshJobs }: Props) {
   const profile = useQuery({ queryKey: ['gpt', 'gopay', 'profile', USER_ID], queryFn: loadProfile });
   const [waPhone, setWaPhone] = useState('');
   const [pin, setPin] = useState('');
@@ -43,7 +45,9 @@ export function GoPayActionsPanel({ currentJob, onDone, onCancelWorkflow, onRefr
     if (!phone && profile.data.wa_phone) setPhone(profile.data.wa_phone);
   }, [phone, profile.data]);
 
-  const disabled = busy !== '';
+  const appAction = gptActionAvailability(actionCatalog, GPT_ACTIONS.goPayApp, undefined, 'gopay');
+  const directDisabled = busy !== '';
+  const workflowDisabled = busy !== '' || !appAction.enabled;
   const primaryPhone = phone || waPhone;
 
   return (
@@ -52,26 +56,26 @@ export function GoPayActionsPanel({ currentJob, onDone, onCancelWorkflow, onRefr
         <DashboardField className="goPayActionField" label="WA 手机号"><Input value={waPhone} placeholder="812..." onChange={(event) => setWaPhone(event.target.value)} /></DashboardField>
         <DashboardField className="goPayActionField" label="PIN"><Input value={pin} type="password" onChange={(event) => setPin(event.target.value)} /></DashboardField>
         <DashboardField className="goPayActionField" label="区号"><Input value={countryCode} placeholder="+62" onChange={(event) => setCountryCode(event.target.value)} /></DashboardField>
-        <Button onClick={saveProfile} disabled={disabled}><Save size={15} />保存</Button>
+        <Button onClick={saveProfile} disabled={directDisabled}><Save size={15} />保存</Button>
       </ActionGroup>
       <ActionGroup title="手机号检测">
-        <GoPayPhoneCheck defaultPhone={primaryPhone} disabled={disabled} onDone={onDone} />
+        <GoPayPhoneCheck defaultPhone={primaryPhone} disabled={directDisabled} onDone={onDone} />
       </ActionGroup>
       <ActionGroup title="需要登录的检测">
-        <Button onClick={() => startAppWorkflow('检测余额', 'check_balance')} disabled={disabled}><WalletCards size={15} />检测余额</Button>
-        <Button onClick={() => startAppWorkflow('检测PIN', 'check_pin')} disabled={disabled}><CheckCircle2 size={15} />检测PIN</Button>
+        <Button onClick={() => startAppWorkflow('检测余额', 'check_balance')} disabled={workflowDisabled}><WalletCards size={15} />检测余额</Button>
+        <Button onClick={() => startAppWorkflow('检测PIN', 'check_pin')} disabled={workflowDisabled}><CheckCircle2 size={15} />检测PIN</Button>
       </ActionGroup>
       <ActionGroup title="流程">
-        <Button onClick={() => startAppWorkflow('登录', 'login')} disabled={disabled}><LogIn size={15} />登录</Button>
-        <Button onClick={() => startAppWorkflow('注册', 'signup')} disabled={disabled}><UserPlus size={15} />注册</Button>
-        <Button onClick={() => startAppWorkflow('设置PIN', 'ensure_pin_setup')} disabled={disabled}><KeyRound size={15} />设置PIN</Button>
-        <Button onClick={() => startAppWorkflow('换绑', 'change_phone')} disabled={disabled}><Repeat size={15} />换绑</Button>
+        <Button onClick={() => startAppWorkflow('登录', 'login')} disabled={workflowDisabled}><LogIn size={15} />登录</Button>
+        <Button onClick={() => startAppWorkflow('注册', 'signup')} disabled={workflowDisabled}><UserPlus size={15} />注册</Button>
+        <Button onClick={() => startAppWorkflow('设置PIN', 'ensure_pin_setup')} disabled={workflowDisabled}><KeyRound size={15} />设置PIN</Button>
+        <Button onClick={() => startAppWorkflow('换绑', 'change_phone')} disabled={workflowDisabled}><Repeat size={15} />换绑</Button>
       </ActionGroup>
       <ActionGroup title="手动 OTP">
         <DashboardField className="goPayActionField" label="OTP"><Input value={otp} placeholder="123456" onChange={(event) => setOtp(event.target.value)} /></DashboardField>
-        <Button onClick={submitOTP} disabled={disabled || !currentJob}><Send size={15} />提交当前流程</Button>
-        <Button variant="destructive" onClick={cancelWorkflow} disabled={disabled || !currentJob}><XCircle size={15} />取消当前流程</Button>
-        <Button onClick={() => void refreshAll('已刷新')} disabled={disabled}><RefreshCcw size={15} />刷新</Button>
+        <Button onClick={submitOTP} disabled={directDisabled || !currentJob}><Send size={15} />提交当前流程</Button>
+        <Button variant="destructive" onClick={cancelWorkflow} disabled={directDisabled || !currentJob}><XCircle size={15} />取消当前流程</Button>
+        <Button onClick={() => void refreshAll('已刷新')} disabled={directDisabled}><RefreshCcw size={15} />刷新</Button>
       </ActionGroup>
     </section>
   );
@@ -82,7 +86,9 @@ export function GoPayActionsPanel({ currentJob, onDone, onCancelWorkflow, onRefr
   }
 
   async function startAppWorkflow(label: string, operation: string) {
-    await startWorkflow(label, '/api/gpt/workflows/gopay-app', {
+    const path = workflowStartPath(actionCatalog, GPT_ACTIONS.goPayApp, 'gopay');
+    if (!path) return onDone(`动作未注册: ${gptActionLabel(actionCatalog, GPT_ACTIONS.goPayApp, GPT_ACTIONS.goPayApp, 'gopay')}`, true);
+    await startWorkflow(label, path, {
       operation,
       user_id: USER_ID,
       phone: primaryPhone,

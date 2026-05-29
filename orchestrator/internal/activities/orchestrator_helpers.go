@@ -1,24 +1,21 @@
 package activities
 
 import (
+	"context"
 	"regexp"
 	"strings"
+
+	"orchestrator/internal/gptsettings"
 )
 
 var otpCodePattern = regexp.MustCompile(`[0-9]{4,8}`)
 
-func (s *Server) paymentOtpTimeout() int32 {
-	if s.otpTimeout <= 0 {
-		return 180
-	}
-	return s.otpTimeout
+func (s *Server) paymentOtpTimeout(ctx context.Context) int32 {
+	return gptsettings.Int32Value(s.goPayPluginValues(ctx), "otp_timeout_seconds", 0)
 }
 
-func (s *Server) registrationOtpTimeout() int32 {
-	if s.regOTPTimeout <= 0 {
-		return 120
-	}
-	return s.regOTPTimeout
+func (s *Server) registrationOtpTimeout(ctx context.Context) int32 {
+	return s.privateFlowRegistrationOTPTimeout(ctx)
 }
 
 func normalizeOTP(value string) string {

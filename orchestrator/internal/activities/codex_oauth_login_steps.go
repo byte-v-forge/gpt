@@ -117,7 +117,7 @@ func (f *browserAuthFlow) submitCodexOAuthPassword(client browserautomationv1.Br
 }
 
 func (s *Server) waitCodexOAuthEmailOTP(ctx context.Context, _ string, email string, issuedAfter int64) (string, error) {
-	wait := s.regOTPTimeout
+	wait := s.registrationOtpTimeout(ctx)
 	if wait <= 0 {
 		wait = defaultCodexOAuthPhoneWaitSeconds
 	}

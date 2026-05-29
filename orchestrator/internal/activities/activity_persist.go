@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"fmt"
 	"orchestrator/db"
 	"orchestrator/internal/jobprojection"
 	"orchestrator/pb"
@@ -40,38 +41,6 @@ func (s *Server) PersistRegisteredActivity(ctx context.Context, input PersistReg
 	return err
 }
 
-func (s *Server) PersistActivatedActivity(ctx context.Context, input PersistActivatedInput) error {
-	account, err := s.getAccount(ctx, input.GetAccountId())
-	if err != nil {
-		return err
-	}
-	sessionToken := input.GetSessionToken()
-	if sessionToken == "" {
-		sessionToken = s.cachedChatGPTSessionToken(ctx, account.GetAccountId())
-	}
-	accessToken := input.GetAccessToken()
-	if accessToken == "" {
-		accessToken = s.cachedChatGPTAccessToken(ctx, account.GetAccountId())
-	}
-	if err := s.saveChatGPTSessionToken(ctx, input.GetAccountId(), sessionToken); err != nil {
-		return err
-	}
-	if err := s.saveChatGPTAccessToken(ctx, input.GetAccountId(), accessToken); err != nil {
-		return err
-	}
-	update := &pb.Account{
-		AccountId:  input.GetAccountId(),
-		Status:     accountStatusActivated,
-		ChargeRef:  input.GetChargeRef(),
-		PlusActive: boolPtr(true),
-		Tier:       "plus",
-	}
-	if input.GetPlusTrialChecked() {
-		update.PlusTrialEligible = boolPtr(input.GetPlusTrialEligible())
-	}
-	return s.updateAccount(ctx, update)
-}
-
 func (s *Server) MarkJobFailedActivity(ctx context.Context, input JobFailureInput) error {
 	if input.Status == "" {
 		input.Status = failedStatus(input.Recoverable, input.Retryable)
@@ -84,6 +53,9 @@ func (s *Server) MarkJobFailedActivity(ctx context.Context, input JobFailureInpu
 }
 
 func (s *Server) MarkJobSucceededActivity(ctx context.Context, input JobSuccessInput) error {
+	if err := s.ensureJobCanSucceed(ctx, input.GetJobId()); err != nil {
+		return err
+	}
 	s.updateJob(ctx, input.GetJobId(), statusSucceeded, "", protoDataMap(input.GetResult()))
 	return nil
 }
@@ -102,4 +74,33 @@ func (s *Server) markStepFailed(ctx context.Context, input JobFailureInput) erro
 		ErrorMessage: input.GetErrorMessage(),
 		Result:       protoDataMap(input.GetResult()),
 	})
+}
+
+func (s *Server) ensureJobCanSucceed(ctx context.Context, jobID string) error {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" {
+		return fmt.Errorf("job_id is required")
+	}
+	job, err := s.getJob(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	if terminalFailureStatus(job.Status) {
+		return fmt.Errorf("job %s is already %s; refuse marking succeeded", jobID, job.Status)
+	}
+	steps, err := s.jobStore.Steps(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	for _, step := range steps {
+		if terminalFailureStatus(step.Status) {
+			return fmt.Errorf("job %s has failed step %s; refuse marking succeeded", jobID, step.StepName)
+		}
+	}
+	return nil
+}
+
+func terminalFailureStatus(status string) bool {
+	status = strings.ToUpper(strings.TrimSpace(status))
+	return status == statusCanceled || strings.HasPrefix(status, "FAILED_")
 }

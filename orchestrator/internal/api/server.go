@@ -8,6 +8,7 @@ import (
 
 	"orchestrator/db"
 	"orchestrator/internal/accountfingerprint"
+	"orchestrator/internal/actionregistry"
 	"orchestrator/internal/activities"
 	"orchestrator/internal/contracts"
 	"orchestrator/internal/jobevents"
@@ -19,22 +20,20 @@ import (
 )
 
 type Config struct {
-	DB                                   *gorm.DB
-	JobStore                             *jobprojection.Store
-	JobEvents                            *jobevents.Store
-	RuntimeSecrets                       runtimesecrets.Store
-	Fingerprints                         *accountfingerprint.Store
-	GPTSettings                          GPTSettingsReader
-	Activities                           *activities.Server
-	AccountClient                        pb.GPTAccountServiceClient
-	PaymentClient                        pb.PaymentServiceClient
-	MailboxPollRequester                 *mailboxevents.Requester
-	OTPProjection                        OTPProjection
-	RegisterProtocolOTPWaits             registerProtocolOTPWaitStore
-	GoPayClient                          pb.GopayAppServiceClient
-	DefaultGoPayAddBalance               *pb.GoPayAddBalance
-	DefaultGoPayAddBalances              map[string]*pb.GoPayAddBalance
-	GoPayAddBalanceConfirmTimeoutSeconds int32
+	DB                   *gorm.DB
+	JobStore             *jobprojection.Store
+	JobEvents            *jobevents.Store
+	RuntimeSecrets       runtimesecrets.Store
+	Fingerprints         *accountfingerprint.Store
+	GPTSettings          GPTSettingsReader
+	Activities           *activities.Server
+	AccountClient        pb.GPTAccountServiceClient
+	PaymentClient        pb.PaymentServiceClient
+	MailboxPollRequester *mailboxevents.Requester
+	OTPProjection        OTPProjection
+	EmailOTPWaits        emailOTPWaitStore
+	GoPayClient          pb.GopayAppServiceClient
+	ActionRegistry       *actionregistry.Registry
 }
 
 type Server struct {
@@ -44,22 +43,20 @@ type Server struct {
 	pb.UnimplementedOTPServiceServer
 	pb.UnimplementedJobServiceServer
 
-	db                                   *gorm.DB
-	jobStore                             *jobprojection.Store
-	jobEvents                            *jobevents.Store
-	runtimeSecrets                       runtimesecrets.Store
-	fingerprints                         *accountfingerprint.Store
-	gptSettings                          GPTSettingsReader
-	activities                           *activities.Server
-	accountClient                        pb.GPTAccountServiceClient
-	paymentClient                        pb.PaymentServiceClient
-	mailboxPollRequester                 *mailboxevents.Requester
-	otpProjection                        OTPProjection
-	registerProtocolOTPWaits             registerProtocolOTPWaitStore
-	gopayClient                          pb.GopayAppServiceClient
-	defaultGoPayAddBalance               *pb.GoPayAddBalance
-	defaultGoPayAddBalances              map[string]*pb.GoPayAddBalance
-	goPayAddBalanceConfirmTimeoutSeconds int32
+	db                   *gorm.DB
+	jobStore             *jobprojection.Store
+	jobEvents            *jobevents.Store
+	runtimeSecrets       runtimesecrets.Store
+	fingerprints         *accountfingerprint.Store
+	gptSettings          GPTSettingsReader
+	activities           *activities.Server
+	accountClient        pb.GPTAccountServiceClient
+	paymentClient        pb.PaymentServiceClient
+	mailboxPollRequester *mailboxevents.Requester
+	otpProjection        OTPProjection
+	emailOTPWaits        emailOTPWaitStore
+	gopayClient          pb.GopayAppServiceClient
+	actionRegistry       *actionregistry.Registry
 }
 
 type GPTSettingsReader interface {
@@ -68,8 +65,6 @@ type GPTSettingsReader interface {
 
 const (
 	actionRegister                 = contracts.ActionRegister
-	actionActivate                 = contracts.ActionActivate
-	actionAutopay                  = contracts.ActionAutopay
 	actionGoPayApp                 = contracts.ActionGoPayApp
 	actionGoPayPayment             = contracts.ActionGoPayPayment
 	actionGoPayQRISPaymentActivate = contracts.ActionGoPayQRISPaymentActivate
@@ -83,7 +78,6 @@ const (
 	actionCodexOAuthProtocol       = contracts.ActionCodexOAuthProtocol
 	actionCodexOAuthAddPhone       = contracts.ActionCodexOAuthAddPhone
 	actionCodexOAuthBatchAddPhone  = contracts.ActionCodexOAuthBatchAddPhone
-	actionRegisterAndActivate      = contracts.ActionRegisterAndActivate
 
 	statusRunning                       = jobstatus.Running
 	statusSucceeded                     = jobstatus.Succeeded
@@ -176,24 +170,23 @@ const (
 )
 
 func NewServer(cfg Config) *Server {
-	return &Server{
-		db:                                   cfg.DB,
-		jobStore:                             cfg.JobStore,
-		jobEvents:                            cfg.JobEvents,
-		runtimeSecrets:                       cfg.RuntimeSecrets,
-		fingerprints:                         cfg.Fingerprints,
-		gptSettings:                          cfg.GPTSettings,
-		activities:                           cfg.Activities,
-		accountClient:                        cfg.AccountClient,
-		paymentClient:                        cfg.PaymentClient,
-		mailboxPollRequester:                 cfg.MailboxPollRequester,
-		otpProjection:                        cfg.OTPProjection,
-		registerProtocolOTPWaits:             cfg.RegisterProtocolOTPWaits,
-		gopayClient:                          cfg.GoPayClient,
-		defaultGoPayAddBalance:               cfg.DefaultGoPayAddBalance,
-		defaultGoPayAddBalances:              cloneGoPayAddBalanceMap(cfg.DefaultGoPayAddBalances),
-		goPayAddBalanceConfirmTimeoutSeconds: cfg.GoPayAddBalanceConfirmTimeoutSeconds,
+	server := &Server{
+		db:                   cfg.DB,
+		jobStore:             cfg.JobStore,
+		jobEvents:            cfg.JobEvents,
+		runtimeSecrets:       cfg.RuntimeSecrets,
+		fingerprints:         cfg.Fingerprints,
+		gptSettings:          cfg.GPTSettings,
+		activities:           cfg.Activities,
+		accountClient:        cfg.AccountClient,
+		paymentClient:        cfg.PaymentClient,
+		mailboxPollRequester: cfg.MailboxPollRequester,
+		otpProjection:        cfg.OTPProjection,
+		emailOTPWaits:        cfg.EmailOTPWaits,
+		gopayClient:          cfg.GoPayClient,
+		actionRegistry:       actionregistry.RegisterDefault(cfg.ActionRegistry),
 	}
+	return server
 }
 
 func (s *Server) setJobParams(ctx context.Context, jobID string, params map[string]string) error {

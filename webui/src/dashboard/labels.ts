@@ -1,3 +1,4 @@
+import { GPT_ACTIONS, type GptActionCatalog } from './action-catalog';
 import type { DisplayLabelMap } from './types';
 
 const accountStatusLabels: DisplayLabelMap = {
@@ -30,28 +31,25 @@ const emailAllocationStatusLabels: DisplayLabelMap = {
 };
 
 const actionLabels: DisplayLabelMap = {
-  REGISTER: '注册账号',
-  REGISTER_PROTOCOL: '协议注册账号',
-  LOGIN_SESSION: '登录取 Token',
-  LOGIN_SESSION_PROTOCOL: '协议登录取 Token',
-  CODEX_OAUTH: '浏览器 auth.json',
-  CODEX_OAUTH_PROTOCOL: '协议 auth.json',
-  CODEX_OAUTH_ADD_PHONE: 'Codex OAuth 加手机号',
-  ACTIVATE: '激活支付',
-  AUTOPAY: '自动支付',
-  GOPAY_APP: 'GoPay App',
-  GOPAY_PAYMENT: 'GoPay 支付',
-  GOPAY_QRIS_PAYMENT_ACTIVATE: 'QRIS激活',
-  GOPAY_WA_PAYMENT: '纯 GoPay-WA 支付',
-  GOPAY_PAYMENT_REBIND: 'GoPay 支付换绑',
-  REGISTER_AND_ACTIVATE: '注册并激活',
-  PROBE_ACCOUNT: '探测账号'
+  [GPT_ACTIONS.register]: '注册账号',
+  [GPT_ACTIONS.registerProtocol]: '协议注册账号',
+  [GPT_ACTIONS.loginSession]: '登录取 Token',
+  [GPT_ACTIONS.loginSessionProtocol]: '协议登录取 Token',
+  [GPT_ACTIONS.codexOAuth]: '浏览器 auth.json',
+  [GPT_ACTIONS.codexOAuthProtocol]: '协议 auth.json',
+  [GPT_ACTIONS.codexOAuthAddPhone]: 'Codex OAuth 加手机号',
+  [GPT_ACTIONS.goPayApp]: 'GoPay App',
+  [GPT_ACTIONS.goPayPayment]: 'GoPay 支付',
+  [GPT_ACTIONS.goPayQRISPaymentActivate]: 'QRIS激活',
+  [GPT_ACTIONS.goPayWAPayment]: '纯 GoPay-WA 支付',
+  [GPT_ACTIONS.goPayPaymentRebind]: 'GoPay 支付换绑',
+  [GPT_ACTIONS.probeAccount]: '探测账号'
 };
 
 export function statusText(status: string) {
   return accountStatusLabels[status] || jobStatusLabels[status] || emailAllocationStatusLabels[status] || status || '-';
 }
 
-export function actionText(action: string) {
-  return actionLabels[action] || action || '-';
+export function actionText(action: string, catalog?: GptActionCatalog) {
+  return catalog?.actions.find((item) => item.action_id === action)?.display_name || actionLabels[action] || action || '-';
 }

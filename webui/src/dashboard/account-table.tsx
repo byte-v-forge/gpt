@@ -11,22 +11,23 @@ import {
 import type { RowActionDescriptor } from '@byte-v-forge/common-ui';
 import { maskEmail } from '@byte-v-forge/common-ui';
 import {
-  accountActivationChannel,
-  accountCodexPhoneState,
   canGoPayPayment,
   isInvalidGptAccount,
   isUserAlreadyExistsAccount
 } from './account-utils';
+import { accountActivationChannel, accountCodexPhoneState } from './account-job-semantics';
 import { AccountChannelTag, AccountCodexPhoneTag, AccountSignalBadge, PaymentChannelIcon } from './account-badges';
+import { GPT_ACTIONS, gptActionAvailability, type GptActionCatalog } from './action-catalog';
 import { AccountRowAuthGroups } from './account-row-auth-groups';
 import { OpenAIIcon } from './brand-icons';
 import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
 import type { Account, ConcreteGoPayPaymentChannel, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, showSecrets, runningAccountIds, runningWorkflowByAccountID, busy, onSelect, onRegisterProtocol, onGoPayPayment, onDelete }: {
+export function AccountTable({ accounts, jobs, selected, actionCatalog, showSecrets, runningAccountIds, runningWorkflowByAccountID, busy, onSelect, onRegisterProtocol, onGoPayPayment, onDelete }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
+  actionCatalog?: GptActionCatalog;
   showSecrets: boolean;
   runningAccountIds: Set<string>;
   runningWorkflowByAccountID: Map<string, Job>;
@@ -41,8 +42,8 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
       {accounts.map((account) => {
         const accountBusy = runningAccountIds.has(account.account_id);
         const currentWorkflow = runningWorkflowByAccountID.get(account.account_id);
-        const activationChannel = accountActivationChannel(account, jobs);
-        const phoneState = accountCodexPhoneState(account, jobs);
+        const activationChannel = accountActivationChannel(account, jobs, actionCatalog);
+        const phoneState = accountCodexPhoneState(account, jobs, actionCatalog);
         return (
           <RecordCard key={account.account_id} selected={selected === account.account_id} onClick={() => onSelect(account)}>
             <RecordMain>
@@ -57,6 +58,7 @@ export function AccountTable({ accounts, jobs, selected, showSecrets, runningAcc
             </RecordMain>
             <AccountRowActions
               account={account}
+              actionCatalog={actionCatalog}
               accountBusy={accountBusy}
               currentWorkflow={currentWorkflow}
               busy={busy}
@@ -85,8 +87,9 @@ function AccountCardIdentity({ account, showSecrets }: {
   );
 }
 
-function AccountRowActions({ account, accountBusy, currentWorkflow, busy, onRegisterProtocol, onGoPayPayment, onDelete }: {
+function AccountRowActions({ account, actionCatalog, accountBusy, currentWorkflow, busy, onRegisterProtocol, onGoPayPayment, onDelete }: {
   account: Account;
+  actionCatalog?: GptActionCatalog;
   accountBusy: boolean;
   currentWorkflow?: Job;
   busy: boolean;
@@ -117,21 +120,22 @@ function AccountRowActions({ account, accountBusy, currentWorkflow, busy, onRegi
     );
   }
 
-  const paymentActions: RowActionDescriptor[] = canGoPayPayment(account) ? GO_PAY_PAYMENT_CHANNELS.filter((channel) => channel !== 'wa').map((channel) => ({
+  const payment = gptActionAvailability(actionCatalog, GPT_ACTIONS.goPayPayment, account, 'account_row');
+  const paymentActions: RowActionDescriptor[] = GO_PAY_PAYMENT_CHANNELS.filter((channel) => channel !== 'wa' && payment.visible).map((channel) => ({
     label: goPayPaymentActionLabel(channel),
     icon: <span className="activationPaymentIcon"><Zap size={13} /><PaymentChannelIcon channel={channel} /></span>,
     onClick: () => onGoPayPayment(account, channel),
-    disabled: busy,
+    disabled: busy || !payment.enabled || !canGoPayPayment(account),
     kind: 'secondary' as const,
     className: 'paymentIconAction activationAction'
-  })) : [];
+  }));
   const leftActions = paymentActions;
   return (
     <RecordActions className="rowActions">
       <div className="rowActionsMain splitRowActions">
         <div className="rowActionsLeft"><RecordActionButtons actions={leftActions} /></div>
         <div className="rowActionsRight">
-          <AccountRowAuthGroups account={account} busy={busy} onRegisterProtocol={onRegisterProtocol} />
+          <AccountRowAuthGroups account={account} actionCatalog={actionCatalog} busy={busy} onRegisterProtocol={onRegisterProtocol} />
         </div>
       </div>
     </RecordActions>

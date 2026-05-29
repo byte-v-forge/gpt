@@ -1,0 +1,1183 @@
+{
+  "id": "gpt-dynamic-ip-preflight",
+  "name": "GPT Dynamic IP Preflight",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "bb865303-2b43-5953-ac10-2b84b93177eb",
+      "name": "When Executed by GPT Workflow",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/' + ($json.action_scope || 'register-protocol') + '/proxy-settings' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $json.job_id, account_id: $json.account_id, n8n_execution_id: $json.n8n_execution_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "29c54a62-519a-5ec9-b8a9-d1ddc5fa2cff",
+      "name": "Get GPT Proxy Settings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const settingsResponse = $input.first().json;\nconst settings = settingsResponse.body || settingsResponse;\nconst input = $('When Executed by GPT Workflow').first().json;\nconst maxAttempts = Math.max(1, Math.min(100, Number(settings.max_proxy_attempts || 10)));\nconst lineAttemptLimit = Math.ceil(maxAttempts / 2);\nconst targets = targetURLs(input, settings);\nconst items = [];\nfor (let attempt = 1; attempt <= maxAttempts; attempt++) {\n  const preferLineProxy = attempt <= lineAttemptLimit;\n  const gatewayAttempt = preferLineProxy ? attempt : attempt - lineAttemptLimit;\n  const request = JSON.parse(JSON.stringify(settings.lease_request || {}));\n  request.policy = request.policy || {};\n  request.policy.labels = {\n    ...(request.policy.labels || {}),\n    attempt: String(gatewayAttempt),\n    workflow_attempt: String(attempt),\n    max_proxy_attempts: String(maxAttempts),\n  };\n  request.chain_policy = {\n    ...(request.chain_policy || {}),\n    country_code: settings.country_code || request?.policy?.labels?.country_code || request?.policy?.region || '',\n    region: settings.region || request?.policy?.labels?.region || request?.policy?.region || '',\n    purpose: settings.purpose || request.purpose || 'REGISTER_PROTOCOL',\n    max_attempts: maxAttempts,\n    allow_direct_dynamic_gateway: true,\n    prefer_line_proxy: preferLineProxy,\n  };\n  items.push({ json: {\n    ...input,\n    settings,\n    target_urls: targets,\n    attempt,\n    gateway_attempt: gatewayAttempt,\n    prefer_line_proxy: preferLineProxy,\n    max_proxy_attempts: maxAttempts,\n    preflight_enabled: !!settings.preflight_enabled,\n    cf_canary_enabled: !!settings.cf_canary_enabled,\n    require_residential: !!settings.require_residential,\n    min_ip_purity_score: Number(settings.min_ip_purity_score || 0),\n    lease_request: request,\n  }});\n}\nreturn items;\nfunction targetURLs() { return ['https://api.openai.com/v1/models']; }\n"
+      },
+      "id": "03b647bb-296e-58d4-862a-30a61cc59f63",
+      "name": "Build Proxy Attempt Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "5c5463fb-b136-5d65-a46e-2f65f43cd940",
+      "name": "Loop Proxy Attempts",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/acquire' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.lease_request }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "636abaac-8362-5260-8624-555bbc00e41f",
+      "name": "Acquire Dynamic Lease",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const attempt = $('Loop Proxy Attempts').first().json;\nconst leaseHTTPResponse = $input.first().json;\nconst leaseResponse = leaseHTTPResponse.body || leaseHTTPResponse;\nfunction endpoint(leaseResponse) {\n  const session = leaseResponse?.lease?.session || {};\n  return leaseResponse?.egress || leaseResponse?.lease?.egress || session.egress || {};\n}\nfunction endpointUrl(egress) {\n  if (!egress?.host || !egress?.port) return '';\n  const protocol = egress.protocol === 'PROXY_PROTOCOL_SOCKS5' ? 'socks5' : 'http';\n  return `${protocol}://${egress.host}:${egress.port}`;\n}\nconst session = leaseResponse?.lease?.session || {};\nconst egress = endpoint(leaseResponse);\nconst listenerRequest = {\n  pool_id: 'default',\n  provider_id: session.provider_id || egress.provider_id || '',\n  listener_id: egress.id || '',\n};\nreturn [{ json: {\n  ...attempt,\n  lease_response: leaseResponse,\n  proxy_url: endpointUrl(egress),\n  check_request: listenerRequest,\n  exit_ip_request: listenerRequest,\n}}];\n"
+      },
+      "id": "01979563-4420-5604-8a44-d2a6973e152d",
+      "name": "Build Proxy Check Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/proxy_exit_ip' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.exit_ip_request }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "77b5407e-d759-56f8-a912-503fc1b753a1",
+      "name": "Get Proxy Exit IP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const base = $('Build Proxy Check Request').first().json;\nconst response = $input.first().json;\nconst body = httpBody(response);\nconst exit = body?.proxy_exit_ip || {};\nconst transportOK = httpOK(response) && !!exit.ip;\nconst errorMessage = transportOK ? '' : (body?.message || body?.error || response.statusMessage || 'proxy exit ip failed');\nconst data = baseData(base, exit.ip || '', {}, {}, {}, !errorMessage, errorMessage);\nreturn [{ json: { ...base, exit_ip: exit.ip || '', exit_ip_response: { proxy_exit_ip: exit }, success: !errorMessage, error_message: errorMessage, data } }];\nfunction httpBody(response) { return response && Object.prototype.hasOwnProperty.call(response, 'body') ? response.body : response; }\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\nfunction baseData(base, exitIP, fraudResponse, edgeResponse, targetResponse, accepted, errorMessage) {\n  const lease = base.lease_response?.lease || {};\n  const session = lease.session || {};\n  const fraud = fraudResponse?.check || {};\n  const edge = edgeResponse?.check || {};\n  return {\n    purpose: base.settings?.purpose || base.lease_request?.purpose || 'REGISTER_PROTOCOL',\n    attempt: base.attempt,\n    max_proxy_attempts: base.max_proxy_attempts,\n    accepted,\n    error_message: errorMessage || '',\n    preflight_enabled: !!base.preflight_enabled,\n    cf_canary_enabled: !!base.cf_canary_enabled,\n    proxy_session_hash: stableHash(session.session_id),\n    exit_ip: exitIP || edge.ip || fraud.ip || '',\n    exit_geo: {\n      ip: exitIP || edge.ip || fraud.ip || '',\n      country_code: fraud.country_code || base.settings?.country_code || '',\n      region: fraud.region || base.settings?.region || '',\n      city: fraud.city || '',\n    },\n    ip_fraud_check: fraud,\n    edge_access_check: edge,\n    proxy_runtime_lease: {\n      lease_id: lease.lease_id || '',\n      provider_id: session.provider_id || '',\n      expires_at: lease.expires_at || session.expires_at || '',\n    },\n    chain_plan: base.lease_response?.chain_plan || lease.chain_plan || {},\n    chain: chainSummary(base.lease_response?.chain_plan || lease.chain_plan || {}, exitIP || edge.ip || fraud.ip || '', fraud),\n  };\n}\nfunction stableHash(value) { let hash = 2166136261; for (const ch of String(value || '')) { hash ^= ch.charCodeAt(0); hash = Math.imul(hash, 16777619); } return (hash >>> 0).toString(16).padStart(8, '0'); }\nfunction chainSummary(plan, exitIP = '', fraud = {}) {\n  const hops = Array.isArray(plan.hops) ? plan.hops.map(normalizeHop).filter((hop) => !String(hop.role).includes('DYNAMIC_EXIT')) : [];\n  const observedExitIP = String(exitIP || fraud.ip || '').trim();\n  if (observedExitIP) {\n    const gateway = plan.dynamic_gateway || {};\n    hops.push({\n      hop_id: `dynamic-exit:${observedExitIP}`,\n      order: hops.length + 1,\n      role: 'PROXY_CHAIN_HOP_ROLE_DYNAMIC_EXIT',\n      source_kind: 'PROXY_SOURCE_KIND_DYNAMIC_IP',\n      source_id: '',\n      source_display_name: '',\n      node_id: '',\n      node_display_name: '',\n      provider_id: gateway.provider_id || '',\n      gateway_id: gateway.gateway_id || '',\n      gateway_display_name: gateway.display_name || '',\n      observed_ip: observedExitIP,\n      country_code: fraud.country_code || '',\n      region: fraud.region || '',\n      city: fraud.city || '',\n      status: '',\n      delay_ms: 0,\n    });\n  }\n  return { chain_id: plan.chain_id || '', hops };\n}\nfunction normalizeHop(hop) {\n  return {\n    hop_id: hop.hop_id || '',\n    order: Number(hop.order || 0),\n    role: hop.role || '',\n    source_kind: hop.source_kind || '',\n    source_id: hop.source_id || '',\n    source_display_name: hop.source_display_name || '',\n    node_id: hop.node_id || '',\n    node_display_name: hop.node_display_name || '',\n    provider_id: hop.provider_id || '',\n    gateway_id: hop.gateway_id || '',\n    gateway_display_name: hop.gateway_display_name || '',\n    observed_ip: hop.observed_ip || '',\n    country_code: hop.country_code || '',\n    region: hop.region || '',\n    city: hop.city || '',\n    status: hop.status || '',\n    delay_ms: Number(hop.delay_ms || 0),\n  };\n}"
+      },
+      "id": "9ebcc33e-0265-50da-9aa7-d8d8cd86ee76",
+      "name": "Evaluate Proxy Exit IP",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "175f598c",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d9403719-dbcb-5631-ad20-68abdbb00b07",
+      "name": "Proxy Exit IP OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "b5b44949",
+              "leftValue": "={{ $json.preflight_enabled }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "50a5a1d3-dc26-53c7-ad3f-34b9b8b2d517",
+      "name": "Preflight Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2880,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const current = $('Evaluate Proxy Exit IP').first().json;\nconst data = { ...(current.data || {}) };\ndata.accepted = true;\ndata.preflight_enabled = false;\ndata.cf_canary_enabled = false;\ndata.error_message = '';\nreturn [{ json: { ...current, success: true, error_message: '', data } }];\n"
+      },
+      "id": "ed991f3c-be3d-5c54-980c-f627a12d30bf",
+      "name": "Build No Preflight Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3200,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/ip_fraud_check' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { ip: $json.exit_ip } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "76b9f96f-5a82-5a48-afb5-fa7d8c8a3354",
+      "name": "IP Fraud Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3200,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const base = $('Evaluate Proxy Exit IP').first().json;\nconst response = $input.first().json;\nconst fraudResponse = httpBody(response);\nconst fraud = fraudResponse?.check || {};\nconst transportError = httpOK(response) ? '' : (fraudResponse?.message || fraudResponse?.error || response.statusMessage || 'IP fraud check failed');\nconst errorMessage = transportError || fraudRejectReason(base, fraud);\nreturn [{ json: { kind: 'fraud', accepted: !errorMessage, error_message: errorMessage, fraud_response: fraudResponse } }];\nfunction httpBody(response) { return response && Object.prototype.hasOwnProperty.call(response, 'body') ? response.body : response; }\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\nfunction fraudRejectReason(base, fraud) {\n  const level = fraud.risk_level || '';\n  if (['PROXY_IP_FRAUD_RISK_LEVEL_UNSUPPORTED', 'PROXY_IP_FRAUD_RISK_LEVEL_UNKNOWN', 'PROXY_IP_FRAUD_RISK_LEVEL_UNSPECIFIED', ''].includes(level)) return 'IP fraud check unavailable';\n  if (['PROXY_IP_FRAUD_RISK_LEVEL_HIGH', 'PROXY_IP_FRAUD_RISK_LEVEL_CRITICAL'].includes(level)) return `IP fraud risk rejected: ${level}`;\n  const riskScore = Number(fraud.risk_score || 0);\n  const purityScore = Math.max(0, Math.min(100, 100 - riskScore));\n  if (Number(base.min_ip_purity_score || 0) > 0 && purityScore < Number(base.min_ip_purity_score)) return `IP purity rejected: ${purityScore}`;\n  if (base.require_residential && fraud.network_kind && !['PROXY_IP_NETWORK_KIND_RESIDENTIAL', 'PROXY_IP_NETWORK_KIND_ISP'].includes(fraud.network_kind)) return `proxy network is not residential-compatible: ${fraud.network_kind}`;\n  if (['PROXY_IP_ANONYMIZER_KIND_PROXY', 'PROXY_IP_ANONYMIZER_KIND_VPN', 'PROXY_IP_ANONYMIZER_KIND_TOR', 'PROXY_IP_ANONYMIZER_KIND_CRAWLER'].includes(fraud.anonymizer_kind || '')) return `proxy anonymizer rejected: ${fraud.anonymizer_kind}`;\n  return '';\n}\n"
+      },
+      "id": "c671f941-c2b2-5340-a355-68ffb990dd4b",
+      "name": "Evaluate IP Fraud",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e0eeb13d",
+              "leftValue": "={{ $json.cf_canary_enabled }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4c456d4c-9e3a-5885-9d92-ff6b11cb46a1",
+      "name": "CF Canary Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3200,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/check_cf_access_risk' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { ...$json.check_request, ip: $json.exit_ip, expected_country_code: $json.settings?.country_code || $json.data?.country_code || '' } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "5f939370-49bd-5ae1-9d59-c322d0a8f6ab",
+      "name": "CF Canary Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3520,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const response = $input.first().json;\nconst edgeResponse = httpBody(response);\nconst edge = edgeResponse?.check || {};\nconst transportError = httpOK(response) ? '' : (edgeResponse?.message || edgeResponse?.error || response.statusMessage || 'CF canary check failed');\nconst errorMessage = transportError || edgeRejectReason(edge);\nreturn [{ json: { kind: 'edge', accepted: !errorMessage, error_message: errorMessage, edge_response: edgeResponse } }];\nfunction httpBody(response) { return response && Object.prototype.hasOwnProperty.call(response, 'body') ? response.body : response; }\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\nfunction edgeRejectReason(edge) {\n  const level = edge.risk_level || '';\n  if (level === 'PROXY_EDGE_ACCESS_RISK_LEVEL_LOW') return '';\n  if (!level) return 'CF canary unavailable';\n  if (level === 'PROXY_EDGE_ACCESS_RISK_LEVEL_UNSUPPORTED') return '';\n  return `CF canary rejected: ${level}`;\n}\n"
+      },
+      "id": "7aa50af5-621f-58e2-8aab-a6c6a5360a03",
+      "name": "Evaluate CF Canary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3840,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: { kind: 'edge', accepted: true, error_message: '', edge_response: { check: { risk_level: 'PROXY_EDGE_ACCESS_RISK_LEVEL_UNSUPPORTED', risk_score: 0, risk_signals: [] } } } }];\n"
+      },
+      "id": "1572e82c-667f-5dd2-92f4-8dbd644fb5a8",
+      "name": "Skip CF Canary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3520,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 2
+      },
+      "id": "955ef209-e572-5de6-ad38-ff6adfa21218",
+      "name": "Merge Risk Checks",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        4160,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const base = $('Evaluate Proxy Exit IP').first().json;\nconst items = $input.all().map((item) => item.json || {});\nconst fraudItem = items.find((item) => item.kind === 'fraud') || {};\nconst edgeItem = items.find((item) => item.kind === 'edge') || {};\nconst errorMessage = fraudItem.error_message || edgeItem.error_message || '';\nconst data = baseData(base, base.exit_ip, fraudItem.fraud_response || {}, edgeItem.edge_response || {}, {}, !errorMessage, errorMessage);\nreturn [{ json: { ...base, success: !errorMessage, error_message: errorMessage, risk_accepted: !errorMessage, data } }];\nfunction baseData(base, exitIP, fraudResponse, edgeResponse, targetResponse, accepted, errorMessage) {\n  const lease = base.lease_response?.lease || {};\n  const session = lease.session || {};\n  const fraud = fraudResponse?.check || {};\n  const edge = edgeResponse?.check || {};\n  return {\n    ...(base.data || {}),\n    accepted,\n    error_message: errorMessage || '',\n    exit_ip: exitIP || edge.ip || fraud.ip || base.data?.exit_ip || '',\n    exit_geo: {\n      ip: exitIP || edge.ip || fraud.ip || base.data?.exit_ip || '',\n      country_code: fraud.country_code || base.data?.country_code || base.settings?.country_code || '',\n      region: fraud.region || base.data?.region || base.settings?.region || '',\n      city: fraud.city || base.data?.city || '',\n    },\n    ip_fraud_check: fraud,\n    edge_access_check: edge,\n    proxy_runtime_lease: base.data?.proxy_runtime_lease || { lease_id: lease.lease_id || '', provider_id: session.provider_id || '', expires_at: lease.expires_at || session.expires_at || '' },\n    chain_plan: base.data?.chain_plan || base.lease_response?.chain_plan || lease.chain_plan || {},\n    chain: chainSummary(base.data?.chain_plan || base.lease_response?.chain_plan || lease.chain_plan || {}, exitIP || edge.ip || fraud.ip || base.data?.exit_ip || '', fraud),\n  };\n}\nfunction chainSummary(plan, exitIP = '', fraud = {}) {\n  const hops = Array.isArray(plan.hops) ? plan.hops.map(normalizeHop).filter((hop) => !String(hop.role).includes('DYNAMIC_EXIT')) : [];\n  const observedExitIP = String(exitIP || fraud.ip || '').trim();\n  if (observedExitIP) {\n    const gateway = plan.dynamic_gateway || {};\n    hops.push({\n      hop_id: `dynamic-exit:${observedExitIP}`,\n      order: hops.length + 1,\n      role: 'PROXY_CHAIN_HOP_ROLE_DYNAMIC_EXIT',\n      source_kind: 'PROXY_SOURCE_KIND_DYNAMIC_IP',\n      source_id: '',\n      source_display_name: '',\n      node_id: '',\n      node_display_name: '',\n      provider_id: gateway.provider_id || '',\n      gateway_id: gateway.gateway_id || '',\n      gateway_display_name: gateway.display_name || '',\n      observed_ip: observedExitIP,\n      country_code: fraud.country_code || '',\n      region: fraud.region || '',\n      city: fraud.city || '',\n      status: '',\n      delay_ms: 0,\n    });\n  }\n  return { chain_id: plan.chain_id || '', hops };\n}\nfunction normalizeHop(hop) {\n  return {\n    hop_id: hop.hop_id || '',\n    order: Number(hop.order || 0),\n    role: hop.role || '',\n    source_kind: hop.source_kind || '',\n    source_id: hop.source_id || '',\n    source_display_name: hop.source_display_name || '',\n    node_id: hop.node_id || '',\n    node_display_name: hop.node_display_name || '',\n    provider_id: hop.provider_id || '',\n    gateway_id: hop.gateway_id || '',\n    gateway_display_name: hop.gateway_display_name || '',\n    observed_ip: hop.observed_ip || '',\n    country_code: hop.country_code || '',\n    region: hop.region || '',\n    city: hop.city || '',\n    status: hop.status || '',\n    delay_ms: Number(hop.delay_ms || 0),\n  };\n}"
+      },
+      "id": "70e53311-de08-5c7c-b6a1-7514c3e02c3e",
+      "name": "Combine Risk Checks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4480,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6435c34b",
+              "leftValue": "={{ $json.risk_accepted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d584e90e-fae1-5ad0-8495-59d4a75d0550",
+      "name": "Risk Checks Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4800,
+        -220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Combine Risk Checks').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "f3e021d7-7888-58f3-bf87-269e17fc783c",
+      "name": "Release Lease After Risk Reject",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5120,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: $('Combine Risk Checks').first().json }];\n"
+      },
+      "id": "32968d55-d7d6-562c-b5f0-ec5280ec76ef",
+      "name": "Continue After Risk Reject",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5440,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const base = $input.first().json;\nconst targets = Array.isArray(base.target_urls) ? base.target_urls : [];\nif (!targets.length) return [{ json: { ...base, target_connectivity_enabled: false } }];\nreturn targets.map((target_url) => ({ json: { ...base, target_url, target_connectivity_enabled: true, connectivity_request: { ...(base.check_request || {}), target_url } } }));\n"
+      },
+      "id": "179420b9-f163-5219-a526-07e460b878a1",
+      "name": "Build Target Connectivity Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5120,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "f5f229a1",
+              "leftValue": "={{ $json.target_connectivity_enabled }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "b8713b9a-2310-5e35-bc44-82ba3b26bb8c",
+      "name": "Target Connectivity Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5440,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/target_connectivity_check' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.connectivity_request }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "d603b191-b58a-555b-b7b6-7867a3e52d98",
+      "name": "Target Connectivity Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5760,
+        -520
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const targetItems = $('Build Target Connectivity Items').all().map((item) => item.json || {});\nconst base = targetItems[0] || $('Combine Risk Checks').first().json;\nconst response = $input.first().json || {};\nconst body = httpBody(response);\nconst check = body?.check || {};\nconst statusCode = Number(check.status_code || 0);\nconst accepted = httpOK(response) && !!check.reachable && statusCode >= 100 && statusCode < 600;\nconst target = check.target_url || targetItems[0]?.target_url || 'https://api.openai.com/v1/models';\nconst errorMessage = accepted ? '' : (check.error_message || body?.message || body?.error || response.statusMessage || `target connectivity rejected: ${target}${statusCode ? ` HTTP ${statusCode}` : ''}`);\nconst data = { ...(base.data || {}) };\ndata.accepted = accepted;\ndata.error_message = errorMessage;\nreturn [{ json: { ...base, success: accepted, error_message: errorMessage, target_accepted: accepted, data } }];\nfunction httpBody(response) { return response && Object.prototype.hasOwnProperty.call(response, 'body') ? response.body : response; }\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\n"
+      },
+      "id": "6b53a8b6-66c6-585d-827b-923bafa38570",
+      "name": "Evaluate Target Connectivity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6080,
+        -520
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e2589342",
+              "leftValue": "={{ $json.target_accepted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "c7a39ed7-b7f7-5327-bbc1-976f0af5096b",
+      "name": "Target Connectivity Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6400,
+        -520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Evaluate Target Connectivity').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "6ab5a9da-f8d2-5216-8773-cd10f1309b53",
+      "name": "Release Lease After Target Reject",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6720,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: $('Evaluate Target Connectivity').first().json }];\n"
+      },
+      "id": "b6008aad-a1e4-5647-aeb2-85e8c785bb47",
+      "name": "Continue After Target Reject",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7040,
+        -120
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Evaluate Proxy Exit IP').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "7b10273b-3c72-557f-8a01-ca14adee0b47",
+      "name": "Release Lease After Exit IP Reject",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: $('Evaluate Proxy Exit IP').first().json }];\n"
+      },
+      "id": "cf7f5f76-93b0-57af-92a0-ebf2e9aefd47",
+      "name": "Continue After Exit IP Reject",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3200,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const settings = $('Get GPT Proxy Settings').first().json;\nconst attempts = Math.max(1, Math.min(100, Number(settings.max_proxy_attempts || 10)));\nconst processed = $input.all().map((item) => item.json || {});\nconst last = [...processed].reverse().find((item) => item.error_message || item.data?.error_message) || {};\nconst errorMessage = last.error_message || last.data?.error_message || `no acceptable proxy in ${attempts} attempts`;\nreturn [{ json: {\n  job_id: settings.job_id,\n  account_id: settings.account_id,\n  n8n_execution_id: settings.n8n_execution_id,\n  success: false,\n  error_message: errorMessage,\n  data: last.data || {\n    purpose: settings.purpose || 'REGISTER_PROTOCOL',\n    accepted: false,\n    max_proxy_attempts: attempts,\n    error_message: errorMessage,\n    reason: 'proxy_preflight_attempts_exhausted',\n  },\n}}];\n"
+      },
+      "id": "8b3b462a-ec07-586a-a489-4d8bc93b7997",
+      "name": "Build Final Proxy Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const current = $input.first().json || {};\nconst data = { ...(current.data || {}) };\ndata.accepted = true;\ndata.error_message = '';\nreturn [{ json: { ...current, success: true, error_message: '', data } }];\n"
+      },
+      "id": "49c3303c-24f3-5bf4-9e50-c7877bd925d4",
+      "name": "Build Final Proxy Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6720,
+        -700
+      ]
+    },
+    {
+      "parameters": {
+        "content": "1. Settings → attempt items",
+        "height": 340,
+        "width": 1040,
+        "color": 4
+      },
+      "id": "layout-note-gpt-proxy-01",
+      "name": "Layout Note - gpt-proxy-01",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "content": "2. Lease dynamic IP and resolve exit IP",
+        "height": 520,
+        "width": 1640,
+        "color": 5
+      },
+      "id": "layout-note-gpt-proxy-02",
+      "name": "Layout Note - gpt-proxy-02",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "content": "3. Optional risk checks\n- IP fraud\n- Cloudflare canary\n- canary skip path is explicit",
+        "height": 640,
+        "width": 1560,
+        "color": 6
+      },
+      "id": "layout-note-gpt-proxy-03",
+      "name": "Layout Note - gpt-proxy-03",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3120,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "content": "4. Target connectivity is the final acceptance gate",
+        "height": 620,
+        "width": 1960,
+        "color": 3
+      },
+      "id": "layout-note-gpt-proxy-04",
+      "name": "Layout Note - gpt-proxy-04",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5040,
+        -760
+      ]
+    },
+    {
+      "parameters": {
+        "content": "Reject paths release lease, then return to attempt loop",
+        "height": 260,
+        "width": 2080,
+        "color": 2
+      },
+      "id": "layout-note-gpt-proxy-05",
+      "name": "Layout Note - gpt-proxy-05",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        5040,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "When Executed by GPT Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get GPT Proxy Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get GPT Proxy Settings": {
+      "main": [
+        [
+          {
+            "node": "Build Proxy Attempt Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Proxy Attempt Items": {
+      "main": [
+        [
+          {
+            "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Proxy Attempts": {
+      "main": [
+        [
+          {
+            "node": "Build Final Proxy Failure",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Acquire Dynamic Lease",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Acquire Dynamic Lease": {
+      "main": [
+        [
+          {
+            "node": "Build Proxy Check Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Proxy Check Request": {
+      "main": [
+        [
+          {
+            "node": "Get Proxy Exit IP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Proxy Exit IP": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Proxy Exit IP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Proxy Exit IP": {
+      "main": [
+        [
+          {
+            "node": "Proxy Exit IP OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proxy Exit IP OK?": {
+      "main": [
+        [
+          {
+            "node": "Preflight Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lease After Exit IP Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lease After Exit IP Reject": {
+      "main": [
+        [
+          {
+            "node": "Continue After Exit IP Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue After Exit IP Reject": {
+      "main": [
+        [
+          {
+            "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preflight Enabled?": {
+      "main": [
+        [
+          {
+            "node": "IP Fraud Check",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "CF Canary Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build No Preflight Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build No Preflight Success": {
+      "main": [
+        [
+          {
+            "node": "Build Final Proxy Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IP Fraud Check": {
+      "main": [
+        [
+          {
+            "node": "Evaluate IP Fraud",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate IP Fraud": {
+      "main": [
+        [
+          {
+            "node": "Merge Risk Checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CF Canary Enabled?": {
+      "main": [
+        [
+          {
+            "node": "CF Canary Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip CF Canary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CF Canary Check": {
+      "main": [
+        [
+          {
+            "node": "Evaluate CF Canary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate CF Canary": {
+      "main": [
+        [
+          {
+            "node": "Merge Risk Checks",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Skip CF Canary": {
+      "main": [
+        [
+          {
+            "node": "Merge Risk Checks",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Risk Checks": {
+      "main": [
+        [
+          {
+            "node": "Combine Risk Checks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combine Risk Checks": {
+      "main": [
+        [
+          {
+            "node": "Risk Checks Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Checks Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Build Target Connectivity Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lease After Risk Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lease After Risk Reject": {
+      "main": [
+        [
+          {
+            "node": "Continue After Risk Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue After Risk Reject": {
+      "main": [
+        [
+          {
+            "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Target Connectivity Items": {
+      "main": [
+        [
+          {
+            "node": "Target Connectivity Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Target Connectivity Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Target Connectivity Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Final Proxy Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Target Connectivity Check": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Target Connectivity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Target Connectivity": {
+      "main": [
+        [
+          {
+            "node": "Target Connectivity Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Target Connectivity Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Build Final Proxy Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lease After Target Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lease After Target Reject": {
+      "main": [
+        [
+          {
+            "node": "Continue After Target Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue After Target Reject": {
+      "main": [
+        [
+          {
+            "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all"
+  },
+  "versionId": "218b8a7a-fe84-51ef-9844-b66bf2db41c4",
+  "meta": null,
+  "pinData": null,
+  "tags": []
+}

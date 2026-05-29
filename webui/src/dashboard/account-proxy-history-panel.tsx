@@ -88,7 +88,7 @@ function chainHops(row: AccountProxyUsage) {
 function hopLabel(hop: AccountProxyChainHop) {
   const role = compact(hop.role).replace(/^CHAIN HOP ROLE /, '');
   if (role === 'LINE PROXY') return `线路 ${hop.order || ''}`.trim();
-  if (role === 'DYNAMIC GATEWAY') return `网关 ${hop.order || ''}`.trim();
+  if (role === 'DYNAMIC GATEWAY') return `动态入口 ${hop.order || ''}`.trim();
   if (role === 'DYNAMIC EXIT') return `出口 ${hop.order || ''}`.trim();
   return `Hop ${hop.order || ''}`.trim();
 }

@@ -79,6 +79,10 @@ func (s *Server) UseN8NLoginSessionProtocolProxy(ctx context.Context, jobID stri
 	return result, nil
 }
 
+func (s *Server) CheckN8NLoginSessionProtocolAuthEdge(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
+	return s.checkN8NProtocolAuthEdge(ctx, jobID, accountID, n8nExecutionID, proxyURL, protocolLoginMode, s.bindN8NLoginProtocolExecution)
+}
+
 func (s *Server) StartN8NLoginSessionProtocolAuth(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error) {
 	jobID, accountID, n8nExecutionID = normalizeN8NLoginProtocolIDs(jobID, accountID, n8nExecutionID)
 	if err := s.bindN8NLoginProtocolExecution(ctx, jobID, n8nExecutionID); err != nil {

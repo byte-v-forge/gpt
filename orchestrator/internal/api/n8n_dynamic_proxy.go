@@ -27,6 +27,8 @@ type n8nDynamicProxySettings struct {
 	CFCanaryEnabled        bool           `json:"cf_canary_enabled"`
 	MaxProxyAttempts       uint32         `json:"max_proxy_attempts"`
 	TargetConnectivityURLs []string       `json:"target_connectivity_urls"`
+	AuthEdgeCheckEnabled   bool           `json:"auth_edge_check_enabled"`
+	AuthEdgeCheckTarget    string         `json:"auth_edge_check_target,omitempty"`
 	LeaseRequest           map[string]any `json:"lease_request"`
 }
 
@@ -88,6 +90,7 @@ func (s *Server) n8nDynamicProxySettings(ctx context.Context, jobID string, acco
 	if attempts == 0 {
 		attempts = 10
 	}
+	authEdgeCheckEnabled := purpose == actionRegisterProtocol || purpose == actionLoginSessionProtocol
 	request := map[string]any{
 		"account_id": accountID,
 		"purpose":    purpose,
@@ -125,6 +128,8 @@ func (s *Server) n8nDynamicProxySettings(ctx context.Context, jobID string, acco
 			"min_ip_purity_score":      preflight.GetMinIpPurityScore(),
 			"max_proxy_attempts":       attempts,
 			"target_connectivity_urls": preflight.GetTargetConnectivityUrls(),
+			"auth_edge_check_enabled":  authEdgeCheckEnabled,
+			"auth_edge_check_target":   "chatgpt_csrf",
 			"proxy_preflight_step":     "settings_loaded",
 		}),
 	}); err != nil {
@@ -145,6 +150,8 @@ func (s *Server) n8nDynamicProxySettings(ctx context.Context, jobID string, acco
 		CFCanaryEnabled:        preflight.GetCfCanaryEnabled(),
 		MaxProxyAttempts:       attempts,
 		TargetConnectivityURLs: preflight.GetTargetConnectivityUrls(),
+		AuthEdgeCheckEnabled:   authEdgeCheckEnabled,
+		AuthEdgeCheckTarget:    "chatgpt_csrf",
 		LeaseRequest:           request,
 	}, nil
 }
@@ -210,6 +217,41 @@ func (s *Server) failN8NDynamicProxy(ctx context.Context, jobID string, accountI
 		return nil, markErr
 	}
 	return &n8nDynamicProxyResult{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Step: stepDynamicIPPreflight, Data: data}, nil
+}
+
+func (s *Server) checkN8NProtocolAuthEdge(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string, mode string, bind func(context.Context, string, string) error) (any, error) {
+	jobID, accountID, n8nExecutionID = normalizeN8NRegisterProtocolIDs(jobID, accountID, n8nExecutionID)
+	if err := bind(ctx, jobID, n8nExecutionID); err != nil {
+		return nil, err
+	}
+	proxyURL = strings.TrimSpace(proxyURL)
+	base := map[string]any{
+		"account_id":             accountID,
+		"n8n_execution_id":       n8nExecutionID,
+		"auth_edge_check_target": "chatgpt_csrf",
+	}
+	if proxyURL == "" {
+		base["auth_edge_accepted"] = false
+		base["error_message"] = "protocol proxy url is required"
+		return &n8nDynamicProxyResult{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Step: stepProtocolAuthEdgeCheck, Success: false, Data: base}, nil
+	}
+	input := s.protocolAuthStartInput(ctx, jobID, accountID, mode)
+	input.ProxyUrl = proxyURL
+	out, err := s.activities.ProtocolAuthEdgeCheckActivity(ctx, input)
+	data := structMap(out.GetData())
+	for key, value := range base {
+		if _, ok := data[key]; !ok {
+			data[key] = value
+		}
+	}
+	if err != nil {
+		data["auth_edge_accepted"] = false
+		data["error_message"] = err.Error()
+		return &n8nDynamicProxyResult{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Step: stepProtocolAuthEdgeCheck, Success: false, ProxyURL: proxyURL, Data: data}, nil
+	}
+	data["auth_edge_accepted"] = true
+	data["error_message"] = ""
+	return &n8nDynamicProxyResult{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Step: stepProtocolAuthEdgeCheck, Success: true, ProxyURL: proxyURL, Data: data}, nil
 }
 
 func (s *Server) dynamicProxyGeoFromFingerprint(ctx context.Context, accountID string, countryCode string, region string) (string, string, string) {

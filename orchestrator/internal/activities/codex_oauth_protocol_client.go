@@ -11,11 +11,9 @@ import (
 	"time"
 
 	fhttp "github.com/bogdanfinn/fhttp"
-	"github.com/byte-v-forge/common-lib/browserfingerprint"
 	"github.com/byte-v-forge/common-lib/browserhttp"
 	"github.com/byte-v-forge/common-lib/fingerprinthttp"
 	"github.com/byte-v-forge/common-lib/stringx"
-	"github.com/google/uuid"
 )
 
 const (
@@ -43,6 +41,7 @@ type codexOAuthProtocolHTTPResponse struct {
 func newGptClient(cfg CodexOAuthConfig, state *codexOAuthProtocolState, profile fingerprinthttp.Profile) (*GptClient, error) {
 	cfg = cfg.withDefaults()
 	profile = profile.WithDefaults(codexOAuthProtocolDefaultProfile(cfg))
+	profile = codexOAuthProtocolCleanProfile(cfg, profile)
 	client, err := fingerprinthttp.New(fingerprinthttp.Config{
 		Timeout:            45 * time.Second,
 		ProxyURL:           profile.ProxyURL,
@@ -171,7 +170,6 @@ func (c *GptClient) applyGptIdentityHeaders(headers http.Header) {
 	if headers == nil {
 		return
 	}
-	c.profile.ApplyBrowserHeaders(headers)
 	if headers.Get("User-Agent") == "" {
 		headers.Set("User-Agent", codexOAuthProtocolUserAgent)
 	}
@@ -179,7 +177,6 @@ func (c *GptClient) applyGptIdentityHeaders(headers http.Header) {
 	if deviceID := c.deviceID(); deviceID != "" {
 		headers.Set("oai-device-id", deviceID)
 	}
-	headers.Set("oai-language", codexOAuthProtocolLanguage)
 	for key, value := range codexOAuthProtocolDatadogHeaders() {
 		headers.Set(key, value)
 	}
@@ -282,26 +279,24 @@ func protocolCookieHostMatches(hostKey string, hostHints ...string) bool {
 
 func codexOAuthProtocolDefaultProfile(cfg CodexOAuthConfig) fingerprinthttp.Profile {
 	cfg = cfg.withDefaults()
-	candidate, _ := browserfingerprint.SelectChromiumCandidate(browserfingerprint.DefaultChromiumCandidates(), cfg.ProtocolTLSProfile)
-	fp := browserfingerprint.BuildChromium(candidate, "en-US", codexOAuthProtocolStableDeviceID(candidate))
-	if strings.TrimSpace(fp.UserAgent) == "" {
-		fp.UserAgent = codexOAuthProtocolUserAgent
-	}
 	return fingerprinthttp.Profile{
 		ProxyURL:       cfg.ProtocolProxyURL,
-		TLSProfileName: fp.TLSProfileName,
-		UserAgent:      fp.UserAgent,
-		SecCHUA:        fp.SecCHUA,
-		SecCHPlatform:  fp.SecCHPlatform,
+		TLSProfileName: cfg.ProtocolTLSProfile,
+		UserAgent:      codexOAuthProtocolUserAgent,
 		AcceptLanguage: codexOAuthProtocolAcceptLanguage,
-		Language:       codexOAuthProtocolLanguage,
-		DeviceID:       fp.DeviceID,
 	}
 }
 
-func codexOAuthProtocolStableDeviceID(candidate browserfingerprint.ChromiumCandidate) string {
-	seed := fmt.Sprintf("byte-v-forge:codex-oauth-protocol:device:%s:%s:%s", candidate.ProfileName, candidate.MajorVersion, browserfingerprint.OSAlias(candidate))
-	return uuid.NewSHA1(uuid.NameSpaceOID, []byte(seed)).String()
+func codexOAuthProtocolCleanProfile(cfg CodexOAuthConfig, profile fingerprinthttp.Profile) fingerprinthttp.Profile {
+	cfg = cfg.withDefaults()
+	profile.ProxyURL = cfg.ProtocolProxyURL
+	profile.UserAgent = codexOAuthProtocolUserAgent
+	profile.AcceptLanguage = codexOAuthProtocolAcceptLanguage
+	profile.SecCHUA = ""
+	profile.SecCHPlatform = ""
+	profile.Language = ""
+	profile.DeviceID = ""
+	return profile
 }
 
 func codexOAuthProtocolResponseJSON(resp *codexOAuthProtocolHTTPResponse) map[string]any {
@@ -318,7 +313,26 @@ func codexOAuthProtocolRequireOK(resp *codexOAuthProtocolHTTPResponse, label str
 	if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
 		return nil
 	}
+	if codexOAuthProtocolEdgeChallenge(resp) {
+		return fmt.Errorf("%s failed: edge challenge status %d", label, resp.StatusCode)
+	}
 	return fmt.Errorf("%s failed: status %d %s", label, resp.StatusCode, codexOAuthProtocolSafeText(string(resp.Body), 360))
+}
+
+func codexOAuthProtocolEdgeChallenge(resp *codexOAuthProtocolHTTPResponse) bool {
+	if resp == nil {
+		return false
+	}
+	if strings.EqualFold(strings.TrimSpace(resp.Header.Get("cf-mitigated")), "challenge") {
+		return true
+	}
+	body := strings.ToLower(string(resp.Body))
+	for _, marker := range []string{"challenge-platform", "cf-chl", "cf-mitigated", "just a moment"} {
+		if strings.Contains(body, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 var (

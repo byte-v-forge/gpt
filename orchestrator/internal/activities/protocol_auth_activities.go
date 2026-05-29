@@ -237,16 +237,9 @@ func newProtocolAuthState() (*codexOAuthProtocolState, error) {
 }
 
 func protocolAuthChatGPTAuthURL(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, account *pb.Account, mode string, data map[string]any) (string, error) {
-	csrfResp, err := client.get(ctx, "https://chatgpt.com/api/auth/csrf", protocolAuthChatGPTLoginURL, false)
+	csrf, err := protocolAuthChatGPTCSRF(ctx, client, data)
 	if err != nil {
 		return "", err
-	}
-	if err := codexOAuthProtocolRequireOK(csrfResp, "chatgpt csrf"); err != nil {
-		return "", err
-	}
-	csrf := strings.TrimSpace(stringAny(codexOAuthProtocolResponseJSON(csrfResp)["csrfToken"]))
-	if csrf == "" {
-		return "", fmt.Errorf("chatgpt csrf token missing")
 	}
 	if strings.TrimSpace(state.DeviceID) == "" {
 		state.DeviceID = client.deviceID()
@@ -287,6 +280,53 @@ func protocolAuthChatGPTAuthURL(ctx context.Context, client *GptClient, state *c
 	state.OAuthState = codexOAuthProtocolQueryFirst(authURL, "state")
 	data["chatgpt_auth_url_ready"] = true
 	return authURL, nil
+}
+
+func protocolAuthChatGPTCSRF(ctx context.Context, client *GptClient, data map[string]any) (string, error) {
+	if data == nil {
+		data = map[string]any{}
+	}
+	var lastErr error
+	for attempt := 1; attempt <= 3; attempt++ {
+		csrf, err := protocolAuthChatGPTCSRFAttempt(ctx, client, data, attempt)
+		if err == nil {
+			return csrf, nil
+		}
+		lastErr = err
+		if attempt < 3 {
+			select {
+			case <-ctx.Done():
+				return "", ctx.Err()
+			case <-time.After(time.Duration(attempt) * 5 * time.Second):
+			}
+		}
+	}
+	if lastErr != nil {
+		return "", lastErr
+	}
+	return "", fmt.Errorf("chatgpt csrf failed")
+}
+
+func protocolAuthChatGPTCSRFAttempt(ctx context.Context, client *GptClient, data map[string]any, attempt int) (string, error) {
+	resp, err := client.get(ctx, "https://chatgpt.com/api/auth/csrf", protocolAuthChatGPTLoginURL, false)
+	if err != nil {
+		return "", err
+	}
+	data["chatgpt_csrf_status"] = resp.StatusCode
+	data["chatgpt_csrf_attempt"] = attempt
+	if codexOAuthProtocolEdgeChallenge(resp) {
+		data["chatgpt_csrf_edge_challenge"] = true
+		return "", fmt.Errorf("chatgpt csrf failed: edge challenge status %d", resp.StatusCode)
+	}
+	if err := codexOAuthProtocolRequireOK(resp, "chatgpt csrf"); err != nil {
+		return "", err
+	}
+	csrf := strings.TrimSpace(stringAny(codexOAuthProtocolResponseJSON(resp)["csrfToken"]))
+	if csrf == "" {
+		return "", fmt.Errorf("chatgpt csrf token missing")
+	}
+	data["chatgpt_csrf_ready"] = true
+	return csrf, nil
 }
 
 func protocolAuthChatGPTScreenHint(mode string) string {

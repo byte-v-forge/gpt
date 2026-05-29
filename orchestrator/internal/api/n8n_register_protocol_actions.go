@@ -122,6 +122,10 @@ func (s *Server) UseN8NRegisterProtocolProxy(ctx context.Context, jobID string, 
 	return result, nil
 }
 
+func (s *Server) CheckN8NRegisterProtocolAuthEdge(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
+	return s.checkN8NProtocolAuthEdge(ctx, jobID, accountID, n8nExecutionID, proxyURL, protocolRegisterMode, s.bindN8NRegisterProtocolExecution)
+}
+
 func (s *Server) StartN8NRegisterProtocolAuth(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error) {
 	jobID, accountID, n8nExecutionID = normalizeN8NRegisterProtocolIDs(jobID, accountID, n8nExecutionID)
 	if err := s.bindN8NRegisterProtocolExecution(ctx, jobID, n8nExecutionID); err != nil {

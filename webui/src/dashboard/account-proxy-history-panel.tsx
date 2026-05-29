@@ -39,11 +39,11 @@ function ProxyUsageCard({ row }: { row: AccountProxyUsage }) {
           {!chainHops(row).length && <InfoLine label="链路" value="-" />}
         </InfoGroup>
         <InfoGroup title="IP 风控">
-          <RiskBadge value={row.ip_fraud_check?.risk_level} score={row.ip_fraud_check?.risk_score} />
+          <RiskBadge value={row.ip_fraud_check?.risk_level} score={riskScore(row.ip_fraud_check)} />
           <InfoLine label="纯净度" value={scoreText(purityScore(row))} />
         </InfoGroup>
         <InfoGroup title="CF Canary">
-          <RiskBadge value={row.edge_access_check?.risk_level} score={row.edge_access_check?.risk_score} />
+          <RiskBadge value={row.edge_access_check?.risk_level} score={riskScore(row.edge_access_check)} />
         </InfoGroup>
         <InfoGroup title="目标连通">
           <ConnectivityBadge row={row} />
@@ -102,7 +102,7 @@ function hopValue(hop: AccountProxyChainHop) {
 }
 
 function hopName(hop: AccountProxyChainHop) {
-  if (hop.role?.includes('DYNAMIC_GATEWAY')) {
+  if (hop.role?.includes('DYNAMIC_GATEWAY') || hop.role?.includes('DYNAMIC_EXIT')) {
     return [providerName(hop.provider_id), gatewayName(hop.gateway_display_name, hop.gateway_id)].filter(Boolean).join(' / ');
   }
   if (hop.source_kind?.includes('SUBSCRIPTION')) return [hop.source_display_name, hop.node_display_name || hop.node_id].filter(Boolean).join(' / ');
@@ -132,9 +132,17 @@ function scoreText(score?: number) {
 }
 
 function purityScore(row: AccountProxyUsage) {
-  const score = Number(row.ip_fraud_check?.risk_score || 0);
-  if (!row.ip_fraud_check?.risk_level && score <= 0) return undefined;
+  const score = riskScore(row.ip_fraud_check);
+  if (!Number.isFinite(score)) return undefined;
   return Math.max(0, Math.min(100, 100 - score));
+}
+
+function riskScore(check?: { risk_level?: string; risk_score?: number }) {
+  const score = Number(check?.risk_score);
+  if (Number.isFinite(score)) return score;
+  const label = compact(check?.risk_level);
+  if (label.includes('LOW')) return 0;
+  return undefined;
 }
 
 function providerName(value?: string) {

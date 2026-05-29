@@ -7,6 +7,7 @@ const (
 	StepRegisterAccountStart            = "register_account_start"
 	StepRegisterAccountBrowser          = "register_account_browser"
 	StepProtocolUseProxy                = gptplugin.StepProtocolUseProxy
+	StepProtocolAuthEdgeCheck           = gptplugin.StepProtocolAuthEdgeCheck
 	StepDynamicIPCreateSession          = gptplugin.StepDynamicIPCreateSession
 	StepDynamicIPExitGeo                = gptplugin.StepDynamicIPExitGeo
 	StepDynamicIPPreflight              = gptplugin.StepDynamicIPPreflight

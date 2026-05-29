@@ -7,6 +7,7 @@ import {
   Input,
   Label,
   PanelHeader,
+  Switch,
   ToastMessage,
   useForm,
   useMutation,
@@ -89,9 +90,9 @@ function BooleanField({ control, name, label }: {
 }) {
   return (
     <Controller control={control} name={name} render={({ field }) => (
-      <Label className="flex items-center gap-2 rounded-md border border-[var(--border-soft)] p-3">
-        <Input className="size-4" checked={!!field.value} type="checkbox" onChange={(event) => field.onChange(event.target.checked)} />
+      <Label className="flex items-center justify-between gap-3 rounded-md border border-[var(--border-soft)] p-3">
         <span>{label}</span>
+        <Switch checked={!!field.value} onCheckedChange={field.onChange} />
       </Label>
     )} />
   );

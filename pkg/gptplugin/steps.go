@@ -2,6 +2,7 @@ package gptplugin
 
 const (
 	StepProtocolUseProxy             = "protocol_use_proxy"
+	StepProtocolAuthEdgeCheck        = "protocol_auth_edge_check"
 	StepDynamicIPCreateSession       = "dynamic_ip_create_session"
 	StepDynamicIPExitGeo             = "dynamic_ip_exit_geo"
 	StepDynamicIPPreflight           = "dynamic_ip_preflight"

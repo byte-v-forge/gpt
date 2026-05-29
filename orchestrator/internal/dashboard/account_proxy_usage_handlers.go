@@ -119,8 +119,8 @@ func proxyUsageResponse(row db.AccountProxyUsage) accountProxyUsageResponse {
 		CountryCode:     row.CountryCode,
 		Region:          row.Region,
 		City:            row.City,
-		IPFraudCheck:    dataMap(data, "ip_fraud_check"),
-		EdgeAccessCheck: dataMap(data, "edge_access_check"),
+		IPFraudCheck:    riskCheckMap(dataMap(data, "ip_fraud_check")),
+		EdgeAccessCheck: riskCheckMap(dataMap(data, "edge_access_check")),
 		TargetReachable: dataBoolDefault(data, "target_connectivity_reachable", row.Accepted),
 		AttemptIndex:    row.AttemptIndex,
 		Accepted:        row.Accepted,
@@ -184,6 +184,24 @@ func dataMap(data map[string]any, key string) map[string]any {
 		return nil
 	}
 	value, _ := data[key].(map[string]any)
+	return value
+}
+
+func riskCheckMap(value map[string]any) map[string]any {
+	if len(value) == 0 {
+		return value
+	}
+	if _, ok := value["risk_score"]; ok {
+		return value
+	}
+	if strings.Contains(strings.ToUpper(dataString(value, "risk_level")), "LOW") {
+		out := make(map[string]any, len(value)+1)
+		for key, item := range value {
+			out[key] = item
+		}
+		out["risk_score"] = 0
+		return out
+	}
 	return value
 }
 

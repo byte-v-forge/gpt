@@ -16,6 +16,7 @@ type N8NRegisterProtocolActions interface {
 	RecordN8NDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string, data map[string]any) (any, error)
 	FailN8NDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error)
 	UseN8NRegisterProtocolProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error)
+	CheckN8NRegisterProtocolAuthEdge(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
 	StartN8NRegisterProtocolAuth(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error)
 	WaitN8NRegisterProtocolAuth(ctx context.Context, jobID string, accountID string, n8nExecutionID string, flowID string, email string) (any, error)
 	AwaitN8NRegisterProtocolOTP(ctx context.Context, jobID string, accountID string, n8nExecutionID string, flowID string, email string, timeoutSeconds int32, otpIssuedAfterUnix int64, resumeURL string) (any, error)
@@ -81,6 +82,8 @@ func (s *server) handleRegisterProtocolAction(w http.ResponseWriter, r *http.Req
 		s.failRegisterProtocolProxy(w, r)
 	case "use-proxy":
 		s.useRegisterProtocolProxy(w, r)
+	case "auth-edge-check":
+		s.checkRegisterProtocolAuthEdge(w, r)
 	case "start":
 		s.startRegisterProtocolAuth(w, r)
 	case "wait":
@@ -135,6 +138,16 @@ func (s *server) useRegisterProtocolProxy(w http.ResponseWriter, r *http.Request
 		return
 	}
 	resp, err := s.n8nRegisterProtocolActions.UseN8NRegisterProtocolProxy(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID)
+	s.writeRegisterProtocolAction(w, resp, err)
+}
+
+func (s *server) checkRegisterProtocolAuthEdge(w http.ResponseWriter, r *http.Request) {
+	var req protocolAuthProxyRecordRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	resp, err := s.n8nRegisterProtocolActions.CheckN8NRegisterProtocolAuthEdge(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
 	s.writeRegisterProtocolAction(w, resp, err)
 }
 

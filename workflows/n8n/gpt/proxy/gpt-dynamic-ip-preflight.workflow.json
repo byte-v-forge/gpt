@@ -45,7 +45,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const settingsResponse = $input.first().json;\nconst settings = settingsResponse.body || settingsResponse;\nconst input = $('When Executed by GPT Workflow').first().json;\nconst maxAttempts = Math.max(1, Math.min(100, Number(settings.max_proxy_attempts || 10)));\nconst lineAttemptLimit = Math.ceil(maxAttempts / 2);\nconst targets = targetURLs(input, settings);\nconst items = [];\nfor (let attempt = 1; attempt <= maxAttempts; attempt++) {\n  const preferLineProxy = attempt <= lineAttemptLimit;\n  const gatewayAttempt = preferLineProxy ? attempt : attempt - lineAttemptLimit;\n  const request = JSON.parse(JSON.stringify(settings.lease_request || {}));\n  request.policy = request.policy || {};\n  request.policy.labels = {\n    ...(request.policy.labels || {}),\n    attempt: String(gatewayAttempt),\n    workflow_attempt: String(attempt),\n    max_proxy_attempts: String(maxAttempts),\n  };\n  request.chain_policy = {\n    ...(request.chain_policy || {}),\n    country_code: settings.country_code || request?.policy?.labels?.country_code || request?.policy?.region || '',\n    region: settings.region || request?.policy?.labels?.region || request?.policy?.region || '',\n    purpose: settings.purpose || request.purpose || 'REGISTER_PROTOCOL',\n    max_attempts: maxAttempts,\n    allow_direct_dynamic_gateway: true,\n    prefer_line_proxy: preferLineProxy,\n  };\n  items.push({ json: {\n    ...input,\n    settings,\n    target_urls: targets,\n    attempt,\n    gateway_attempt: gatewayAttempt,\n    prefer_line_proxy: preferLineProxy,\n    max_proxy_attempts: maxAttempts,\n    preflight_enabled: !!settings.preflight_enabled,\n    cf_canary_enabled: !!settings.cf_canary_enabled,\n    require_residential: !!settings.require_residential,\n    min_ip_purity_score: Number(settings.min_ip_purity_score || 0),\n    lease_request: request,\n  }});\n}\nreturn items;\nfunction targetURLs() { return ['https://api.openai.com/v1/models']; }\n"
+        "jsCode": "const settingsResponse = $input.first().json;\nconst settings = settingsResponse.body || settingsResponse;\nconst input = $('When Executed by GPT Workflow').first().json;\nconst maxAttempts = Math.max(1, Math.min(100, Number(settings.max_proxy_attempts || 10)));\nconst lineAttemptLimit = Math.ceil(maxAttempts / 2);\nconst targets = targetURLs(input, settings);\nconst actionScopeValue = input.action_scope || settings.action_scope || actionScope(settings.purpose);\nconst items = [];\nfor (let attempt = 1; attempt <= maxAttempts; attempt++) {\n  const preferLineProxy = attempt <= lineAttemptLimit;\n  const gatewayAttempt = preferLineProxy ? attempt : attempt - lineAttemptLimit;\n  const request = JSON.parse(JSON.stringify(settings.lease_request || {}));\n  request.policy = request.policy || {};\n  request.policy.labels = {\n    ...(request.policy.labels || {}),\n    attempt: String(gatewayAttempt),\n    workflow_attempt: String(attempt),\n    max_proxy_attempts: String(maxAttempts),\n    selection_seed: String(input.job_id || settings.job_id || input.account_id || settings.account_id || ''),\n  };\n  request.chain_policy = {\n    ...(request.chain_policy || {}),\n    country_code: settings.country_code || request?.policy?.labels?.country_code || request?.policy?.region || '',\n    region: settings.region || request?.policy?.labels?.region || request?.policy?.region || '',\n    purpose: settings.purpose || request.purpose || 'REGISTER_PROTOCOL',\n    max_attempts: maxAttempts,\n    allow_direct_dynamic_gateway: true,\n    prefer_line_proxy: preferLineProxy,\n  };\n  items.push({ json: {\n    ...input,\n    action_scope: actionScopeValue,\n    settings,\n    target_urls: targets,\n    attempt,\n    gateway_attempt: gatewayAttempt,\n    prefer_line_proxy: preferLineProxy,\n    max_proxy_attempts: maxAttempts,\n    preflight_enabled: !!settings.preflight_enabled,\n    cf_canary_enabled: !!settings.cf_canary_enabled,\n    require_residential: !!settings.require_residential,\n    min_ip_purity_score: Number(settings.min_ip_purity_score || 0),\n    lease_request: request,\n  }});\n}\nreturn items;\nfunction targetURLs() { return ['https://api.openai.com/v1/models']; }\nfunction actionScope(purpose) {\n  const value = String(purpose || '').toUpperCase();\n  if (value === 'LOGIN_SESSION_PROTOCOL') return 'login-session-protocol';\n  if (value === 'REGISTER_PROTOCOL') return 'register-protocol';\n  if (value === 'CODEX_OAUTH_PROTOCOL') return 'codex-oauth-protocol';\n  if (value === 'CODEX_OAUTH_ADD_PHONE') return 'codex-oauth-add-phone';\n  if (value === 'PROBE_ACCOUNT') return 'probe-account';\n  return 'register-protocol';\n}\n"
       },
       "id": "03b647bb-296e-58d4-862a-30a61cc59f63",
       "name": "Build Proxy Attempt Items",
@@ -771,6 +771,154 @@
         5040,
         0
       ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "auth-edge-enabled",
+              "leftValue": "={{ $json.auth_edge_check_enabled || $json.settings?.auth_edge_check_enabled }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "de397431-a64f-511e-9bd9-bcd4e6abe241",
+      "name": "Auth Edge Check Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        6720,
+        -520
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/' + ($json.action_scope || 'register-protocol') + '/auth-edge-check' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $json.job_id, account_id: $json.account_id, n8n_execution_id: $json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data || {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "3eb5d33b-0cc3-5e91-acce-3ec12b0b6ffd",
+      "name": "ChatGPT CSRF Edge Check",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7040,
+        -620
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const base = $('Auth Edge Check Enabled?').first().json || {};\nconst response = $input.first().json || {};\nconst result = httpBody(response);\nconst body = result?.body && typeof result.body === 'object' ? result.body : result;\nconst checkData = body?.data || {};\nconst accepted = httpOK(response) && (body?.success === true || checkData.auth_edge_accepted === true);\nconst errorMessage = accepted ? '' : (checkData.error_message || body?.error_message || body?.message || response.statusMessage || 'chatgpt csrf edge check rejected');\nconst data = { ...(base.data || {}), ...checkData };\ndata.auth_edge_accepted = accepted;\ndata.auth_edge_check_target = data.auth_edge_check_target || 'chatgpt_csrf';\ndata.error_message = errorMessage;\nreturn [{ json: { ...base, success: accepted, auth_edge_accepted: accepted, error_message: errorMessage, data } }];\nfunction httpBody(response) { return response && Object.prototype.hasOwnProperty.call(response, 'body') ? response.body : response; }\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\n"
+      },
+      "id": "dd95111c-2d02-5485-909c-f4e0a1a4da8c",
+      "name": "Evaluate ChatGPT CSRF Edge",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7360,
+        -620
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "auth-edge-accepted",
+              "leftValue": "={{ $json.auth_edge_accepted }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "604111a2-f1c9-5cb2-bbb9-99e45ff5aa5a",
+      "name": "Auth Edge Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        7680,
+        -620
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PROXY_RUNTIME_API_BASE_URL + '/leases/release' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { account_id: $('Evaluate ChatGPT CSRF Edge').first().json.account_id } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "262a2548-bee7-5272-a166-17191068a5bc",
+      "name": "Release Lease After Auth Edge Reject",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        8000,
+        -500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: $('Evaluate ChatGPT CSRF Edge').first().json }];\n"
+      },
+      "id": "30292bf8-ea1a-5f62-91d2-bda59c784e04",
+      "name": "Continue After Auth Edge Reject",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8320,
+        -500
+      ]
     }
   ],
   "connections": {
@@ -1100,7 +1248,7 @@
         ],
         [
           {
-            "node": "Build Final Proxy Success",
+            "node": "Auth Edge Check Enabled?",
             "type": "main",
             "index": 0
           }
@@ -1133,7 +1281,7 @@
       "main": [
         [
           {
-            "node": "Build Final Proxy Success",
+            "node": "Auth Edge Check Enabled?",
             "type": "main",
             "index": 0
           }
@@ -1159,6 +1307,86 @@
       ]
     },
     "Continue After Target Reject": {
+      "main": [
+        [
+          {
+            "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Edge Check Enabled?": {
+      "main": [
+        [
+          {
+            "node": "ChatGPT CSRF Edge Check",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Final Proxy Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ChatGPT CSRF Edge Check": {
+      "main": [
+        [
+          {
+            "node": "Evaluate ChatGPT CSRF Edge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate ChatGPT CSRF Edge": {
+      "main": [
+        [
+          {
+            "node": "Auth Edge Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auth Edge Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Build Final Proxy Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Release Lease After Auth Edge Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lease After Auth Edge Reject": {
+      "main": [
+        [
+          {
+            "node": "Continue After Auth Edge Reject",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Continue After Auth Edge Reject": {
       "main": [
         [
           {

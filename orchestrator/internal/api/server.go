@@ -85,6 +85,7 @@ const (
 	stepRegisterAccountStart            = contracts.StepRegisterAccountStart
 	stepRegisterAccountBrowser          = contracts.StepRegisterAccountBrowser
 	stepProtocolUseProxy                = contracts.StepProtocolUseProxy
+	stepProtocolAuthEdgeCheck           = contracts.StepProtocolAuthEdgeCheck
 	stepDynamicIPCreateSession          = contracts.StepDynamicIPCreateSession
 	stepDynamicIPExitGeo                = contracts.StepDynamicIPExitGeo
 	stepDynamicIPPreflight              = contracts.StepDynamicIPPreflight

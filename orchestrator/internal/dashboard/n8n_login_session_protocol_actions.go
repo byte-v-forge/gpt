@@ -16,6 +16,7 @@ type N8NLoginSessionProtocolActions interface {
 	RecordN8NLoginSessionProtocolDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string, data map[string]any) (any, error)
 	FailN8NLoginSessionProtocolDynamicProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error)
 	UseN8NLoginSessionProtocolProxy(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error)
+	CheckN8NLoginSessionProtocolAuthEdge(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error)
 	StartN8NLoginSessionProtocolAuth(ctx context.Context, jobID string, accountID string, n8nExecutionID string) (any, error)
 	WaitN8NLoginSessionProtocolAuth(ctx context.Context, jobID string, accountID string, n8nExecutionID string, flowID string, email string) (any, error)
 	AwaitN8NLoginSessionProtocolOTP(ctx context.Context, jobID string, accountID string, n8nExecutionID string, flowID string, email string, timeoutSeconds int32, otpIssuedAfterUnix int64, resumeURL string) (any, error)
@@ -43,6 +44,8 @@ func (s *server) handleLoginProtocolAction(w http.ResponseWriter, r *http.Reques
 		s.failLoginProtocolProxy(w, r)
 	case "use-proxy":
 		s.useLoginProtocolProxy(w, r)
+	case "auth-edge-check":
+		s.checkLoginProtocolAuthEdge(w, r)
 	case "start":
 		s.startLoginProtocolAuth(w, r)
 	case "wait":
@@ -97,6 +100,16 @@ func (s *server) useLoginProtocolProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resp, err := s.n8nLoginSessionProtocolActions.UseN8NLoginSessionProtocolProxy(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID)
+	s.writeLoginProtocolAction(w, resp, err)
+}
+
+func (s *server) checkLoginProtocolAuthEdge(w http.ResponseWriter, r *http.Request) {
+	var req protocolAuthProxyRecordRequest
+	if err := readJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err)
+		return
+	}
+	resp, err := s.n8nLoginSessionProtocolActions.CheckN8NLoginSessionProtocolAuthEdge(r.Context(), req.JobID, req.AccountID, req.N8NExecutionID, req.ProxyURL)
 	s.writeLoginProtocolAction(w, resp, err)
 }
 

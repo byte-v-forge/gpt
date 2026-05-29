@@ -1,4 +1,4 @@
-import { Controller, DashboardField, Input, Label } from '@byte-v-forge/common-ui';
+import { Controller, DashboardField, Input, Label, Switch } from '@byte-v-forge/common-ui';
 import type { Control } from '@byte-v-forge/common-ui';
 import { GPTPluginConfigFieldKind } from '../proto/orchestrator_settings';
 import type { GPTPluginConfigField, GPTPluginConfigSchema } from '../proto/orchestrator_settings';
@@ -43,9 +43,9 @@ function PluginField({ form, pluginKey, field }: {
   if (field.kind === GPTPluginConfigFieldKind.GPT_PLUGIN_CONFIG_FIELD_KIND_BOOLEAN) {
     return (
       <Controller control={form.control} name={name as any} render={({ field: valueField }) => (
-        <Label className="flex items-center gap-2 rounded-md border border-[var(--border-soft)] p-3">
-          <Input className="size-4" checked={isTruthy(valueField.value)} type="checkbox" onChange={(event) => valueField.onChange(event.target.checked ? 'true' : 'false')} />
+        <Label className="flex items-center justify-between gap-3 rounded-md border border-[var(--border-soft)] p-3">
           <span>{field.label}</span>
+          <Switch checked={isTruthy(valueField.value)} onCheckedChange={(checked) => valueField.onChange(checked ? 'true' : 'false')} />
         </Label>
       )} />
     );

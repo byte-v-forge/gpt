@@ -102,6 +102,18 @@ func (s *Store) RecordMailboxEmail(ctx context.Context, event *mailboxv1.Mailbox
 	return nil
 }
 
+func (s *Store) LatestSMSCode(ctx context.Context, activationID string, issuedAfterUnix int64) (string, bool, error) {
+	activationID = strings.TrimSpace(activationID)
+	if activationID == "" {
+		return "", false, errors.New("activation id missing")
+	}
+	record, ok, err := s.get(ctx, s.smsKey(activationID))
+	if err != nil || !ok || record.Code == "" || record.ReceivedAtUnix < issuedAfterUnix {
+		return "", false, err
+	}
+	return record.Code, true, nil
+}
+
 func (s *Store) WaitSMSCode(ctx context.Context, activationID string, issuedAfterUnix int64, timeout time.Duration, interval time.Duration) (string, bool, error) {
 	activationID = strings.TrimSpace(activationID)
 	if activationID == "" {

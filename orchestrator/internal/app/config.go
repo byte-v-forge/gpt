@@ -42,10 +42,9 @@ type orchestratorConfig struct {
 	CodexOAuthPhoneWaitSeconds              int32
 	CodexOAuthPhoneMinReuseRemainingSeconds int32
 
-	GoPayOTPWebhookListenAddr string
-	GoPayOTPRelayKeyPrefix    string
-	GoPayOTPWebhookTTL        time.Duration
-	GoPayOTPWebhookMaxItems   int
+	GoPayOTPRelayKeyPrefix  string
+	GoPayOTPWebhookTTL      time.Duration
+	GoPayOTPWebhookMaxItems int
 }
 
 func loadOrchestratorConfig() orchestratorConfig {
@@ -84,9 +83,8 @@ func loadOrchestratorConfig() orchestratorConfig {
 		CodexOAuthPhoneWaitSeconds:              envx.PositiveInt32("CODEX_OAUTH_PHONE_WAIT_SECONDS", 120),
 		CodexOAuthPhoneMinReuseRemainingSeconds: envx.PositiveInt32("CODEX_OAUTH_PHONE_MIN_REUSE_REMAINING_SECONDS", 300),
 
-		GoPayOTPWebhookListenAddr: envx.StringDefault("GOPAY_OTP_WEBHOOK_LISTEN_ADDR", ":8081"),
-		GoPayOTPRelayKeyPrefix:    envx.StringDefault("GOPAY_OTP_RELAY_KEY_PREFIX", "byte-v-forge:gpt:gopay-otp"),
-		GoPayOTPWebhookTTL:        envx.PositiveDurationSeconds("GOPAY_OTP_WEBHOOK_TTL_SECONDS", 10*time.Minute),
-		GoPayOTPWebhookMaxItems:   envx.PositiveInt("GOPAY_OTP_WEBHOOK_MAX_ITEMS", 100),
+		GoPayOTPRelayKeyPrefix:  envx.StringDefault("GOPAY_OTP_RELAY_KEY_PREFIX", "byte-v-forge:gpt:gopay-otp"),
+		GoPayOTPWebhookTTL:      envx.PositiveDurationSeconds("GOPAY_OTP_WEBHOOK_TTL_SECONDS", 10*time.Minute),
+		GoPayOTPWebhookMaxItems: envx.PositiveInt("GOPAY_OTP_WEBHOOK_MAX_ITEMS", 100),
 	}
 }

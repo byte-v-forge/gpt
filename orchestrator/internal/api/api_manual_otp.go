@@ -60,15 +60,17 @@ func (s *Server) ResendOTP(ctx context.Context, req *pb.ResendOTPRequest) (*pb.R
 }
 
 func (s *Server) signalManualOTP(ctx context.Context, jobID, otpKind string) error {
-	if otpKind != "registration" {
-		return nil
-	}
-	job, err := s.getJob(ctx, jobID)
-	if err != nil {
-		return err
-	}
-	if job.Action == actionRegisterProtocol && job.LastStep == stepRegisterAccountProtocolOTPWait {
-		return s.ResumeN8NEmailManualOTP(ctx, nil, jobID)
+	switch otpKind {
+	case "registration":
+		job, err := s.getJob(ctx, jobID)
+		if err != nil {
+			return err
+		}
+		if job.Action == actionRegisterProtocol && job.LastStep == stepRegisterAccountProtocolOTPWait {
+			return s.ResumeN8NEmailManualOTP(ctx, nil, jobID)
+		}
+	case "payment":
+		return s.ResumeN8NPaymentManualOTP(ctx, nil, jobID)
 	}
 	return nil
 }

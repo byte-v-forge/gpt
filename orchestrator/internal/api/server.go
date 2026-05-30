@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -15,7 +16,9 @@ import (
 	"orchestrator/internal/jobprojection"
 	"orchestrator/internal/jobstatus"
 	"orchestrator/internal/mailboxevents"
+	"orchestrator/internal/paymentotpwait"
 	"orchestrator/internal/runtimesecrets"
+	"orchestrator/internal/smsotpwait"
 	"orchestrator/pb"
 )
 
@@ -32,8 +35,30 @@ type Config struct {
 	MailboxPollRequester *mailboxevents.Requester
 	OTPProjection        OTPProjection
 	EmailOTPWaits        emailOTPWaitStore
+	SMSOTPWaits          smsOTPWaitStore
+	PaymentOTPWaits      paymentOTPWaitStore
 	GoPayClient          pb.GopayAppServiceClient
 	ActionRegistry       *actionregistry.Registry
+}
+
+type smsOTPWaitStore interface {
+	Register(context.Context, smsotpwait.Entry, time.Duration) error
+	PendingForActivation(context.Context, string, int64) ([]smsotpwait.Entry, error)
+	Get(context.Context, string) (smsotpwait.Entry, bool, error)
+	Delete(context.Context, smsotpwait.Entry) error
+	Claim(context.Context, string, time.Duration) (bool, error)
+	ReleaseClaim(context.Context, string) error
+}
+
+type paymentOTPWaitStore interface {
+	Register(context.Context, paymentotpwait.Entry, time.Duration) error
+	RecordCode(context.Context, paymentotpwait.CodeRecord, time.Duration) error
+	LatestCode(context.Context, string, int64) (paymentotpwait.CodeRecord, bool, error)
+	PendingForQueue(context.Context, string, int64) ([]paymentotpwait.Entry, error)
+	Get(context.Context, string) (paymentotpwait.Entry, bool, error)
+	Delete(context.Context, paymentotpwait.Entry) error
+	Claim(context.Context, string, time.Duration) (bool, error)
+	ReleaseClaim(context.Context, string) error
 }
 
 type Server struct {
@@ -55,6 +80,8 @@ type Server struct {
 	mailboxPollRequester *mailboxevents.Requester
 	otpProjection        OTPProjection
 	emailOTPWaits        emailOTPWaitStore
+	smsOTPWaits          smsOTPWaitStore
+	paymentOTPWaits      paymentOTPWaitStore
 	gopayClient          pb.GopayAppServiceClient
 	actionRegistry       *actionregistry.Registry
 }
@@ -184,6 +211,8 @@ func NewServer(cfg Config) *Server {
 		mailboxPollRequester: cfg.MailboxPollRequester,
 		otpProjection:        cfg.OTPProjection,
 		emailOTPWaits:        cfg.EmailOTPWaits,
+		smsOTPWaits:          cfg.SMSOTPWaits,
+		paymentOTPWaits:      cfg.PaymentOTPWaits,
 		gopayClient:          cfg.GoPayClient,
 		actionRegistry:       actionregistry.RegisterDefault(cfg.ActionRegistry),
 	}

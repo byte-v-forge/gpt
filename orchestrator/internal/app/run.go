@@ -31,16 +31,6 @@ func Run() {
 		log.Fatalf("Failed to initialize GPT service dependencies: %v", err)
 	}
 	defer deps.Close()
-	if deps.goPayActionsEnabled() {
-		otpWebhookServer, err := startGoPayOTPWebhookServer(cfg.GoPayOTPWebhookListenAddr, deps.otpRelay)
-		if err != nil {
-			log.Fatalf("Failed to start GoPay OTP webhook: %v", err)
-		}
-		if otpWebhookServer != nil {
-			defer otpWebhookServer.Close()
-		}
-	}
-
 	lis, err := net.Listen("tcp", cfg.ListenAddr)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -66,6 +56,8 @@ func Run() {
 		MailboxPollRequester: deps.mailboxPollRequester,
 		OTPProjection:        deps.otpProjection,
 		EmailOTPWaits:        deps.emailOTPWaits,
+		SMSOTPWaits:          deps.smsOTPWaits,
+		PaymentOTPWaits:      deps.paymentOTPWaits,
 		GoPayClient:          deps.gopayClient,
 		ActionRegistry:       deps.actionRegistry,
 	})
@@ -113,6 +105,7 @@ func Run() {
 		return startOTPProjectionConsumers(groupCtx, deps.platformBus, cfg, deps.otpProjection, deps.mailboxState)
 	})
 	group.Go(func() error { return runEmailOTPResumeWorker(groupCtx, cfg, deps, apiServer) })
+	group.Go(func() error { return runSMSOTPResumeWorker(groupCtx, cfg, deps, apiServer) })
 	go func() {
 		<-groupCtx.Done()
 		grpcServer.GracefulStop()
@@ -143,6 +136,20 @@ func runEmailOTPResumeWorker(ctx context.Context, cfg orchestratorConfig, deps *
 		return err
 	}
 	return api.StartN8NEmailOTPResumeWorker(ctx, consumer, apiServer)
+}
+
+func runSMSOTPResumeWorker(ctx context.Context, cfg orchestratorConfig, deps *orchestratorDependencies, apiServer *api.Server) error {
+	consumer, err := deps.platformBus.PullWorkerConsumer(
+		cfg.EventStreamName,
+		eventcatalog.SMSCodeReceived.Subject,
+		api.N8NSMSOTPResumeConsumerDurable,
+		10,
+		30*time.Second,
+	)
+	if err != nil {
+		return err
+	}
+	return api.StartN8NSMSOTPResumeWorker(ctx, consumer, apiServer)
 }
 
 func dashboardSelfTarget(listenAddr string) string {

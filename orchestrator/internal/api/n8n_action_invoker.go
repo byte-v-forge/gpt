@@ -20,7 +20,12 @@ type rawN8NActionRequest struct {
 	UseAccountToken   bool           `json:"use_account_token"`
 	OTPRequired       bool           `json:"otp_required"`
 	OTPSource         string         `json:"otp_source"`
+	OTP               string         `json:"otp"`
+	Source            string         `json:"source"`
+	Purpose           string         `json:"purpose"`
+	ResumeURL         string         `json:"resume_url"`
 	OTPIssuedAfter    int64          `json:"otp_issued_after_unix"`
+	OTPReceivedAt     int64          `json:"otp_received_at_unix"`
 	OTPTimeoutSeconds int32          `json:"otp_timeout_seconds"`
 	OTPRetryAttempt   int32          `json:"otp_retry_attempt"`
 	UserID            string         `json:"user_id"`
@@ -76,6 +81,12 @@ func (s *Server) invokeN8NGoPayApp(ctx context.Context, action string, req rawN8
 		return s.StartN8NGoPayAppAuth(ctx, req.JobID, req.N8NExecutionID, req.Operation, req.UserID, req.Phone, req.OTPChannel, req.ActivationID, req.StateJSON)
 	case "check-gopay-auth-otp":
 		return s.CheckN8NGoPayAppAuthOTP(ctx, req.JobID, req.N8NExecutionID, req.Operation, req.UserID, req.OTPChannel, req.ActivationID, req.OTPIssuedAfter)
+	case "await-sms-otp":
+		return s.AwaitN8NSMSOTP(ctx, goPayAppSMSOTPWaitRequest(req))
+	case "await-payment-otp":
+		return s.AwaitN8NPaymentOTP(ctx, goPayAppPaymentOTPWaitRequest(req))
+	case "resume-payment-otp":
+		return s.ReceiveN8NPaymentOTP(ctx, paymentOTPReceiveRequest(req))
 	case "complete-gopay-auth":
 		return s.CompleteN8NGoPayAppAuth(ctx, req.JobID, req.N8NExecutionID, req.Operation, req.UserID, req.Phone, req.OTPChannel, req.ActivationID, req.StateJSON, req.OTPIssuedAfter, req.OTPSource, req.Data)
 	case "start-signup":
@@ -141,6 +152,12 @@ func (s *Server) invokeN8NGoPayPaymentRebind(ctx context.Context, action string,
 		return s.StartN8NGoPayPaymentRebindAuth(ctx, req.JobID, req.AccountID, req.N8NExecutionID, req.UserID, req.WAPhone, req.StateJSON)
 	case "check-gopay-auth-otp":
 		return s.CheckN8NGoPayPaymentRebindAuthOTP(ctx, req.JobID, req.AccountID, req.N8NExecutionID, req.UserID, req.OTPChannel, req.OTPIssuedAfter)
+	case "await-sms-otp":
+		return s.AwaitN8NSMSOTP(ctx, goPayPaymentRebindSMSOTPWaitRequest(req))
+	case "await-payment-otp":
+		return s.AwaitN8NPaymentOTP(ctx, goPayPaymentRebindPaymentOTPWaitRequest(req))
+	case "resume-payment-otp":
+		return s.ReceiveN8NPaymentOTP(ctx, paymentOTPReceiveRequest(req))
 	case "complete-gopay-auth":
 		return s.CompleteN8NGoPayPaymentRebindAuth(ctx, req.JobID, req.AccountID, req.N8NExecutionID, req.UserID, req.WAPhone, req.OTPChannel, req.StateJSON, req.OTPIssuedAfter, req.OTPSource, req.Data)
 	case "start-gopay-pin":
@@ -188,6 +205,12 @@ func (s *Server) invokeN8NGoPayPayment(ctx context.Context, action string, req r
 		return s.StartN8NGoPayPaymentSignup(ctx, req.JobID, req.AccountID, req.N8NExecutionID, req.UserID, req.ActivationID, req.Phone, req.StateJSON)
 	case "check-signup-otp":
 		return s.CheckN8NGoPayPaymentSignupOTP(ctx, req.JobID, req.AccountID, req.N8NExecutionID, req.UserID, req.ActivationID, req.OTPChannel, req.OTPIssuedAfter)
+	case "await-sms-otp":
+		return s.AwaitN8NSMSOTP(ctx, goPayPaymentSMSOTPWaitRequest(req))
+	case "await-payment-otp":
+		return s.AwaitN8NPaymentOTP(ctx, goPayPaymentPaymentOTPWaitRequest(req))
+	case "resume-payment-otp":
+		return s.ReceiveN8NPaymentOTP(ctx, paymentOTPReceiveRequest(req))
 	case "retry-signup":
 		return s.RetryN8NGoPayPaymentSignup(ctx, req.JobID, req.AccountID, req.N8NExecutionID, req.UserID, req.ActivationID, req.OTPChannel, req.StateJSON, req.Data)
 	case "request-signup-otp":
@@ -276,6 +299,10 @@ func (s *Server) invokeN8NGoPayWAPayment(ctx context.Context, action string, req
 		return s.StartN8NGoPayWAPaymentStep(ctx, req.JobID, req.AccountID, req.N8NExecutionID, req.UserID, req.WAPhone, req.FlowID, req.StateJSON)
 	case "check-payment-otp":
 		return s.CheckN8NGoPayWAPaymentOTP(ctx, req.JobID, req.AccountID, req.N8NExecutionID, req.UserID, req.OTPIssuedAfter)
+	case "await-payment-otp":
+		return s.AwaitN8NPaymentOTP(ctx, goPayWAPaymentOTPWaitRequest(req))
+	case "resume-payment-otp":
+		return s.ReceiveN8NPaymentOTP(ctx, paymentOTPReceiveRequest(req))
 	case "complete-payment":
 		return s.CompleteN8NGoPayWAPayment(ctx, req.JobID, req.AccountID, req.N8NExecutionID, req.FlowID, req.StateJSON, req.UseAccountToken, req.OTPRequired, req.OTPIssuedAfter, req.OTPSource, req.Data)
 	case "finish":

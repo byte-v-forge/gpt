@@ -33,23 +33,27 @@ import (
 	"orchestrator/internal/jobprojection"
 	"orchestrator/internal/mailboxevents"
 	"orchestrator/internal/otpprojection"
+	"orchestrator/internal/paymentotpwait"
 	"orchestrator/internal/runtimesecrets"
+	"orchestrator/internal/smsotpwait"
 	"orchestrator/pb"
 )
 
 type orchestratorDependencies struct {
-	db             *gorm.DB
-	jobStore       *jobprojection.Store
-	jobEvents      *jobevents.Store
-	fingerprints   *accountfingerprint.Store
-	gptSettings    *gptsettings.Store
-	otpProjection  *otpprojection.Store
-	emailOTPWaits  *emailotpwait.Store
-	mailboxState   *accountmail.Projector
-	secrets        runtimesecrets.Store
-	platformBus    *natseventbus.Bus
-	hotStream      hotstream.Bus
-	actionRegistry *actionregistry.Registry
+	db              *gorm.DB
+	jobStore        *jobprojection.Store
+	jobEvents       *jobevents.Store
+	fingerprints    *accountfingerprint.Store
+	gptSettings     *gptsettings.Store
+	otpProjection   *otpprojection.Store
+	emailOTPWaits   *emailotpwait.Store
+	smsOTPWaits     *smsotpwait.Store
+	paymentOTPWaits *paymentotpwait.Store
+	mailboxState    *accountmail.Projector
+	secrets         runtimesecrets.Store
+	platformBus     *natseventbus.Bus
+	hotStream       hotstream.Bus
+	actionRegistry  *actionregistry.Registry
 
 	accountClient           pb.GPTAccountServiceClient
 	browserAutomationClient browserautomationv1.BrowserAutomationServiceClient
@@ -134,6 +138,18 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 		return nil, fmt.Errorf("initialize email otp wait store: %w", err)
 	}
 	deps.emailOTPWaits = emailOTPWaits
+	smsOTPWaits, err := smsotpwait.NewStore(runtimeSecretClient, "byte-v-forge:gpt:sms-otp-wait")
+	if err != nil {
+		deps.Close()
+		return nil, fmt.Errorf("initialize sms otp wait store: %w", err)
+	}
+	deps.smsOTPWaits = smsOTPWaits
+	paymentOTPWaits, err := paymentotpwait.NewStore(runtimeSecretClient, "byte-v-forge:gpt:payment-otp-wait")
+	if err != nil {
+		deps.Close()
+		return nil, fmt.Errorf("initialize payment otp wait store: %w", err)
+	}
+	deps.paymentOTPWaits = paymentOTPWaits
 	platformEventBus, closePlatformEventBus, err := newPlatformEventBus(ctx, cfg)
 	if err != nil {
 		deps.Close()

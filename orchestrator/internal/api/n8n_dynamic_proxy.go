@@ -212,11 +212,18 @@ func (s *Server) failN8NDynamicProxy(ctx context.Context, jobID string, accountI
 	if strings.TrimSpace(errorMessage) == "" {
 		errorMessage = "dynamic proxy preflight failed"
 	}
-	err := fmt.Errorf("%s", errorMessage)
-	if markErr := s.markActionFailed(ctx, jobID, stepDynamicIPPreflight, jobstatus.FailedRetryable, false, true, err, data); markErr != nil {
-		return nil, markErr
+	if err := s.activities.MarkJobFailedActivity(ctx, pb.JobFailureInput{
+		JobId:        jobID,
+		StepName:     stepDynamicIPPreflight,
+		Status:       jobstatus.FailedRetryable,
+		Recoverable:  false,
+		Retryable:    true,
+		ErrorMessage: errorMessage,
+		Result:       structData(data),
+	}); err != nil {
+		return nil, err
 	}
-	return &n8nDynamicProxyResult{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Step: stepDynamicIPPreflight, Data: data}, nil
+	return &n8nDynamicProxyResult{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Step: stepDynamicIPPreflight, Success: false, Data: data}, nil
 }
 
 func (s *Server) checkN8NProtocolAuthEdge(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string, mode string, bind func(context.Context, string, string) error) (any, error) {

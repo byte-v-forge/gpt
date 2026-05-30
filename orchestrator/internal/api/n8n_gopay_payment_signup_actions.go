@@ -274,7 +274,7 @@ func goPayPaymentSignupOTPCheckResult(jobID string, accountID string, n8nExecuti
 
 func firstNonZeroInt32(values ...int32) int32 {
 	for _, value := range values {
-		if value != 0 {
+		if value > 0 {
 			return value
 		}
 	}

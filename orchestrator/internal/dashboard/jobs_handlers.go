@@ -17,7 +17,7 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := s.jobClient.ListJobs(r.Context(), &pb.ListJobsRequest{
+	resp, err := s.workflowAPI.ListJobs(r.Context(), &pb.ListJobsRequest{
 		Limit:     int32(httpx.QueryInt(r, "limit", 100)),
 		Status:    strings.TrimSpace(r.URL.Query().Get("status")),
 		Action:    strings.TrimSpace(r.URL.Query().Get("action")),
@@ -32,15 +32,7 @@ func (s *server) handleJobs(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, errors.New(resp.GetErrorMessage()))
 		return
 	}
-	if requestJobPageResponse(r) {
-		writeJSON(w, http.StatusOK, resp)
-		return
-	}
-	snapshots := resp.GetSnapshots()
-	if snapshots == nil {
-		snapshots = []*pb.JobSnapshot{}
-	}
-	writeJSON(w, http.StatusOK, snapshots)
+	writeProtoJSON(w, http.StatusOK, resp)
 }
 
 func (s *server) handleJob(w http.ResponseWriter, r *http.Request) {
@@ -53,16 +45,11 @@ func (s *server) handleJob(w http.ResponseWriter, r *http.Request) {
 	jobID := strings.TrimSpace(parts[0])
 
 	if len(parts) > 1 {
+		if s.handlePrivateJobAction(w, r, jobID, parts) {
+			return
+		}
 		switch parts[1] {
 		case "otp":
-			if len(parts) == 2 {
-				if r.Method != http.MethodPost {
-					w.WriteHeader(http.StatusMethodNotAllowed)
-					return
-				}
-				s.submitJobOTP(w, r, jobID)
-				return
-			}
 			if len(parts) == 3 && parts[2] == "resend" {
 				if r.Method != http.MethodPost {
 					w.WriteHeader(http.StatusMethodNotAllowed)
@@ -72,35 +59,6 @@ func (s *server) handleJob(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeError(w, http.StatusNotFound, fmt.Errorf("unsupported job otp action: %s", strings.Join(parts[1:], "/")))
-			return
-		case "gopay-payment":
-			if len(parts) != 3 || parts[2] != "confirm" {
-				writeError(w, http.StatusNotFound, fmt.Errorf("unsupported job gopay-payment action: %s", strings.Join(parts[1:], "/")))
-				return
-			}
-			if r.Method != http.MethodPost {
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				return
-			}
-			s.confirmManualGoPayPayment(w, r, jobID)
-			return
-		case "add-balance":
-			if len(parts) != 3 {
-				writeError(w, http.StatusNotFound, fmt.Errorf("unsupported job add-balance action: %s", strings.Join(parts[1:], "/")))
-				return
-			}
-			if r.Method != http.MethodPost {
-				w.WriteHeader(http.StatusMethodNotAllowed)
-				return
-			}
-			switch parts[2] {
-			case "confirm":
-				s.confirmManualAddBalance(w, r, jobID)
-			case "select":
-				s.selectGoPayAddBalance(w, r, jobID)
-			default:
-				writeError(w, http.StatusNotFound, fmt.Errorf("unsupported job add-balance action: %s", strings.Join(parts[1:], "/")))
-			}
 			return
 		case "cancel":
 			if len(parts) != 2 {
@@ -123,7 +81,7 @@ func (s *server) handleJob(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	resp, err := s.jobClient.GetJob(r.Context(), &pb.GetJobRequest{JobId: jobID})
+	resp, err := s.workflowAPI.GetJob(r.Context(), &pb.GetJobRequest{JobId: jobID})
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err)
 		return
@@ -132,12 +90,7 @@ func (s *server) handleJob(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, errors.New(resp.GetErrorMessage()))
 		return
 	}
-	writeJSON(w, http.StatusOK, resp.GetSnapshot())
-}
-
-func requestJobPageResponse(r *http.Request) bool {
-	value := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("page")))
-	return value == "true" || value == "1"
+	writeProtoJSON(w, http.StatusOK, resp)
 }
 
 func requestJobListCursor(r *http.Request) *pb.JobListCursor {

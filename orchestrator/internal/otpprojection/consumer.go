@@ -2,100 +2,127 @@ package otpprojection
 
 import (
 	"context"
-	"errors"
 	"log"
 
 	"github.com/byte-v-forge/common-lib/eventbus"
 	"github.com/byte-v-forge/common-lib/eventcatalog"
 	mailboxv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/mailbox/v1"
 	smsv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/sms/v1"
+	wav1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/wa/v1"
+	"google.golang.org/protobuf/proto"
 )
-
-const (
-	SMSCodeConsumerDurable      = "gpt-otp-sms-code"
-	MailboxEmailConsumerDurable = "gpt-otp-mailbox-email"
-)
-
-var errMalformedEvent = errors.New("malformed otp projection event")
-
-type Consumer struct {
-	store            *Store
-	kind             string
-	mailboxProjector MailboxEmailProjector
-}
 
 type MailboxEmailProjector interface {
 	ProjectMailboxEmail(context.Context, *mailboxv1.MailboxEmailReceivedEvent) error
 }
 
-func RunSMSCodeConsumer(ctx context.Context, consumer eventbus.Consumer, store *Store) error {
-	worker := &Consumer{store: store, kind: SourceSMS}
-	return eventbus.RunConsumerWorker(ctx, eventbus.ConsumerWorkerConfig{
-		Name:     SourceSMS + " otp projection events",
-		Consumer: consumer,
-		Handler:  worker.handle,
-		Logf:     logConsumer,
+type ConsumerSpec struct {
+	Label   string
+	Subject string
+	Durable string
+	Run     func(context.Context, eventbus.Consumer) error
+}
+
+type projectionConfig[T proto.Message] struct {
+	Source  string
+	Name    string
+	New     func() T
+	Project func(context.Context, T) error
+}
+
+type projectionConsumer[T proto.Message] struct {
+	cfg projectionConfig[T]
+}
+
+func runSMSCodeConsumer(ctx context.Context, consumer eventbus.Consumer, store *Store) error {
+	return runProjectionConsumer(ctx, consumer, projectionConfig[*smsv1.SmsCodeReceivedEvent]{
+		Source: SourceSMS,
+		Name:   SourceSMS + " otp projection events",
+		New:    func() *smsv1.SmsCodeReceivedEvent { return &smsv1.SmsCodeReceivedEvent{} },
+		Project: func(ctx context.Context, event *smsv1.SmsCodeReceivedEvent) error {
+			return store.RecordSMSCode(ctx, event)
+		},
 	})
 }
 
-func RunMailboxEmailConsumer(ctx context.Context, consumer eventbus.Consumer, store *Store, projector MailboxEmailProjector) error {
-	worker := &Consumer{store: store, kind: SourceMailbox, mailboxProjector: projector}
-	return eventbus.RunConsumerWorker(ctx, eventbus.ConsumerWorkerConfig{
-		Name:     SourceMailbox + " otp projection events",
-		Consumer: consumer,
-		Handler:  worker.handle,
-		Logf:     logConsumer,
+func runMailboxEmailConsumer(ctx context.Context, consumer eventbus.Consumer, store *Store, projector MailboxEmailProjector) error {
+	return runProjectionConsumer(ctx, consumer, projectionConfig[*mailboxv1.MailboxEmailReceivedEvent]{
+		Source: SourceMailbox,
+		Name:   SourceMailbox + " otp projection events",
+		New:    func() *mailboxv1.MailboxEmailReceivedEvent { return &mailboxv1.MailboxEmailReceivedEvent{} },
+		Project: func(ctx context.Context, event *mailboxv1.MailboxEmailReceivedEvent) error {
+			if err := store.RecordMailboxEmail(ctx, event); err != nil {
+				return err
+			}
+			if projector != nil {
+				return projector.ProjectMailboxEmail(ctx, event)
+			}
+			return nil
+		},
 	})
 }
 
-func SMSCodeSubject() string {
-	return eventcatalog.SMSCodeReceived.Subject
+func runWAOTPConsumer(ctx context.Context, consumer eventbus.Consumer, store *Store) error {
+	return runProjectionConsumer(ctx, consumer, projectionConfig[*wav1.WaOtpReceivedEvent]{
+		Source: SourceWA,
+		Name:   SourceWA + " otp projection events",
+		New:    func() *wav1.WaOtpReceivedEvent { return &wav1.WaOtpReceivedEvent{} },
+		Project: func(ctx context.Context, event *wav1.WaOtpReceivedEvent) error {
+			return store.RecordWAOTP(ctx, event)
+		},
+	})
 }
 
-func MailboxEmailSubject() string {
-	return eventcatalog.MailboxEmailReceived.Subject
+func ConsumerSpecs(store *Store, mailboxProjector MailboxEmailProjector) []ConsumerSpec {
+	return []ConsumerSpec{
+		{
+			Label:   "SMS OTP",
+			Subject: eventcatalog.SMSCodeReceived.Subject,
+			Durable: "gpt-otp-sms-code",
+			Run: func(ctx context.Context, consumer eventbus.Consumer) error {
+				return runSMSCodeConsumer(ctx, consumer, store)
+			},
+		},
+		{
+			Label:   "mailbox OTP",
+			Subject: eventcatalog.MailboxEmailReceived.Subject,
+			Durable: "gpt-otp-mailbox-email",
+			Run: func(ctx context.Context, consumer eventbus.Consumer) error {
+				return runMailboxEmailConsumer(ctx, consumer, store, mailboxProjector)
+			},
+		},
+		{
+			Label:   "WA OTP",
+			Subject: eventcatalog.WAOTPReceived.Subject,
+			Durable: "gpt-otp-wa-otp",
+			Run: func(ctx context.Context, consumer eventbus.Consumer) error {
+				return runWAOTPConsumer(ctx, consumer, store)
+			},
+		},
+	}
 }
 
-func (c *Consumer) handle(ctx context.Context, message eventbus.ReceivedMessage) {
-	var err error
-	switch c.kind {
-	case SourceSMS:
-		err = c.recordSMS(ctx, message)
-	case SourceMailbox:
-		err = c.recordMailbox(ctx, message)
-	}
-	if err != nil {
-		if errors.Is(err, errMalformedEvent) {
-			eventbus.TermMessage(ctx, message, "terminate malformed otp projection event", logConsumer)
-			return
-		}
-		log.Printf("[orchestrator] record %s otp projection failed event_id=%s: %v", c.kind, eventbus.EventID(message), err)
-		eventbus.NakMessage(ctx, message, "retry otp projection event", logConsumer)
-		return
-	}
-	eventbus.AckMessage(ctx, message, "ack otp projection event", logConsumer)
+func runProjectionConsumer[T proto.Message](ctx context.Context, consumer eventbus.Consumer, cfg projectionConfig[T]) error {
+	worker := &projectionConsumer[T]{cfg: cfg}
+	return eventbus.RunTypedConsumerWorker(ctx, eventbus.TypedConsumerWorkerConfig[T]{
+		Name:           cfg.Name,
+		Consumer:       consumer,
+		NewMessage:     cfg.New,
+		Handler:        worker.handle,
+		MalformedLabel: "terminate malformed otp projection event",
+		Logf:           logConsumer,
+	})
 }
 
-func (c *Consumer) recordSMS(ctx context.Context, message eventbus.ReceivedMessage) error {
-	event := &smsv1.SmsCodeReceivedEvent{}
-	if err := eventbus.UnmarshalPayload(message, event); err != nil {
-		return errMalformedEvent
+func (c *projectionConsumer[T]) handle(ctx context.Context, event T, message eventbus.ReceivedMessage) eventbus.HandlerResult {
+	if c.cfg.Project == nil {
+		return eventbus.AckResult("ack otp projection event")
 	}
-	return c.store.RecordSMSCode(ctx, event)
-}
-
-func (c *Consumer) recordMailbox(ctx context.Context, message eventbus.ReceivedMessage) error {
-	event := &mailboxv1.MailboxEmailReceivedEvent{}
-	if err := eventbus.UnmarshalPayload(message, event); err != nil {
-		return errMalformedEvent
+	if err := c.cfg.Project(ctx, event); err != nil {
+		log.Printf("[orchestrator] record %s otp projection failed event_id=%s: %v", c.cfg.Source, eventbus.EventID(message), err)
+		return eventbus.NakResult(0, "retry otp projection event")
 	}
-	if err := c.store.RecordMailboxEmail(ctx, event); err != nil {
-		return err
-	}
-	if c.mailboxProjector != nil {
-		return c.mailboxProjector.ProjectMailboxEmail(ctx, event)
-	}
-	return nil
+	return eventbus.AckResult("ack otp projection event")
 }
 
 func logConsumer(format string, args ...any) {

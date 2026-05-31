@@ -17,15 +17,16 @@ func (s *server) handleAccountMailboxInbox(w http.ResponseWriter, r *http.Reques
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	var req mailboxInboxRequest
-	if err := readJSON(r, &req); err != nil {
+	var req pb.FetchAccountMailboxRequest
+	if err := readProtoJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	if req.LimitPerMailbox <= 0 {
+	req.AccountId = accountID
+	if req.GetLimitPerMailbox() <= 0 {
 		req.LimitPerMailbox = 10
 	}
-	if req.LimitPerMailbox > 100 {
+	if req.GetLimitPerMailbox() > 100 {
 		req.LimitPerMailbox = 100
 	}
 
@@ -36,10 +37,7 @@ func (s *server) handleAccountMailboxInbox(w http.ResponseWriter, r *http.Reques
 	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(timeout)*time.Second)
 	defer cancel()
 
-	resp, err := s.accountWorkflowClient.FetchAccountMailbox(ctx, &pb.FetchAccountMailboxRequest{
-		AccountId:       accountID,
-		LimitPerMailbox: req.LimitPerMailbox,
-	})
+	resp, err := s.workflowAPI.FetchAccountMailbox(ctx, &req)
 	if err != nil {
 		if status.Code(err) == codes.DeadlineExceeded {
 			writeError(w, http.StatusGatewayTimeout, err)
@@ -48,5 +46,5 @@ func (s *server) handleAccountMailboxInbox(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeProtoJSON(w, http.StatusOK, resp)
 }

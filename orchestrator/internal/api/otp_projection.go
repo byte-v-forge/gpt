@@ -9,6 +9,8 @@ import (
 
 type OTPProjection interface {
 	LatestSMSCode(ctx context.Context, activationID string, issuedAfterUnix int64) (string, bool, error)
+	LatestWACode(ctx context.Context, e164Number string, issuedAfterUnix int64) (string, bool, error)
+	LatestWASignal(ctx context.Context, e164Number string, issuedAfterUnix int64) (string, string, bool, error)
 	WaitMailboxSignal(ctx context.Context, email string, kind mailboxv1.EmailSignalKind, issuedAfterUnix int64, timeout time.Duration, interval time.Duration) (*mailboxv1.EmailInboxMessage, string, bool, error)
 	LatestMailboxSignal(ctx context.Context, email string, kind mailboxv1.EmailSignalKind, issuedAfterUnix int64) (*mailboxv1.EmailInboxMessage, string, bool, error)
 }

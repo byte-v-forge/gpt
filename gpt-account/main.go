@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -10,10 +12,13 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/byte-v-forge/common-lib/accountstream"
 	"github.com/byte-v-forge/common-lib/emailx"
 	"github.com/byte-v-forge/common-lib/envx"
 	"github.com/byte-v-forge/common-lib/grpchealth"
 	"github.com/byte-v-forge/common-lib/hotstream"
+	"github.com/byte-v-forge/common-lib/pagex"
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -25,158 +30,59 @@ import (
 )
 
 const (
-	gptEmailStatusAvailable         = "AVAILABLE"
-	gptEmailStatusAssigned          = "ASSIGNED"
-	gptEmailStatusRegistered        = "REGISTERED"
-	gptEmailStatusOAuthPending      = "OAUTH_PENDING"
-	gptEmailStatusAuthFailed        = "AUTH_FAILED"
-	gptEmailStatusUserAlreadyExists = "USER_ALREADY_EXISTS"
-	gptEmailStatusBlocked           = "BLOCKED"
-	codexPhoneStatusConfirmed       = "CONFIRMED"
-	codexPhoneStatusOAuthNeedPhone  = "OAUTH_NEED_PHONE"
+	codexPhoneStatusConfirmed      = "CONFIRMED"
+	codexPhoneStatusOAuthNeedPhone = "OAUTH_NEED_PHONE"
 )
 
 type gptAccountServer struct {
 	pb.UnimplementedGPTAccountServiceServer
-	db    *gorm.DB
-	state *accountStateStore
-	hot   hotstream.Publisher
+	db            *gorm.DB
+	state         *accountStateStore
+	hot           hotstream.Publisher
+	accountStream *accountstream.Publisher
 }
 
 func (s *gptAccountServer) CreateAccount(ctx context.Context, req *pb.CreateAccountRequest) (*pb.CreateAccountResponse, error) {
-	account, err := s.buildAccount(req.GetAccount())
+	out, err := s.createGPTAccount(ctx, req.GetAccount(), req.GetCredential())
 	if err != nil {
 		return nil, err
 	}
-	if account.Email == "" {
-		return nil, status.Error(codes.InvalidArgument, "email is required")
-	}
-
-	if err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(account).Error; err != nil {
-			return err
-		}
-		return assignAccountEmailAllocation(tx, account.ID, account.Email)
-	}); err != nil {
-		return nil, err
-	}
-	if err := s.state.saveInitial(ctx, account.ID, req.GetAccount()); err != nil {
-		return nil, err
-	}
-
-	out, err := s.accountToProto(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("Created account id=%s email=%s", account.ID, emailx.Redact(account.Email))
-	s.publishAccountHotStream(ctx, accountUpdatedEvent, out)
 	return &pb.CreateAccountResponse{Account: out}, nil
 }
 
 func (s *gptAccountServer) GetAccount(ctx context.Context, req *pb.GetAccountRequest) (*pb.GetAccountResponse, error) {
-	account, err := s.findAccount(ctx, req.GetAccountId())
-	if err != nil {
-		return nil, err
-	}
-	out, err := s.accountToProto(ctx, account)
+	out, err := s.getGPTAccount(ctx, req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}
 	return &pb.GetAccountResponse{Account: out}, nil
 }
 
+func (s *gptAccountServer) GetAccountCredential(ctx context.Context, req *pb.GetAccountCredentialRequest) (*pb.GetAccountCredentialResponse, error) {
+	account, err := s.findAccount(ctx, req.GetAccountId())
+	if err != nil {
+		return nil, err
+	}
+	return &pb.GetAccountCredentialResponse{AccountId: account.ID, Credential: &pb.AccountCredential{Password: account.Password}}, nil
+}
+
 func (s *gptAccountServer) UpdateAccount(ctx context.Context, req *pb.UpdateAccountRequest) (*pb.UpdateAccountResponse, error) {
-	accountID := strings.TrimSpace(req.GetAccount().GetAccountId())
-	if accountID == "" {
-		return nil, status.Error(codes.InvalidArgument, "account_id is required")
-	}
-
-	if _, err := s.findAccount(ctx, accountID); err != nil {
-		return nil, err
-	}
-
-	updates := updateMap(req.GetAccount())
-	if len(updates) > 0 {
-		if err := s.db.WithContext(ctx).Model(&db.Account{}).Where("id = ?", accountID).Updates(updates).Error; err != nil {
-			return nil, err
-		}
-	}
-	if err := s.state.savePatch(ctx, accountID, req.GetAccount()); err != nil {
-		return nil, err
-	}
-
-	account, err := s.findAccount(ctx, accountID)
+	out, err := s.updateGPTAccount(ctx, req.GetAccount(), req.GetCredential())
 	if err != nil {
 		return nil, err
 	}
-	out, err := s.accountToProto(ctx, account)
-	if err != nil {
-		return nil, err
-	}
-	log.Printf("Updated account id=%s status=%s", account.ID, out.GetStatus())
-	s.publishAccountHotStream(ctx, accountUpdatedEvent, out)
 	return &pb.UpdateAccountResponse{Account: out}, nil
 }
 
 func (s *gptAccountServer) DeleteAccount(ctx context.Context, req *pb.DeleteAccountRequest) (*pb.DeleteAccountResponse, error) {
-	accountID := strings.TrimSpace(req.GetAccountId())
-	if accountID == "" {
-		return nil, status.Error(codes.InvalidArgument, "account_id is required")
-	}
-
-	result := s.db.WithContext(ctx).Delete(&db.Account{}, "id = ?", accountID)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	if result.RowsAffected == 0 {
-		return nil, status.Error(codes.NotFound, "account not found")
-	}
-	if err := s.state.delete(ctx, accountID); err != nil {
+	if err := s.deleteGPTAccount(ctx, req.GetAccountId()); err != nil {
 		return nil, err
 	}
-	s.publishAccountHotStream(ctx, accountDeletedEvent, &pb.Account{AccountId: accountID, UpdatedAt: time.Now().Unix()})
 	return &pb.DeleteAccountResponse{Ack: true}, nil
 }
 
 func (s *gptAccountServer) ListAccounts(ctx context.Context, req *pb.ListAccountsRequest) (*pb.ListAccountsResponse, error) {
-	limit := int(req.GetLimit())
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 500 {
-		limit = 500
-	}
-
-	statusFilter := strings.TrimSpace(req.GetStatus())
-	dbLimit := limit
-	if statusFilter != "" {
-		dbLimit = 500
-	}
-	query := s.db.WithContext(ctx).Order("created_at DESC").Limit(dbLimit)
-	if emailFilter := emailx.Normalize(req.GetEmail()); emailFilter != "" {
-		query = query.Where("email = ?", emailFilter)
-	}
-
-	var accounts []db.Account
-	if err := query.Find(&accounts).Error; err != nil {
-		return nil, err
-	}
-
-	resp := &pb.ListAccountsResponse{Accounts: make([]*pb.Account, 0, len(accounts))}
-	for i := range accounts {
-		account, err := s.accountToProto(ctx, &accounts[i])
-		if err != nil {
-			return nil, err
-		}
-		if statusFilter != "" && account.GetStatus() != statusFilter {
-			continue
-		}
-		resp.Accounts = append(resp.Accounts, account)
-		if len(resp.Accounts) >= limit {
-			break
-		}
-	}
-	return resp, nil
+	return s.listGPTAccounts(ctx, req)
 }
 
 func (s *gptAccountServer) UpsertGPTEmailAllocation(ctx context.Context, req *pb.UpsertGPTEmailAllocationRequest) (*pb.UpsertGPTEmailAllocationResponse, error) {
@@ -231,48 +137,108 @@ func (s *gptAccountServer) UpsertGPTEmailAllocation(ctx context.Context, req *pb
 }
 
 func (s *gptAccountServer) ListGPTEmailAllocations(ctx context.Context, req *pb.ListGPTEmailAllocationsRequest) (*pb.ListGPTEmailAllocationsResponse, error) {
-	limit := int(req.GetLimit())
-	if limit <= 0 {
-		limit = 100
+	limit := pagex.NormalizePageLimit(int(req.GetLimit()))
+	cursor, err := decodeEmailAllocationCursor(req.GetCursor())
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
-	if limit > 500 {
-		limit = 500
-	}
-
-	query := s.db.WithContext(ctx).Order("updated_at ASC").Limit(limit)
-	if statusFilter := strings.TrimSpace(req.GetStatus()); statusFilter != "" {
-		query = query.Where("status = ?", statusFilter)
-	}
-	if primaryEmail := emailx.Normalize(req.GetPrimaryEmail()); primaryEmail != "" {
-		query = query.Where("primary_email = ?", primaryEmail)
-	}
-	if req.GetSplittableOnly() {
-		query = query.Where("is_primary = ? AND splittable = ?", true, true)
-	}
-
-	var rows []db.GPTEmailAllocation
-	if err := query.Find(&rows).Error; err != nil {
+	rows, hasMore, err := s.emailAllocationPageRows(ctx, req, cursor, limit)
+	if err != nil {
 		return nil, err
 	}
 	resp := &pb.ListGPTEmailAllocationsResponse{Allocations: make([]*pb.GPTEmailAllocation, 0, len(rows))}
 	for i := range rows {
 		resp.Allocations = append(resp.Allocations, gptEmailAllocationToProto(&rows[i]))
 	}
+	if hasMore && len(rows) > 0 {
+		last := rows[len(rows)-1]
+		resp.NextCursor = encodeEmailAllocationCursor(last.UpdatedAt, last.Email)
+	}
 	return resp, nil
+}
+
+func (s *gptAccountServer) emailAllocationPageRows(ctx context.Context, req *pb.ListGPTEmailAllocationsRequest, cursor emailAllocationCursor, limit int) ([]db.GPTEmailAllocation, bool, error) {
+	query := s.db.WithContext(ctx).Order("updated_at ASC").Order("email ASC").Limit(pagex.KeysetLookaheadLimit(limit))
+	if statusFilter := strings.TrimSpace(req.GetStatus()); statusFilter != "" {
+		query = query.Where("status = ?", statusFilter)
+	}
+	if email := emailx.Normalize(req.GetEmail()); email != "" {
+		query = query.Where("email = ?", email)
+	}
+	if primaryEmail := emailx.Normalize(req.GetPrimaryEmail()); primaryEmail != "" {
+		query = query.Where("primary_email = ?", primaryEmail)
+	}
+	if req.IsPrimary != nil {
+		query = query.Where("is_primary = ?", req.GetIsPrimary())
+	}
+	if req.GetSplittableOnly() {
+		query = query.Where("is_primary = ? AND splittable = ?", true, true)
+	}
+	if cursor.Valid() {
+		query = query.Where("(updated_at, email) > (?, ?)", cursor.UpdatedAt, cursor.Email)
+	}
+
+	var rows []db.GPTEmailAllocation
+	if err := query.Find(&rows).Error; err != nil {
+		return nil, false, err
+	}
+	rows, hasMore := pagex.TrimLimit(rows, limit)
+	return rows, hasMore, nil
+}
+
+type emailAllocationCursor struct {
+	UpdatedAt int64  `json:"updated_at"`
+	Email     string `json:"email"`
+}
+
+func (c emailAllocationCursor) Valid() bool {
+	return c.UpdatedAt >= 0 && emailx.Normalize(c.Email) != ""
+}
+
+func encodeEmailAllocationCursor(updatedAt int64, email string) string {
+	email = emailx.Normalize(email)
+	if updatedAt < 0 || email == "" {
+		return ""
+	}
+	data, err := json.Marshal(emailAllocationCursor{UpdatedAt: updatedAt, Email: email})
+	if err != nil {
+		return ""
+	}
+	return base64.RawURLEncoding.EncodeToString(data)
+}
+
+func decodeEmailAllocationCursor(value string) (emailAllocationCursor, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return emailAllocationCursor{}, nil
+	}
+	data, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		return emailAllocationCursor{}, fmt.Errorf("invalid email allocation cursor")
+	}
+	var cursor emailAllocationCursor
+	if err := json.Unmarshal(data, &cursor); err != nil {
+		return emailAllocationCursor{}, fmt.Errorf("invalid email allocation cursor")
+	}
+	cursor.Email = emailx.Normalize(cursor.Email)
+	if !cursor.Valid() {
+		return emailAllocationCursor{}, fmt.Errorf("invalid email allocation cursor")
+	}
+	return cursor, nil
 }
 
 func (s *gptAccountServer) ClaimGPTEmailAllocation(ctx context.Context, req *pb.ClaimGPTEmailAllocationRequest) (*pb.ClaimGPTEmailAllocationResponse, error) {
 	email := emailx.Normalize(req.GetEmail())
-	accountID := strings.TrimSpace(req.GetAccountId())
+	accountID, accountErr := normalizeAccountID(req.GetAccountId())
 	nextStatus := strings.TrimSpace(req.GetStatus())
 	if email == "" {
 		return nil, status.Error(codes.InvalidArgument, "email is required")
 	}
-	if accountID == "" {
-		return nil, status.Error(codes.InvalidArgument, "account_id is required")
+	if accountErr != nil {
+		return nil, accountErr
 	}
 	if nextStatus == "" {
-		nextStatus = gptEmailStatusAssigned
+		nextStatus = gptplugin.EmailStatusAssigned
 	}
 
 	var claimed bool
@@ -334,19 +300,19 @@ func (s *gptAccountServer) ClaimGPTEmailAllocation(ctx context.Context, req *pb.
 
 func (s *gptAccountServer) CreateGPTEmailAliasAllocation(ctx context.Context, req *pb.CreateGPTEmailAliasAllocationRequest) (*pb.CreateGPTEmailAliasAllocationResponse, error) {
 	primaryEmail := emailx.Normalize(req.GetPrimaryEmail())
-	accountID := strings.TrimSpace(req.GetAccountId())
+	accountID, accountErr := normalizeAccountID(req.GetAccountId())
 	if primaryEmail == "" {
 		return nil, status.Error(codes.InvalidArgument, "primary_email is required")
 	}
-	if accountID == "" {
-		return nil, status.Error(codes.InvalidArgument, "account_id is required")
+	if accountErr != nil {
+		return nil, accountErr
 	}
 
 	var created *db.GPTEmailAllocation
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var primary db.GPTEmailAllocation
 		result := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			Where("email = ? AND is_primary = ? AND status = ? AND splittable = ?", primaryEmail, true, gptEmailStatusRegistered, true).
+			Where("email = ? AND is_primary = ? AND status = ? AND splittable = ?", primaryEmail, true, gptplugin.EmailStatusRegistered, true).
 			Find(&primary)
 		if result.Error != nil {
 			return result.Error
@@ -367,7 +333,7 @@ func (s *gptAccountServer) CreateGPTEmailAliasAllocation(ctx context.Context, re
 				Email:             alias,
 				PrimaryEmail:      primary.Email,
 				IsPrimary:         false,
-				Status:            gptEmailStatusAssigned,
+				Status:            gptplugin.EmailStatusAssigned,
 				Splittable:        false,
 				AssignedAccountID: accountID,
 				LastError:         "",
@@ -421,38 +387,38 @@ func (s *gptAccountServer) MarkGPTEmailAllocationStatus(ctx context.Context, req
 			"status":     nextStatus,
 			"last_error": strings.TrimSpace(req.GetLastError()),
 		}
-		if nextStatus == gptEmailStatusRegistered && row.IsPrimary {
+		if nextStatus == gptplugin.EmailStatusRegistered && row.IsPrimary {
 			updates["splittable"] = true
 		}
-		if nextStatus == gptEmailStatusUserAlreadyExists || nextStatus == gptEmailStatusBlocked {
+		if nextStatus == gptplugin.EmailStatusUserAlreadyExists || nextStatus == gptplugin.EmailStatusBlocked {
 			updates["splittable"] = false
 		}
 		if err := tx.Model(&db.GPTEmailAllocation{}).Where("email = ?", row.Email).Updates(updates).Error; err != nil {
 			return err
 		}
-		if nextStatus == gptEmailStatusRegistered {
+		if nextStatus == gptplugin.EmailStatusRegistered {
 			if err := refreshPrimaryRegisteredState(tx, row.PrimaryEmail); err != nil {
 				return err
 			}
 		}
-		if nextStatus == gptEmailStatusUserAlreadyExists {
+		if nextStatus == gptplugin.EmailStatusUserAlreadyExists {
 			primaryEmail := row.PrimaryEmail
 			if primaryEmail == "" {
 				primaryEmail = row.Email
 			}
 			blockUpdate := map[string]any{
-				"status":     gptEmailStatusBlocked,
+				"status":     gptplugin.EmailStatusBlocked,
 				"splittable": false,
 				"last_error": strings.TrimSpace(req.GetLastError()),
 			}
 			if err := tx.Model(&db.GPTEmailAllocation{}).
-				Where("email = ? AND is_primary = ? AND status <> ?", primaryEmail, true, gptEmailStatusUserAlreadyExists).
+				Where("email = ? AND is_primary = ? AND status <> ?", primaryEmail, true, gptplugin.EmailStatusUserAlreadyExists).
 				Updates(blockUpdate).Error; err != nil {
 				return err
 			}
 			if err := tx.Model(&db.GPTEmailAllocation{}).
-				Where("primary_email = ? AND is_primary = ? AND status = ?", primaryEmail, false, gptEmailStatusAvailable).
-				Updates(map[string]any{"status": gptEmailStatusBlocked, "last_error": strings.TrimSpace(req.GetLastError())}).Error; err != nil {
+				Where("primary_email = ? AND is_primary = ? AND status = ?", primaryEmail, false, gptplugin.EmailStatusAvailable).
+				Updates(map[string]any{"status": gptplugin.EmailStatusBlocked, "last_error": strings.TrimSpace(req.GetLastError())}).Error; err != nil {
 				return err
 			}
 		}
@@ -474,20 +440,25 @@ func (s *gptAccountServer) MarkGPTEmailAllocationStatus(ctx context.Context, req
 	return &pb.MarkGPTEmailAllocationStatusResponse{Allocation: out}, nil
 }
 
-func (s *gptAccountServer) buildAccount(input *pb.Account) (*db.Account, error) {
+func (s *gptAccountServer) buildAccount(input *pb.Account, credential *pb.AccountCredential) (*db.Account, error) {
 	if input == nil {
 		input = &pb.Account{}
 	}
 
 	account := &db.Account{
-		ID:       strings.TrimSpace(input.GetAccountId()),
-		Email:    strings.TrimSpace(input.GetEmail()),
-		Password: input.GetPassword(),
+		ID:       gptAccountID(input),
+		Email:    gptAccountEmail(input),
+		Password: strings.TrimSpace(credential.GetPassword()),
 	}
 
 	if account.ID == "" {
 		account.ID = gofakeit.UUID()
 	}
+	accountID, err := normalizeAccountID(account.ID)
+	if err != nil {
+		return nil, err
+	}
+	account.ID = accountID
 	account.Email = emailx.Normalize(account.Email)
 	if account.Password == "" {
 		account.Password = gofakeit.Password(true, true, true, true, false, 12)
@@ -512,17 +483,21 @@ func buildGPTEmailAllocation(input *pb.GPTEmailAllocation) (*db.GPTEmailAllocati
 	if primaryEmail == email {
 		isPrimary = true
 	}
+	assignedAccountID, err := normalizeOptionalAccountID(input.GetAssignedAccountId(), "assigned_account_id")
+	if err != nil {
+		return nil, err
+	}
 	row := &db.GPTEmailAllocation{
 		Email:             email,
 		PrimaryEmail:      primaryEmail,
 		IsPrimary:         isPrimary,
 		Status:            strings.TrimSpace(input.GetStatus()),
 		Splittable:        input.GetSplittable(),
-		AssignedAccountID: strings.TrimSpace(input.GetAssignedAccountId()),
+		AssignedAccountID: assignedAccountID,
 		LastError:         strings.TrimSpace(input.GetLastError()),
 	}
 	if row.Status == "" {
-		row.Status = gptEmailStatusAvailable
+		row.Status = gptplugin.EmailStatusAvailable
 	}
 	return row, nil
 }
@@ -544,17 +519,17 @@ func assignAccountEmailAllocation(tx *gorm.DB, accountID string, email string) e
 			Email:             email,
 			PrimaryEmail:      emailx.CanonicalPlusAlias(email),
 			IsPrimary:         emailx.CanonicalPlusAlias(email) == email,
-			Status:            gptEmailStatusAssigned,
+			Status:            gptplugin.EmailStatusAssigned,
 			Splittable:        false,
 			AssignedAccountID: accountID,
 			LastError:         "",
 		}).Error
 	}
-	if !canRefreshAllocationStatus(existing.Status, gptEmailStatusAssigned) && existing.AssignedAccountID != accountID {
+	if !canRefreshAllocationStatus(existing.Status, gptplugin.EmailStatusAssigned) && existing.AssignedAccountID != accountID {
 		return nil
 	}
 	return tx.Model(&db.GPTEmailAllocation{}).Where("email = ?", email).Updates(map[string]any{
-		"status":              gptEmailStatusAssigned,
+		"status":              gptplugin.EmailStatusAssigned,
 		"assigned_account_id": accountID,
 		"last_error":          "",
 	}).Error
@@ -566,22 +541,22 @@ func refreshPrimaryRegisteredState(tx *gorm.DB, primaryEmail string) error {
 		return nil
 	}
 	return tx.Model(&db.GPTEmailAllocation{}).
-		Where("email = ? AND is_primary = ? AND status NOT IN ?", primaryEmail, true, []string{gptEmailStatusUserAlreadyExists, gptEmailStatusBlocked}).
-		Where("EXISTS (SELECT 1 FROM gpt_email_allocations AS child WHERE child.primary_email = ? AND child.status = ?)", primaryEmail, gptEmailStatusRegistered).
+		Where("email = ? AND is_primary = ? AND status NOT IN ?", primaryEmail, true, []string{gptplugin.EmailStatusUserAlreadyExists, gptplugin.EmailStatusBlocked}).
+		Where("EXISTS (SELECT 1 FROM gpt_email_allocations AS child WHERE child.primary_email = ? AND child.status = ?)", primaryEmail, gptplugin.EmailStatusRegistered).
 		Updates(map[string]any{
-			"status":     gptEmailStatusRegistered,
+			"status":     gptplugin.EmailStatusRegistered,
 			"splittable": true,
 		}).Error
 }
 
 func (s *gptAccountServer) findAccount(ctx context.Context, accountID string) (*db.Account, error) {
-	accountID = strings.TrimSpace(accountID)
-	if accountID == "" {
-		return nil, status.Error(codes.InvalidArgument, "account_id is required")
+	accountID, err := normalizeAccountID(accountID)
+	if err != nil {
+		return nil, err
 	}
 
 	var account db.Account
-	err := s.db.WithContext(ctx).First(&account, "id = ?", accountID).Error
+	err = s.db.WithContext(ctx).First(&account, "id = ?", accountID).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, status.Error(codes.NotFound, "account not found")
 	}
@@ -607,16 +582,35 @@ func (s *gptAccountServer) findGPTEmailAllocation(ctx context.Context, email str
 	return &row, nil
 }
 
-func updateMap(account *pb.Account) map[string]interface{} {
+func normalizeAccountID(value string) (string, error) {
+	accountID, err := gptAccountDescriptor.NormalizeID(value, "account_id")
+	if err != nil {
+		return "", status.Error(codes.InvalidArgument, err.Error())
+	}
+	return accountID, nil
+}
+
+func normalizeOptionalAccountID(value string, field string) (string, error) {
+	if strings.TrimSpace(value) == "" {
+		return "", nil
+	}
+	accountID, err := gptAccountDescriptor.NormalizeID(value, field)
+	if err != nil {
+		return "", status.Error(codes.InvalidArgument, err.Error())
+	}
+	return accountID, nil
+}
+
+func updateMap(account *pb.Account, credential *pb.AccountCredential) map[string]interface{} {
 	updates := map[string]interface{}{}
 	if account == nil {
 		return updates
 	}
 
-	if value := emailx.Normalize(account.GetEmail()); value != "" {
+	if value := gptAccountEmail(account); value != "" {
 		updates["email"] = value
 	}
-	if value := account.GetPassword(); value != "" {
+	if value := strings.TrimSpace(credential.GetPassword()); value != "" {
 		updates["password"] = value
 	}
 	return updates
@@ -627,16 +621,13 @@ func (s *gptAccountServer) accountToProto(ctx context.Context, account *db.Accou
 		return nil, nil
 	}
 	out := &pb.Account{
-		AccountId:           account.ID,
-		Email:               account.Email,
-		Password:            account.Password,
-		CreatedAt:           account.CreatedAt,
-		UpdatedAt:           account.UpdatedAt,
+		Account:             newGptAccountRecord(account.ID, account.Email, account.CreatedAt, account.UpdatedAt),
 		PrimaryMailboxEmail: emailx.CanonicalPlusAlias(account.Email),
 	}
 	if err := s.state.apply(ctx, out); err != nil {
 		return nil, err
 	}
+	out.Account = gptAccountProjection(out)
 	return out, nil
 }
 
@@ -676,16 +667,16 @@ func canRefreshAllocationStatus(current string, incoming string) bool {
 	current = strings.TrimSpace(current)
 	incoming = strings.TrimSpace(incoming)
 	switch current {
-	case "", gptEmailStatusAvailable, gptEmailStatusOAuthPending, gptEmailStatusAuthFailed:
+	case "", gptplugin.EmailStatusAvailable, gptplugin.EmailStatusOAuthPending, gptplugin.EmailStatusAuthFailed:
 		return true
-	case gptEmailStatusRegistered:
-		return incoming == gptEmailStatusRegistered || incoming == gptEmailStatusUserAlreadyExists || incoming == gptEmailStatusBlocked
-	case gptEmailStatusAssigned:
-		return incoming == gptEmailStatusUserAlreadyExists || incoming == gptEmailStatusBlocked
-	case gptEmailStatusUserAlreadyExists, gptEmailStatusBlocked:
+	case gptplugin.EmailStatusRegistered:
+		return incoming == gptplugin.EmailStatusRegistered || incoming == gptplugin.EmailStatusUserAlreadyExists || incoming == gptplugin.EmailStatusBlocked
+	case gptplugin.EmailStatusAssigned:
+		return incoming == gptplugin.EmailStatusUserAlreadyExists || incoming == gptplugin.EmailStatusBlocked
+	case gptplugin.EmailStatusUserAlreadyExists, gptplugin.EmailStatusBlocked:
 		return false
 	default:
-		return incoming != gptEmailStatusAvailable && incoming != gptEmailStatusOAuthPending && incoming != gptEmailStatusAuthFailed
+		return incoming != gptplugin.EmailStatusAvailable && incoming != gptplugin.EmailStatusOAuthPending && incoming != gptplugin.EmailStatusAuthFailed
 	}
 }
 
@@ -724,7 +715,12 @@ func main() {
 	}
 
 	grpcServer := grpc.NewServer()
-	pb.RegisterGPTAccountServiceServer(grpcServer, &gptAccountServer{db: database, state: stateStore, hot: hot})
+	pb.RegisterGPTAccountServiceServer(grpcServer, &gptAccountServer{
+		db:            database,
+		state:         stateStore,
+		hot:           hot,
+		accountStream: accountstream.NewPublisher(accountstream.Config{Publisher: hot, Descriptor: gptAccountDescriptor}),
+	})
 	grpchealth.RegisterServing(grpcServer)
 
 	log.Printf("GPT account gRPC server listening on %s", listenAddr)

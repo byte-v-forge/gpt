@@ -181,7 +181,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $json.browser_session_id, email: $json.email, timeout_seconds: $json.otp_timeout_seconds || 300, otp_issued_after_unix: $json.otp_issued_after_unix || 0, resume_url: $execution.resumeUrl } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $json.flow_id, channel: 'email', target: $json.email, timeout_seconds: $json.otp_timeout_seconds || 300, otp_issued_after_unix: $json.otp_issued_after_unix || 0, resume_url: $execution.resumeUrl } }}",
         "options": {}
       },
       "id": "login-session-register-otp-resume",
@@ -291,7 +291,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $json.body?.flow_id || $json.flow_id || $('Start Browser Login').first().json.browser_session_id, otp_source: $json.body?.otp_source || $json.otp_source || $json.data?.otp_source || 'mailbox', otp_issued_after_unix: $json.body?.otp_issued_after_unix || $json.otp_issued_after_unix || $json.data?.issued_after_unix || $('Start Browser Login').first().json.otp_issued_after_unix || 0 } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $json.body?.flow_id || $json.flow_id || $('Start Browser Login').first().json.flow_id, otp_source: $json.body?.otp_source || $json.otp_source || $json.data?.otp_source || 'mailbox', otp_issued_after_unix: $json.body?.otp_issued_after_unix || $json.otp_issued_after_unix || $json.data?.issued_after_unix || $('Start Browser Login').first().json.otp_issued_after_unix || 0 } }}",
         "options": {}
       },
       "id": "login-session-complete-browser",
@@ -335,7 +335,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Start Browser Login').first().json.browser_session_id, error_message: 'login session OTP wait timed out', data: { reason: 'otp_wait_timeout' } } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Start Browser Login').first().json.flow_id, error_message: 'login session OTP wait timed out', data: { reason: 'otp_wait_timeout', error_message: 'login session OTP wait timed out' } } }}",
         "options": {}
       },
       "id": "login-session-fail-otp-timeout",
@@ -357,7 +357,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Start Browser Login').first().json.browser_session_id, error_message: 'login session did not reach terminal or OTP state', data: $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Start Browser Login').first().json.flow_id, error_message: 'login session did not reach terminal or OTP state', data: Object.assign({}, $json.data || {}, { reason: 'unexpected_state', error_message: 'login session did not reach terminal or OTP state', stage: $json.stage || $json.state || '' }) } }}",
         "options": {}
       },
       "id": "login-session-fail-unexpected",

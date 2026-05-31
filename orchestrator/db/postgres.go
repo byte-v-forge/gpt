@@ -59,14 +59,6 @@ type JobEvent struct {
 	CreatedAt    int64 `gorm:"autoCreateTime"`
 }
 
-type GoPayUserProfile struct {
-	StateKey  string `gorm:"primaryKey;column:state_key"`
-	WAPhone   string `gorm:"column:wa_phone"`
-	PIN       string `gorm:"column:pin"`
-	CreatedAt int64  `gorm:"autoCreateTime"`
-	UpdatedAt int64  `gorm:"autoUpdateTime"`
-}
-
 type GPTRuntimeSetting struct {
 	SettingsKey string `gorm:"primaryKey;column:settings_key"`
 	ValueJSON   string `gorm:"column:value_json"`
@@ -141,10 +133,6 @@ func (JobEvent) TableName() string {
 	return "job_events"
 }
 
-func (GoPayUserProfile) TableName() string {
-	return "gopay_user_profiles"
-}
-
 func (GPTRuntimeSetting) TableName() string {
 	return "gpt_runtime_settings"
 }
@@ -182,7 +170,6 @@ func validateSchema(db *gorm.DB) {
 		"job_params",
 		"job_steps",
 		"job_events",
-		"gopay_user_profiles",
 		"gpt_runtime_settings",
 		"codex_oauth_phone_leases",
 		"account_browser_fingerprints",

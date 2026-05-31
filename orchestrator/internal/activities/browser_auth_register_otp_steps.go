@@ -62,12 +62,14 @@ func (f *browserAuthFlow) resendEmailOTP(client browserautomationv1.BrowserAutom
 	}
 	issuedAfter := unixSecondsFromMillis(startedAt)
 	f.markOTPRequestClickedAt(issuedAfter)
-	data := map[string]any{
-		"browser_session_id":             f.sessionID,
-		"mode":                           f.mode,
-		"email":                          f.email,
-		"otp_issued_after_unix":          issuedAfter,
-		"otp_request_started_at_unix_ms": startedAt,
+	data := &pb.ActivityBrowserResendOTPData{
+		ResponsePresent:           boolPtr(true),
+		Success:                   boolPtr(true),
+		BrowserSessionId:          f.sessionID,
+		Email:                     f.email,
+		OtpIssuedAfterUnix:        issuedAfter,
+		OtpRequestStartedAtUnixMs: startedAt,
+		Mode:                      f.mode,
 	}
 	return &pb.BrowserAuthResendOTPOutput{
 		BrowserSessionId:          f.sessionID,
@@ -76,7 +78,13 @@ func (f *browserAuthFlow) resendEmailOTP(client browserautomationv1.BrowserAutom
 		OtpIssuedAfterUnix:        issuedAfter,
 		OtpRequestStartedAtUnixMs: startedAt,
 		OtpTimeoutSeconds:         0,
-		Data:                      protoData(data),
+		Data: &pb.ActivityBrowserAuthOTPRequestStepData{
+			BrowserSessionId:          f.sessionID,
+			Mode:                      f.mode,
+			BrowserResend:             data,
+			OtpIssuedAfterUnix:        issuedAfter,
+			OtpRequestStartedAtUnixMs: startedAt,
+		},
 	}, nil
 }
 

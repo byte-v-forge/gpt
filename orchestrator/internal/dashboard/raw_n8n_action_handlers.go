@@ -33,7 +33,7 @@ func (s *server) handleRawN8NAction(actionID string, w http.ResponseWriter, r *h
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if s.n8nActionInvoker == nil {
+	if s.n8nActions == nil {
 		writeError(w, http.StatusBadGateway, errors.New("n8n action invoker is not configured"))
 		return
 	}
@@ -42,7 +42,7 @@ func (s *server) handleRawN8NAction(actionID string, w http.ResponseWriter, r *h
 		writeError(w, http.StatusBadRequest, fmt.Errorf("read n8n action body: %w", err))
 		return
 	}
-	resp, err := s.n8nActionInvoker.InvokeN8NAction(r.Context(), gptplugin.N8NActionCall{
+	resp, err := s.n8nActions.InvokeN8NAction(r.Context(), gptplugin.N8NActionCall{
 		ActionID: actionID,
 		SubPath:  s.actionSubPath(r, actionID),
 		RawJSON:  body,

@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
-import { ActionButtonGroup, api, Button, ControlledInputFieldList, ControlledSelectField, DashboardDialog, errorText, ToolbarIconButton, useForm } from '@byte-v-forge/common-ui';
+import { ActionButtonGroup, api, Button, ControlledInputFieldList, ControlledSelectField, DashboardDialog, errorText, ToolbarIconButton, useAsyncActionRunner, useForm } from '@byte-v-forge/common-ui';
 import type { ActionButtonDescriptor, Control, ControlledInputFieldDescriptor, SubmitHandler } from '@byte-v-forge/common-ui';
 import { accountEmail, defaultMailboxChoice, domainsForProvider, emailStrategyForValues, mailboxChoiceOptions, mailboxProviderOptions, type CreateAccountValues } from './create-account-options';
 import { CreateAccountGeoFields } from './create-account-geo-fields';
 import { useCreateAccountMailboxData } from './create-account-mailbox-data';
 import { randomRegionForCountry, regionOptionsForCountry } from './geo-options';
+import { requireAccount } from './account-response';
+import type { CreateGPTAccountRequest, CreateGPTAccountResponse } from '../proto/orchestrator_account';
+import { accountCarrierID } from '@byte-v-forge/common-ui';
 
 const defaultCountryCode = 'JP';
 
 export function CreateAccountForm({ compact, onDone, onError }: { compact?: boolean; onDone: (message: string) => void; onError: (message: string) => void }) {
   const [open, setOpen] = useState(false);
-  const [working, setWorking] = useState('');
+  const runner = useAsyncActionRunner();
   const { domains, providerCapabilities } = useCreateAccountMailboxData(open);
   const { control, getValues, handleSubmit, reset, setValue, watch } = useForm<CreateAccountValues>({ defaultValues: createDefaultValues() });
   const providerOptions = useMemo(() => mailboxProviderOptions(providerCapabilities, domains), [providerCapabilities, domains]);
@@ -57,23 +60,21 @@ export function CreateAccountForm({ compact, onDone, onError }: { compact?: bool
     if (requiresDomain && !activeDomain) return onError('未配置可用域名');
     const email = accountEmail(effective, activeDomain);
     if (isManual && !email) return onError('邮箱不能为空');
-    setWorking('创建账号');
-    try {
-      const resp = await api<any>('/api/gpt/accounts', {
+    await runner.tryRun('创建账号', async () => {
+      const payload: CreateGPTAccountRequest = {
+        account_id: '',
+        email,
+        password: values.password,
+        country_code: values.country_code,
+        region: values.region,
+        email_strategy: emailStrategyForValues(effective)
+      };
+      const resp = await api<CreateGPTAccountResponse>('/api/gpt/accounts', {
         method: 'POST',
-        body: JSON.stringify({
-          email,
-          email_domain: requiresDomain ? activeDomain : '',
-          email_local_part: requiresDomain ? values.local : '',
-          domain: requiresDomain ? activeDomain : '',
-          local_part: requiresDomain ? values.local : '',
-          password: values.password,
-          country_code: values.country_code,
-          region: values.region,
-          email_strategy: emailStrategyForValues(effective)
-        })
+        body: JSON.stringify(payload)
       });
-      onDone(`创建账号 已提交: ${resp.job_id || resp.account_id || email || 'ok'}`);
+      const account = requireAccount(resp.account);
+      onDone(`创建账号 已提交: ${accountCarrierID(account) || email || 'ok'}`);
       reset({
         ...createDefaultValues(),
         provider_key: providerKey,
@@ -81,11 +82,7 @@ export function CreateAccountForm({ compact, onDone, onError }: { compact?: bool
         domain: activeDomain
       });
       setOpen(false);
-    } catch (err) {
-      onError(errorText(err));
-    } finally {
-      setWorking('');
-    }
+    }, { onError: (err) => onError(errorText(err)) });
   };
 
   return (
@@ -97,7 +94,7 @@ export function CreateAccountForm({ compact, onDone, onError }: { compact?: bool
           <Plus className="size-4" /> 添加账号
         </Button>
       )}
-      <DashboardDialog open={open} title="创建 GPT 账号" description="选择 Mailbox Provider、邮箱类型和地区。" size="sm" footer={<ActionButtonGroup actions={dialogActions(working, requiresDomain && !activeDomain)} />} onOpenChange={setOpen}>
+      <DashboardDialog open={open} title="创建 GPT 账号" description="选择 Mailbox Provider、邮箱类型和地区。" size="sm" footer={<ActionButtonGroup actions={dialogActions(runner.activeKey, requiresDomain && !activeDomain)} />} onOpenChange={setOpen}>
         <form id="create-account-form" className="grid gap-3" onSubmit={handleSubmit(createAccount)}>
           <CreateAccountMailboxFields control={control} providerOptions={providerOptions} providerKey={providerKey} choiceOptions={choiceOptions} mailboxChoice={mailboxChoice} domains={activeDomains} activeDomain={activeDomain} showDomain={requiresDomain} showEmail={isManual} />
           <div className="grid gap-2 sm:grid-cols-2">

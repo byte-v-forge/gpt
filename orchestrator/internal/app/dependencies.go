@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/byte-v-forge/common-lib/eventcatalog"
 	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
 	smsv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/sms/v1"
 	"github.com/byte-v-forge/common-lib/grpcclient"
@@ -24,45 +23,39 @@ import (
 	"orchestrator/db"
 	"orchestrator/internal/accountfingerprint"
 	"orchestrator/internal/accountmail"
+	"orchestrator/internal/accountproxyusage"
 	"orchestrator/internal/actionregistry"
-	"orchestrator/internal/contracts"
-	"orchestrator/internal/emailotpwait"
-	"orchestrator/internal/gopayotp"
+	"orchestrator/internal/channelotpwait"
 	"orchestrator/internal/gptsettings"
 	"orchestrator/internal/jobevents"
 	"orchestrator/internal/jobprojection"
 	"orchestrator/internal/mailboxevents"
 	"orchestrator/internal/otpprojection"
-	"orchestrator/internal/paymentotpwait"
 	"orchestrator/internal/runtimesecrets"
-	"orchestrator/internal/smsotpwait"
 	"orchestrator/pb"
 )
 
 type orchestratorDependencies struct {
-	db              *gorm.DB
-	jobStore        *jobprojection.Store
-	jobEvents       *jobevents.Store
-	fingerprints    *accountfingerprint.Store
-	gptSettings     *gptsettings.Store
-	otpProjection   *otpprojection.Store
-	emailOTPWaits   *emailotpwait.Store
-	smsOTPWaits     *smsotpwait.Store
-	paymentOTPWaits *paymentotpwait.Store
-	mailboxState    *accountmail.Projector
-	secrets         runtimesecrets.Store
-	platformBus     *natseventbus.Bus
-	hotStream       hotstream.Bus
-	actionRegistry  *actionregistry.Registry
+	db                *gorm.DB
+	jobStore          *jobprojection.Store
+	jobEvents         *jobevents.Store
+	fingerprints      *accountfingerprint.Store
+	accountProxyUsage *accountproxyusage.Store
+	gptSettings       *gptsettings.Store
+	otpProjection     *otpprojection.Store
+	channelOTPWaits   *channelotpwait.Store
+	mailboxState      *accountmail.Projector
+	secrets           runtimesecrets.Store
+	platformBus       *natseventbus.Bus
+	hotStream         hotstream.Bus
+	actionRegistry    *actionregistry.Registry
 
 	accountClient           pb.GPTAccountServiceClient
 	browserAutomationClient browserautomationv1.BrowserAutomationServiceClient
 	paymentClient           pb.PaymentServiceClient
-	gopayClient             pb.GopayAppServiceClient
 	smsClient               smsv1.SmsOrderServiceClient
 	smsCatalogClient        smsv1.SmsCatalogServiceClient
 	mailboxPollRequester    *mailboxevents.Requester
-	otpRelay                gopayotp.Relay
 
 	closers []func() error
 }
@@ -80,7 +73,10 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 		return nil, err
 	}
 	deps.addCloser(otpRelayClient.Close)
-	deps.otpRelay = newGoPayOTPRelay(otpRelayClient, cfg)
+	if err := configurePrivateDependencies(ctx, cfg, deps, otpRelayClient); err != nil {
+		deps.Close()
+		return nil, err
+	}
 
 	browserAutomationConn, err := newGRPCClientConn("browser-automation service", cfg.BrowserAutomationAddr)
 	if err != nil {
@@ -95,20 +91,6 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 		return nil, err
 	}
 	deps.addCloser(paymentConn.Close)
-
-	var gopayConn *grpc.ClientConn
-	if deps.goPayActionsEnabled() {
-		gopayConn, err = newGRPCClientConn(
-			"GoPay app channel",
-			cfg.GoPayAppAddr,
-			grpc.WithDefaultServiceConfig(gopayAppGRPCRetryServiceConfig()),
-		)
-		if err != nil {
-			deps.Close()
-			return nil, err
-		}
-		deps.addCloser(gopayConn.Close)
-	}
 
 	smsConn, err := newGRPCClientConn("sms service", cfg.SmsAddr)
 	if err != nil {
@@ -132,24 +114,15 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 		return nil, fmt.Errorf("initialize otp projection: %w", err)
 	}
 	deps.otpProjection = otpStore
-	emailOTPWaits, err := emailotpwait.NewStore(runtimeSecretClient, "byte-v-forge:gpt:email-otp-wait")
+	channelOTPWaits, err := channelotpwait.NewStore(runtimeSecretClient, "byte-v-forge:gpt:channel-otp-wait", channelotpwait.Config{
+		RequiredError:      "channel otp wait redis client is required",
+		MissingErrorPrefix: "channel otp wait",
+	})
 	if err != nil {
 		deps.Close()
-		return nil, fmt.Errorf("initialize email otp wait store: %w", err)
+		return nil, fmt.Errorf("initialize channel otp wait store: %w", err)
 	}
-	deps.emailOTPWaits = emailOTPWaits
-	smsOTPWaits, err := smsotpwait.NewStore(runtimeSecretClient, "byte-v-forge:gpt:sms-otp-wait")
-	if err != nil {
-		deps.Close()
-		return nil, fmt.Errorf("initialize sms otp wait store: %w", err)
-	}
-	deps.smsOTPWaits = smsOTPWaits
-	paymentOTPWaits, err := paymentotpwait.NewStore(runtimeSecretClient, "byte-v-forge:gpt:payment-otp-wait")
-	if err != nil {
-		deps.Close()
-		return nil, fmt.Errorf("initialize payment otp wait store: %w", err)
-	}
-	deps.paymentOTPWaits = paymentOTPWaits
+	deps.channelOTPWaits = channelOTPWaits
 	platformEventBus, closePlatformEventBus, err := newPlatformEventBus(ctx, cfg)
 	if err != nil {
 		deps.Close()
@@ -170,6 +143,7 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 		WithActionRegistry(deps.actionRegistry).
 		WithPublisher(deps.jobEvents)
 	deps.fingerprints = accountfingerprint.NewStore(database)
+	deps.accountProxyUsage = accountproxyusage.NewStore(database)
 	deps.gptSettings = gptsettings.NewStore(database)
 	deps.mailboxPollRequester = mailboxevents.NewRequester(database)
 	secrets, err := newRuntimeSecretStore(runtimeSecretClient, cfg)
@@ -182,23 +156,10 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 	deps.mailboxState = accountmail.NewProjector(deps.accountClient).WithHotStream(deps.hotStream)
 	deps.browserAutomationClient = browserautomationv1.NewBrowserAutomationServiceClient(browserAutomationConn)
 	deps.paymentClient = pb.NewPaymentServiceClient(paymentConn)
-	if gopayConn != nil {
-		deps.gopayClient = pb.NewGopayAppServiceClient(gopayConn)
-	}
 	deps.smsClient = smsv1.NewSmsOrderServiceClient(smsConn)
 	deps.smsCatalogClient = smsv1.NewSmsCatalogServiceClient(smsConn)
 
 	return deps, nil
-}
-
-func (d *orchestratorDependencies) goPayActionsEnabled() bool {
-	return d.hasAnyAction(
-		contracts.ActionGoPayApp,
-		contracts.ActionGoPayPayment,
-		contracts.ActionGoPayQRISPaymentActivate,
-		contracts.ActionGoPayWAPayment,
-		contracts.ActionGoPayPaymentRebind,
-	)
 }
 
 func (d *orchestratorDependencies) hasAnyAction(actionIDs ...string) bool {
@@ -243,19 +204,15 @@ func newHotStreamBus(ctx context.Context, cfg orchestratorConfig) (hotstream.Bus
 }
 
 func startOTPProjectionConsumers(ctx context.Context, bus *natseventbus.Bus, cfg orchestratorConfig, store *otpprojection.Store, mailboxProjector otpprojection.MailboxEmailProjector) error {
-	smsConsumer, err := bus.PullWorkerConsumer(cfg.EventStreamName, eventcatalog.SMSCodeReceived.Subject, otpprojection.SMSCodeConsumerDurable, 10, 30*time.Second)
-	if err != nil {
-		return fmt.Errorf("initialize GPT SMS OTP projection consumer: %w", err)
-	}
-	mailboxConsumer, err := bus.PullWorkerConsumer(cfg.EventStreamName, eventcatalog.MailboxEmailReceived.Subject, otpprojection.MailboxEmailConsumerDurable, 10, 30*time.Second)
-	if err != nil {
-		return fmt.Errorf("initialize GPT mailbox OTP projection consumer: %w", err)
-	}
 	group, groupCtx := errgroup.WithContext(ctx)
-	group.Go(func() error { return otpprojection.RunSMSCodeConsumer(groupCtx, smsConsumer, store) })
-	group.Go(func() error {
-		return otpprojection.RunMailboxEmailConsumer(groupCtx, mailboxConsumer, store, mailboxProjector)
-	})
+	for _, spec := range otpprojection.ConsumerSpecs(store, mailboxProjector) {
+		spec := spec
+		consumer, err := bus.PullWorkerConsumer(cfg.EventStreamName, spec.Subject, spec.Durable, 10, 30*time.Second)
+		if err != nil {
+			return fmt.Errorf("initialize GPT %s projection consumer: %w", spec.Label, err)
+		}
+		group.Go(func() error { return spec.Run(groupCtx, consumer) })
+	}
 	return group.Wait()
 }
 
@@ -265,10 +222,6 @@ func newRequiredRedisClient(ctx context.Context, redisURL string, requiredMessag
 		return nil, fmt.Errorf("initialize redis client: %w", err)
 	}
 	return client, nil
-}
-
-func newGoPayOTPRelay(client redis.Cmdable, cfg orchestratorConfig) gopayotp.Relay {
-	return gopayotp.NewRedisRelay(client, cfg.GoPayOTPRelayKeyPrefix, cfg.GoPayOTPWebhookTTL, cfg.GoPayOTPWebhookMaxItems)
 }
 
 func newRuntimeSecretStore(client redis.Cmdable, cfg orchestratorConfig) (runtimesecrets.Store, error) {
@@ -284,21 +237,6 @@ func newGRPCClientConn(name string, addr string, extraOpts ...grpc.DialOption) (
 		return nil, fmt.Errorf("connect to %s: %w", name, err)
 	}
 	return conn, nil
-}
-
-func gopayAppGRPCRetryServiceConfig() string {
-	return `{
-		"methodConfig": [{
-			"name": [{"service": "gopay_app.GopayAppService"}],
-			"retryPolicy": {
-				"MaxAttempts": 3,
-				"InitialBackoff": "0.3s",
-				"MaxBackoff": "2s",
-				"BackoffMultiplier": 2,
-				"RetryableStatusCodes": ["UNAVAILABLE"]
-			}
-		}]
-	}`
 }
 
 func (d *orchestratorDependencies) addCloser(closeFn func() error) {

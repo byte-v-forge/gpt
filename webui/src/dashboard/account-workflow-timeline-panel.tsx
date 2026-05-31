@@ -1,52 +1,76 @@
-import { Badge, EmptyBlock, formatUnix, statusText } from '@byte-v-forge/common-ui';
-import { gptActionLabel, type GptActionCatalog } from './action-catalog';
-import { stepDuration, stepProgressText } from './job-utils';
+import { ExternalLink } from 'lucide-react';
+import { Badge, Button, EmptyBlock, accountActionLabel, formatUnix, statusText } from '@byte-v-forge/common-ui';
+import type { GptActionCatalog } from './action-catalog';
+import { renderWorkflowJobActions, type WorkflowJobActionMessageKind } from './job-action-renderers';
 import type { Job, JobStep } from './types';
 
-export function AccountWorkflowTimelinePanel({ accountID, jobs, actionCatalog }: { accountID: string; jobs: Job[]; actionCatalog?: GptActionCatalog }) {
-  const rows = jobs
+type AccountWorkflowTimelinePanelProps = {
+  accountID: string;
+  jobs: Job[];
+  actionCatalog?: GptActionCatalog;
+  onChanged?: () => void | Promise<void>;
+  onMessage?: (kind: WorkflowJobActionMessageKind, message: string) => void;
+  onError?: (error: unknown) => void;
+};
+
+export function AccountWorkflowTimelinePanel({ accountID, jobs, actionCatalog, onChanged, onMessage, onError }: AccountWorkflowTimelinePanelProps) {
+  const current = selectCurrentJob(jobs
     .filter((job) => job.account_id === accountID)
     .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0))
-    .slice(0, 20);
-  if (!rows.length) return <EmptyBlock text="暂无工作流记录" />;
-  return <section className="accountWorkflowTimelinePanel">{rows.map((job) => <WorkflowRunCard key={job.job_id} job={job} actionCatalog={actionCatalog} />)}</section>;
+  );
+  if (!current) return <EmptyBlock text="暂无工作流记录" />;
+  const actions = renderWorkflowJobActions({
+    job: current,
+    progress: null,
+    nowUnix: Math.floor(Date.now() / 1000),
+    onChanged,
+    onMessage,
+    onError
+  });
+  return (
+    <section className="accountWorkflowTimelinePanel">
+      <WorkflowRunLine job={current} actionCatalog={actionCatalog} />
+      {actions}
+    </section>
+  );
 }
 
-function WorkflowRunCard({ job, actionCatalog }: { job: Job; actionCatalog?: GptActionCatalog }) {
-  const steps = [...(job.steps || [])].sort((a, b) => (a.started_at || 0) - (b.started_at || 0) || a.step_name.localeCompare(b.step_name));
+function WorkflowRunLine({ job, actionCatalog }: { job: Job; actionCatalog?: GptActionCatalog }) {
+  const workflow = accountActionLabel(actionCatalog, job.action, compact(job.action));
+  const step = currentStep(job);
   return (
-    <article className="workflowRunCard">
-      <header className="workflowRunHeader">
-        <div className="workflowRunTitle">
-          <strong>{gptActionLabel(actionCatalog, job.action, compact(job.action))}</strong>
-          <span>{formatUnix(job.updated_at)} · {job.n8n_execution_id ? `n8n #${job.n8n_execution_id}` : job.job_id}</span>
-        </div>
-        <StatusBadge status={job.status} />
-      </header>
-      {job.error_message && <p className="workflowRunError">{trimError(job.error_message)}</p>}
-      <ol className="workflowStepList">
-        {steps.length ? steps.map((step) => <WorkflowStepItem key={step.step_name} step={step} current={step.step_name === job.last_step} />) : <li className="workflowStepEmpty">等待节点上报</li>}
-      </ol>
+    <article className="workflowRunLine">
+      <StatusBadge status={job.status} />
+      <span className="workflowRunLineItem">当前流程：<strong title={workflow}>{workflow}</strong></span>
+      <span className="workflowRunLineItem">当前步骤：<strong title={step}>{step}</strong></span>
+      <span className={`workflowRunMeta ${job.error_message ? 'workflowRunMetaError' : ''}`} title={job.error_message || job.job_id}>
+        {job.error_message ? trimError(job.error_message) : `${formatUnix(job.updated_at)} · ${job.n8n_execution_id ? `n8n #${job.n8n_execution_id}` : job.job_id}`}
+      </span>
+      <Button asChild variant="outline" size="sm"><a href={workflowRuntimeHref(job)}><ExternalLink />工作流页</a></Button>
     </article>
   );
 }
 
-function WorkflowStepItem({ step, current }: { step: JobStep; current: boolean }) {
-  const progress = stepProgressText(step, null);
-  return (
-    <li className={`workflowStepItem ${statusClass(step.status)} ${current ? 'current' : ''}`}>
-      <span className="workflowStepDot" />
-      <div className="workflowStepBody">
-        <div className="workflowStepTopline">
-          <strong>{compact(step.step_name)}</strong>
-          <span>{stepDuration(step)}<StatusBadge status={step.status} /></span>
-        </div>
-        <p>{stepTimeRange(step)}</p>
-        {progress && <p className="workflowStepProgress">{progress}</p>}
-        {step.error_message && <p className="workflowStepError">{trimError(step.error_message)}</p>}
-      </div>
-    </li>
-  );
+function selectCurrentJob(jobs: Job[]) {
+  return jobs.find((job) => isRunning(job.status)) || jobs[0] || null;
+}
+
+function currentStep(job: Job) {
+  if (job.last_step) return compact(job.last_step);
+  const steps = sortSteps(job.steps || []);
+  return compact(steps.at(-1)?.step_name || '-');
+}
+
+function sortSteps(steps: JobStep[]) {
+  return [...steps].sort((a, b) => (a.started_at || 0) - (b.started_at || 0) || a.step_name.localeCompare(b.step_name));
+}
+
+function workflowRuntimeHref(job: Job) {
+  const params = new URLSearchParams();
+  if (job.n8n_execution_id) params.set('execution_id', job.n8n_execution_id);
+  if (job.job_id) params.set('run_id', job.job_id);
+  const query = params.toString();
+  return `/workflow-runtime/workflow${query ? `?${query}` : ''}`;
 }
 
 function StatusBadge({ status }: { status?: string }) {
@@ -54,10 +78,8 @@ function StatusBadge({ status }: { status?: string }) {
   return <Badge className={`badge ${statusClass(normalized)}`} variant="outline">{statusText(normalized)}</Badge>;
 }
 
-function stepTimeRange(step: JobStep) {
-  const started = step.started_at ? formatUnix(step.started_at) : '-';
-  const completed = step.completed_at ? formatUnix(step.completed_at) : step.status === 'RUNNING' ? '进行中' : '-';
-  return `${started} → ${completed}`;
+function isRunning(status?: string) {
+  return ['CREATED', 'RUNNING', 'WAITING'].includes((status || '').toUpperCase());
 }
 
 function statusClass(status?: string) {

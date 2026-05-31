@@ -2,25 +2,15 @@ package activities
 
 import (
 	"fmt"
+	"orchestrator/internal/contracts"
 )
 
 func browserAuthStartStepName(mode string) (string, error) {
 	switch mode {
 	case browserAuthModeRegister:
-		return stepRegisterAccountStart, nil
+		return contracts.StepRegisterAccountStart, nil
 	case browserAuthModeLogin:
-		return stepLoginSessionStart, nil
-	default:
-		return "", fmt.Errorf("unsupported browser auth mode: %s", mode)
-	}
-}
-
-func browserAuthBrowserStepName(mode string) (string, error) {
-	switch mode {
-	case browserAuthModeRegister:
-		return stepRegisterAccountBrowser, nil
-	case browserAuthModeLogin:
-		return stepLoginSessionBrowser, nil
+		return contracts.StepLoginSessionStart, nil
 	default:
 		return "", fmt.Errorf("unsupported browser auth mode: %s", mode)
 	}
@@ -29,9 +19,9 @@ func browserAuthBrowserStepName(mode string) (string, error) {
 func browserAuthOTPRequestStepName(mode string) (string, error) {
 	switch mode {
 	case browserAuthModeRegister:
-		return stepRegisterAccountOTPRequest, nil
+		return contracts.StepRegisterAccountOTPRequest, nil
 	case browserAuthModeLogin:
-		return stepLoginSessionOTPRequest, nil
+		return contracts.StepLoginSessionOTPRequest, nil
 	default:
 		return "", fmt.Errorf("unsupported browser auth mode: %s", mode)
 	}
@@ -40,9 +30,9 @@ func browserAuthOTPRequestStepName(mode string) (string, error) {
 func browserAuthCompleteStepName(mode string) (string, error) {
 	switch mode {
 	case browserAuthModeRegister:
-		return stepRegisterAccountComplete, nil
+		return contracts.StepRegisterAccountComplete, nil
 	case browserAuthModeLogin:
-		return stepLoginSessionComplete, nil
+		return contracts.StepLoginSessionComplete, nil
 	default:
 		return "", fmt.Errorf("unsupported browser auth mode: %s", mode)
 	}

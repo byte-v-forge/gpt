@@ -1,27 +1,20 @@
-import { useEffect, useState } from 'react';
-import { DetailDrawer, latestOtpForEmail, ToastMessage, WorkspaceTabbedPanel } from '@byte-v-forge/common-ui';
+import { useState } from 'react';
+import { accountMailboxContextForEmail, DetailDrawer, latestOtpForEmail, ToastMessage, WorkspaceTabbedPanel } from '@byte-v-forge/common-ui';
 import { AccountDetails } from './account-details';
-import { GPT_ACTIONS, GPT_CAPABILITIES, gptCatalogHasCapability, useGptActionCatalog, type GptActionCatalog } from './action-catalog';
+import { useGptActionCatalog, type GptActionCatalog } from './action-catalog';
 import { useGptAccountActions } from './account-actions';
 import { useGptAccountData } from './account-data';
 import { useGptAccountEventCache } from './account-events';
-import { mailboxContextForEmail } from './account-mail-utils';
 import { accountActivationChannel, accountCodexPhoneState } from './account-job-semantics';
-import { GoPayLabPage } from './gopay-page';
 import { GPTSettingsPage } from './gpt-settings-page';
 import { GptAccountsView } from './view';
+import { accountCarrierID, accountCarrierEmail } from '@byte-v-forge/common-ui';
 
-type GptPageTab = 'accounts' | 'gopay' | 'settings';
+type GptPageTab = 'accounts' | 'settings';
 
 export function GptAccountsPage() {
   const [tab, setTab] = useState<GptPageTab>('accounts');
   const actionCatalog = useGptActionCatalog();
-  const showGoPay = gptCatalogHasCapability(actionCatalog.data, GPT_CAPABILITIES.goPay);
-
-  useEffect(() => {
-    if (tab === 'gopay' && !showGoPay) setTab('accounts');
-  }, [showGoPay, tab]);
-
   return (
     <WorkspaceTabbedPanel<GptPageTab>
       title="GPT"
@@ -35,16 +28,6 @@ export function GptAccountsPage() {
           content: <GptAccountsTab actionCatalog={actionCatalog.data} />,
           contentClassName: 'flex flex-col overflow-hidden'
         },
-        ...(showGoPay
-          ? [
-              {
-                value: 'gopay' as const,
-                label: 'GoPay',
-                content: <GoPayLabPage actionCatalog={actionCatalog.data} />,
-                contentClassName: 'flex flex-col overflow-hidden'
-              }
-            ]
-          : []),
         {
           value: 'settings',
           label: '设置',
@@ -59,7 +42,7 @@ export function GptAccountsPage() {
 function GptAccountsTab({ actionCatalog }: { actionCatalog?: GptActionCatalog }) {
   const [selectedAccountID, setSelectedAccountID] = useState('');
   const [showSecrets, setShowSecrets] = useState(true);
-  const data = useGptAccountData(selectedAccountID);
+  const data = useGptAccountData(selectedAccountID, setSelectedAccountID);
   const actions = useGptAccountActions(data, showSecrets, setSelectedAccountID, actionCatalog);
   const busy = actions.working || data.busy;
   const selectedPhoneState = data.selected ? accountCodexPhoneState(data.selected, data.jobs, actions.actionCatalog) : null;
@@ -78,6 +61,7 @@ function GptAccountsTab({ actionCatalog }: { actionCatalog?: GptActionCatalog })
         cleaningInvalidAccounts={actions.cleaningInvalidAccounts}
         runningAccountIds={data.runningIds}
         runningWorkflowByAccountID={data.runningByAccount}
+        accountsPagination={data.accountsPagination}
         onCreateDone={async (message) => {
           actions.toast.showOK(message);
           await data.invalidate();
@@ -85,10 +69,9 @@ function GptAccountsTab({ actionCatalog }: { actionCatalog?: GptActionCatalog })
         onError={actions.toast.showError}
         onToggleSecrets={() => setShowSecrets((value) => !value)}
         onCleanInvalidAccounts={actions.cleanInvalidAccounts}
-        onSelectAccount={(account) => setSelectedAccountID(account.account_id)}
-        onRegisterProtocol={(account) => actions.runWorkflow(GPT_ACTIONS.registerProtocol, account)}
-        onCodexOAuthBatchAddPhone={actions.runCodexOAuthBatchAddPhone}
-        onGoPayPayment={(account, channel) => void actions.runGoPayPayment(account, channel)}
+        onSelectAccount={(account) => setSelectedAccountID(accountCarrierID(account))}
+        runWorkflow={actions.runWorkflow}
+        runBulkWorkflow={actions.runBulkWorkflow}
         onDeleteAccount={actions.deleteAccount}
       />
       <DetailDrawer open={!!data.selected} title="GPT账号详情" size="wide" onClose={() => setSelectedAccountID('')}>
@@ -100,23 +83,19 @@ function GptAccountsTab({ actionCatalog }: { actionCatalog?: GptActionCatalog })
             showSecrets={showSecrets}
             busy={busy}
             inboxLoading={actions.inboxLoading}
-            mailboxContext={mailboxContextForEmail(data.mailboxes, data.allocations, data.selected)}
-            latestOtp={latestOtpForEmail(actions.inbox, data.mailboxes, data.selected.email)}
+            mailboxContext={accountMailboxContextForEmail(data.mailboxes, data.allocations, { email: accountCarrierEmail(data.selected), primary_mailbox_email: data.selected.primary_mailbox_email })}
+            latestOtp={latestOtpForEmail(actions.inbox, data.mailboxes, accountCarrierEmail(data.selected))}
             activationChannel={accountActivationChannel(data.selected, data.jobs, actions.actionCatalog)}
             codexPhoneState={selectedPhoneState!}
-            updatingWebAccessToken={actions.updatingWebAccessTokens.has(data.selected.account_id)}
+            updatingWebAccessToken={actions.updatingWebAccessTokens.has(accountCarrierID(data.selected))}
             onCopy={actions.toast.copyValue}
             onFetchInbox={actions.fetchInbox}
             onSessionSave={(account, sessionToken) => actions.updateAccount(account, { session_token: sessionToken }, '认证信息已更新')}
             onAccessSave={(account, accessToken) => actions.updateAccount(account, { access_token: accessToken }, '认证信息已更新')}
-            onProbeAccount={(account) => actions.runWorkflow(GPT_ACTIONS.probeAccount, account)}
-            onRegister={(account) => actions.runWorkflow(GPT_ACTIONS.register, account)}
-            onRegisterProtocol={(account) => actions.runWorkflow(GPT_ACTIONS.registerProtocol, account)}
-            onLogin={(account) => actions.runWorkflow(GPT_ACTIONS.loginSession, account)}
-            onLoginProtocol={(account) => actions.runWorkflow(GPT_ACTIONS.loginSessionProtocol, account)}
-            onCodexOAuthAddPhone={(account) => actions.runWorkflow(GPT_ACTIONS.codexOAuth, account)}
-            onCodexOAuthProtocol={(account) => actions.runWorkflow(GPT_ACTIONS.codexOAuthProtocol, account)}
-            onGoPayPayment={(account, channel) => void actions.runGoPayPayment(account, channel)}
+            runWorkflow={actions.runWorkflow}
+            onWorkflowChanged={data.invalidate}
+            onWorkflowMessage={actions.toast.showToast}
+            onWorkflowError={actions.toast.showError}
             onUpdateWebAccessToken={actions.updateWebAccessToken}
             onDelete={actions.deleteAccount}
           />

@@ -1,41 +1,20 @@
-import { Play } from 'lucide-react';
-import { RecordActionButtons } from '@byte-v-forge/common-ui';
+import { AccountRowActionGroups, accountRowAction } from '@byte-v-forge/common-ui';
 import type { RowActionDescriptor } from '@byte-v-forge/common-ui';
-import { GPT_ACTIONS, gptActionAvailability, gptActionLabel, type GptActionCatalog } from './action-catalog';
-import { canRegister } from './account-utils';
+import type { GptActionCatalog } from './action-catalog';
+import { ACCOUNT_ROW_ACTIONS, accountWorkflowActionProps, type AccountWorkflowRunner } from './account-action-specs';
 import type { Account } from './types';
 
-export function AccountRowAuthGroups({ account, actionCatalog, busy, onRegisterProtocol }: {
+export function AccountRowAuthGroups({ account, actionCatalog, busy, runWorkflow }: {
   account: Account;
   actionCatalog?: GptActionCatalog;
   busy: boolean;
-  onRegisterProtocol: (a: Account) => void;
+  runWorkflow: AccountWorkflowRunner;
 }) {
-  return (
-    <div className="rowAuthGroups">
-      <RowActionGroup actions={protocolActions(account, actionCatalog, busy, onRegisterProtocol)} />
-    </div>
-  );
+  return <AccountRowActionGroups actions={rowWorkflowActions(account, actionCatalog, busy, runWorkflow)} />;
 }
 
-function RowActionGroup({ actions }: { actions: RowActionDescriptor[] }) {
-  if (actions.length === 0) return null;
-  return (
-    <span className="rowActionGroup">
-      <RecordActionButtons actions={actions} />
-    </span>
-  );
-}
-
-function protocolActions(account: Account, catalog: GptActionCatalog | undefined, busy: boolean, onRegister: (a: Account) => void): RowActionDescriptor[] {
-  const placement = 'account_row';
-  const availability = gptActionAvailability(catalog, GPT_ACTIONS.registerProtocol, account, placement);
-  if (!availability.visible) return [];
-  return [{
-    label: gptActionLabel(catalog, GPT_ACTIONS.registerProtocol, '注册', placement),
-    icon: <Play size={14} />,
-    onClick: () => onRegister(account),
-    disabled: busy || !availability.enabled || !canRegister(account),
-    kind: 'secondary'
-  }];
+function rowWorkflowActions(account: Account, catalog: GptActionCatalog | undefined, busy: boolean, run: AccountWorkflowRunner): RowActionDescriptor[] {
+  return ACCOUNT_ROW_ACTIONS
+    .map((spec) => accountRowAction({ catalog, account, busy, placement: 'account_row' }, accountWorkflowActionProps(spec, run)))
+    .filter((action): action is RowActionDescriptor => !!action);
 }

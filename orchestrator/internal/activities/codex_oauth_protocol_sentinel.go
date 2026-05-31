@@ -12,6 +12,8 @@ import (
 
 	fhttp "github.com/bogdanfinn/fhttp"
 	"github.com/google/uuid"
+
+	"orchestrator/pb"
 )
 
 const (
@@ -27,27 +29,23 @@ type codexOAuthSentinelGenerator struct {
 	sid       string
 }
 
-func codexOAuthProtocolSentinelHeader(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any, flow string) map[string]string {
+func codexOAuthProtocolSentinelHeader(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data sentinelStepData, flow string) map[string]string {
 	if client == nil || state == nil {
 		return nil
 	}
 	token, err := client.sentinelToken(ctx, flow)
 	if err != nil {
-		if data != nil {
-			data["sentinel_error"] = codexOAuthProtocolSafeText(err.Error(), 180)
-		}
+		data.setSentinelError(codexOAuthProtocolSafeText(err.Error(), 180))
 		return nil
 	}
 	if strings.TrimSpace(token) == "" {
 		return nil
 	}
-	if data != nil {
-		data["sentinel_flow"] = flow
-		data["sentinel_token_present"] = true
-		var parsed map[string]any
-		if json.Unmarshal([]byte(token), &parsed) == nil {
-			data["sentinel_t_present"] = strings.TrimSpace(stringAny(parsed["t"])) != ""
-		}
+	data.setSentinelFlow(flow)
+	data.setSentinelTokenPresent(true)
+	var parsed map[string]any
+	if json.Unmarshal([]byte(token), &parsed) == nil {
+		data.setSentinelTPresent(strings.TrimSpace(stringAny(parsed["t"])) != "")
 	}
 	return map[string]string{"openai-sentinel-token": token}
 }
@@ -60,7 +58,7 @@ func (c *GptClient) sentinelToken(ctx context.Context, flow string) (string, err
 	if deviceID == "" {
 		deviceID = uuid.NewString()
 		if c.state != nil {
-			c.state.DeviceID = deviceID
+			c.state.DeviceId = deviceID
 		}
 	}
 	if token, err := c.sentinelTokenQuickJS(ctx, deviceID, flow); err == nil && strings.TrimSpace(token) != "" {

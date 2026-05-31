@@ -31,7 +31,7 @@ func (s *server) handleRawN8NWorkflowStart(actionID string, w http.ResponseWrite
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	if s.n8nWorkflowStarter == nil {
+	if s.n8nActions == nil {
 		writeError(w, http.StatusBadGateway, errors.New("n8n workflow starter is not configured"))
 		return
 	}
@@ -45,7 +45,7 @@ func (s *server) handleRawN8NWorkflowStart(actionID string, w http.ResponseWrite
 		writeError(w, http.StatusBadRequest, fmt.Errorf("read n8n workflow body: %w", err))
 		return
 	}
-	started, err := s.n8nWorkflowStarter.StartN8NWorkflow(r.Context(), gptplugin.N8NWorkflowStartCall{
+	started, err := s.n8nActions.StartN8NWorkflow(r.Context(), gptplugin.N8NWorkflowStartCall{
 		ActionID: actionID,
 		RawJSON:  body,
 	})
@@ -54,12 +54,12 @@ func (s *server) handleRawN8NWorkflowStart(actionID string, w http.ResponseWrite
 		return
 	}
 	if err := workflow.trigger(r.Context(), started.TriggerPayload); err != nil {
-		_ = s.n8nWorkflowStarter.FailN8NWorkflowTrigger(r.Context(), gptplugin.N8NWorkflowTriggerFailure{
+		_ = s.n8nActions.FailN8NWorkflowTrigger(r.Context(), gptplugin.N8NWorkflowTriggerFailure{
 			ActionID:     actionID,
 			JobID:        started.JobID,
 			AccountID:    started.AccountID,
 			ErrorMessage: err.Error(),
-			Data:         map[string]any{"reason": "n8n_trigger_failed"},
+			Data:         n8nTriggerFailedMap(),
 		})
 		writeError(w, http.StatusBadGateway, err)
 		return

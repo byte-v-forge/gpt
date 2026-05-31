@@ -261,7 +261,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const base = $('Evaluate Proxy Exit IP').first().json;\nconst response = $input.first().json;\nconst fraudResponse = httpBody(response);\nconst fraud = fraudResponse?.check || {};\nconst transportError = httpOK(response) ? '' : responseErrorMessage(response, fraudResponse, 'IP fraud check failed');\nconst errorMessage = transportError || fraudRejectReason(base, fraud);\nreturn [{ json: { kind: 'fraud', accepted: !errorMessage, error_message: errorMessage, fraud_response: fraudResponse } }];\nfunction httpBody(response) {\n  if (!response || typeof response !== 'object') return response;\n  if (Object.prototype.hasOwnProperty.call(response, 'body')) return response.body;\n  if (Object.prototype.hasOwnProperty.call(response, 'data')) return response.data;\n  return response;\n}\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\nfunction responseErrorMessage(response, body, fallback) {\n  if (typeof body === 'string' && body.trim()) return body.trim();\n  if (body?.message) return body.message;\n  if (body?.error) return body.error;\n  if (response?.statusMessage) return response.statusMessage;\n  return fallback;\n}\nfunction fraudRejectReason(base, fraud) {\n  const level = fraud.risk_level || '';\n  if (['PROXY_IP_FRAUD_RISK_LEVEL_UNSUPPORTED', 'PROXY_IP_FRAUD_RISK_LEVEL_UNKNOWN', 'PROXY_IP_FRAUD_RISK_LEVEL_UNSPECIFIED', ''].includes(level)) return 'IP fraud check unavailable';\n  if (['PROXY_IP_FRAUD_RISK_LEVEL_HIGH', 'PROXY_IP_FRAUD_RISK_LEVEL_CRITICAL'].includes(level)) return `IP fraud risk rejected: ${level}`;\n  const riskScore = Number(fraud.risk_score || 0);\n  const purityScore = Math.max(0, Math.min(100, 100 - riskScore));\n  const expectedCountry = String(base.settings?.country_code || base.lease_request?.chain_policy?.country_code || '').toUpperCase();\n  const actualCountry = String(fraud.country_code || '').toUpperCase();\n  if (expectedCountry && actualCountry && actualCountry !== expectedCountry) return `IP country rejected: expected ${expectedCountry}, got ${actualCountry}`;\n  if (Number(base.min_ip_purity_score || 0) > 0 && purityScore < Number(base.min_ip_purity_score)) return `IP purity rejected: ${purityScore}`;\n  if (base.require_residential && fraud.network_kind && !['PROXY_IP_NETWORK_KIND_RESIDENTIAL', 'PROXY_IP_NETWORK_KIND_ISP'].includes(fraud.network_kind)) return `proxy network is not residential-compatible: ${fraud.network_kind}`;\n  if (['PROXY_IP_ANONYMIZER_KIND_PROXY', 'PROXY_IP_ANONYMIZER_KIND_VPN', 'PROXY_IP_ANONYMIZER_KIND_TOR', 'PROXY_IP_ANONYMIZER_KIND_CRAWLER'].includes(fraud.anonymizer_kind || '')) return `proxy anonymizer rejected: ${fraud.anonymizer_kind}`;\n  return '';\n}\n"
+        "jsCode": "const base = $('Evaluate Proxy Exit IP').first().json;\nconst response = $input.first().json;\nconst fraudResponse = httpBody(response);\nconst fraud = fraudResponse?.check || {};\nconst transportError = httpOK(response) ? '' : responseErrorMessage(response, fraudResponse, 'IP fraud check failed');\nconst errorMessage = transportError || fraudRejectReason(base, fraud);\nreturn [{ json: { kind: 'fraud', accepted: !errorMessage, error_message: errorMessage, fraud_response: fraudResponse } }];\nfunction httpBody(response) {\n  if (!response || typeof response !== 'object') return response;\n  if (Object.prototype.hasOwnProperty.call(response, 'body')) return response.body;\n  if (Object.prototype.hasOwnProperty.call(response, 'data')) return response.data;\n  return response;\n}\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\nfunction responseErrorMessage(response, body, fallback) {\n  if (typeof body === 'string' && body.trim()) return body.trim();\n  if (body?.message) return body.message;\n  if (body?.error) return body.error;\n  if (response?.statusMessage) return response.statusMessage;\n  return fallback;\n}\nfunction fraudRejectReason(base, fraud) {\n  const level = fraud.risk_level || '';\n  if (['PROXY_IP_FRAUD_RISK_LEVEL_UNSUPPORTED', 'PROXY_IP_FRAUD_RISK_LEVEL_UNKNOWN', 'PROXY_IP_FRAUD_RISK_LEVEL_UNSPECIFIED', ''].includes(level)) return 'IP fraud check unavailable';\n  if (['PROXY_IP_FRAUD_RISK_LEVEL_HIGH', 'PROXY_IP_FRAUD_RISK_LEVEL_CRITICAL'].includes(level)) return `IP fraud risk rejected: ${level}`;\n  const riskScore = Number(fraud.risk_score || 0);\n  const purityScore = Math.max(0, Math.min(100, 100 - riskScore));\n  const expectedCountry = String(base.settings?.country_code || base.lease_request?.chain_policy?.country_code || '').toUpperCase();\n  const actualCountry = String(fraud.country_code || '').toUpperCase();\n  if (expectedCountry && actualCountry && actualCountry !== expectedCountry) return `IP country rejected: expected ${expectedCountry}, got ${actualCountry}`;\n  if (Number(base.min_ip_purity_score || 0) > 0 && purityScore < Number(base.min_ip_purity_score)) return `IP purity rejected: ${purityScore}`;\n  if (base.require_residential && fraud.network_kind && !['PROXY_IP_NETWORK_KIND_RESIDENTIAL', 'PROXY_IP_NETWORK_KIND_ISP', 'PROXY_IP_NETWORK_KIND_MOBILE'].includes(fraud.network_kind)) return `proxy network is not residential-compatible: ${fraud.network_kind}`;\n  if (['PROXY_IP_ANONYMIZER_KIND_PROXY', 'PROXY_IP_ANONYMIZER_KIND_VPN', 'PROXY_IP_ANONYMIZER_KIND_TOR', 'PROXY_IP_ANONYMIZER_KIND_CRAWLER'].includes(fraud.anonymizer_kind || '')) return `proxy anonymizer rejected: ${fraud.anonymizer_kind}`;\n  return '';\n}\n"
       },
       "id": "c671f941-c2b2-5340-a355-68ffb990dd4b",
       "name": "Evaluate IP Fraud",
@@ -539,7 +539,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const targetItems = $('Build Target Connectivity Items').all().map((item) => item.json || {});\nconst base = targetItems[0] || $('Combine Risk Checks').first().json;\nconst response = $input.first().json || {};\nconst body = httpBody(response);\nconst check = body?.check || {};\nconst statusCode = Number(check.status_code || 0);\nconst accepted = httpOK(response) && !!check.reachable && statusCode >= 100 && statusCode < 600;\nconst target = check.target_url || targetItems[0]?.target_url || 'https://api.openai.com/v1/models';\nconst errorMessage = accepted ? '' : (check.error_message || responseErrorMessage(response, body, `target connectivity rejected: ${target}${statusCode ? ` HTTP ${statusCode}` : ''}`));\nconst data = { ...(base.data || {}) };\ndata.accepted = accepted;\ndata.error_message = errorMessage;\nreturn [{ json: { ...base, success: accepted, error_message: errorMessage, target_accepted: accepted, data } }];\nfunction responseErrorMessage(response, body, fallback) {\n  if (typeof body === 'string' && body.trim()) return body.trim();\n  if (body?.message) return body.message;\n  if (body?.error) return body.error;\n  if (response?.statusMessage) return response.statusMessage;\n  return fallback;\n}\nfunction httpBody(response) {\n  if (!response || typeof response !== 'object') return response;\n  if (Object.prototype.hasOwnProperty.call(response, 'body')) return response.body;\n  if (Object.prototype.hasOwnProperty.call(response, 'data')) return response.data;\n  return response;\n}\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\n"
+        "jsCode": "const targetItems = $('Build Target Connectivity Items').all().map((item) => item.json || {});\nconst base = targetItems[0] || $('Combine Risk Checks').first().json;\nconst response = $input.first().json || {};\nconst body = httpBody(response);\nconst check = body?.check || {};\nconst statusCode = Number(check.status_code || 0);\nconst accepted = httpOK(response) && !!check.reachable && statusCode >= 100 && statusCode < 600;\nconst target = check.target_url || targetItems[0]?.target_url || 'https://api.openai.com/v1/models';\nconst errorMessage = accepted ? '' : (check.error_message || responseErrorMessage(response, body, `target connectivity rejected: ${target}${statusCode ? ` HTTP ${statusCode}` : ''}`));\nconst data = { ...(base.data || {}) };\ndata.accepted = accepted;\ndata.error_message = errorMessage;\ndata.target_connectivity_enabled = true;\ndata.target_connectivity_reachable = accepted;\ndata.target_connectivity_check = check;\nreturn [{ json: { ...base, success: accepted, error_message: errorMessage, target_accepted: accepted, data } }];\nfunction responseErrorMessage(response, body, fallback) {\n  if (typeof body === 'string' && body.trim()) return body.trim();\n  if (body?.message) return body.message;\n  if (body?.error) return body.error;\n  if (response?.statusMessage) return response.statusMessage;\n  return fallback;\n}\nfunction httpBody(response) {\n  if (!response || typeof response !== 'object') return response;\n  if (Object.prototype.hasOwnProperty.call(response, 'body')) return response.body;\n  if (Object.prototype.hasOwnProperty.call(response, 'data')) return response.data;\n  return response;\n}\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\n"
       },
       "id": "6b53a8b6-66c6-585d-827b-923bafa38570",
       "name": "Evaluate Target Connectivity",
@@ -667,7 +667,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const settings = $('Get GPT Proxy Settings').first().json;\nconst attempts = Math.max(1, Math.min(100, Number(settings.max_proxy_attempts || 10)));\nconst processed = $input.all().map((item) => item.json || {});\nconst last = [...processed].reverse().find((item) => item.error_message || item.data?.error_message) || {};\nconst errorMessage = last.error_message || last.data?.error_message || `no acceptable proxy in ${attempts} attempts`;\nreturn [{ json: {\n  job_id: settings.job_id,\n  account_id: settings.account_id,\n  n8n_execution_id: settings.n8n_execution_id,\n  success: false,\n  error_message: errorMessage,\n  data: last.data || {\n    purpose: settings.purpose || 'REGISTER_PROTOCOL',\n    accepted: false,\n    max_proxy_attempts: attempts,\n    error_message: errorMessage,\n    reason: 'proxy_preflight_attempts_exhausted',\n  },\n}}];\n"
+        "jsCode": "const settings = $('Get GPT Proxy Settings').first().json;\nconst attempts = Math.max(1, Math.min(100, Number(settings.max_proxy_attempts || 10)));\nconst processed = $input.all().map((item) => item.json || {});\nconst last = [...processed].reverse().find((item) => item.error_message || item.data?.error_message) || {};\nconst errorMessage = last.error_message || last.data?.error_message || `no acceptable proxy in ${attempts} attempts`;\nconst actionScope = last.action_scope || actionScopeFor(settings.purpose);\nconst data = { ...(last.data || {}) };\ndata.purpose = data.purpose || settings.purpose || 'REGISTER_PROTOCOL';\ndata.accepted = false;\ndata.success = false;\ndata.max_proxy_attempts = attempts;\ndata.error_message = errorMessage;\ndata.reason = data.reason || 'proxy_preflight_attempts_exhausted';\nreturn [{ json: {\n  job_id: settings.job_id,\n  account_id: settings.account_id,\n  n8n_execution_id: settings.n8n_execution_id,\n  action_scope: actionScope,\n  success: false,\n  error_message: errorMessage,\n  data,\n}}];\nfunction actionScopeFor(purpose) {\n  const value = String(purpose || '').toUpperCase();\n  if (value === 'LOGIN_SESSION_PROTOCOL') return 'login-session-protocol';\n  if (value === 'REGISTER_PROTOCOL') return 'register-protocol';\n  if (value === 'CODEX_OAUTH_PROTOCOL') return 'codex-oauth-protocol';\n  if (value === 'CODEX_OAUTH_ADD_PHONE') return 'codex-oauth-add-phone';\n  if (value === 'PROBE_ACCOUNT') return 'probe-account';\n  return 'register-protocol';\n}\n"
       },
       "id": "8b3b462a-ec07-586a-a489-4d8bc93b7997",
       "name": "Build Final Proxy Failure",
@@ -835,7 +835,7 @@
     {
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const base = $('Auth Edge Check Enabled?').first().json || {};\nconst response = $input.first().json || {};\nconst result = httpBody(response);\nconst body = result?.body && typeof result.body === 'object' ? result.body : result;\nconst checkData = body?.data || {};\nconst accepted = httpOK(response) && (body?.success === true || checkData.auth_edge_accepted === true);\nconst errorMessage = accepted ? '' : (checkData.error_message || body?.error_message || responseErrorMessage(response, body, 'chatgpt csrf edge check rejected'));\nconst data = { ...(base.data || {}), ...checkData };\ndata.auth_edge_accepted = accepted;\ndata.auth_edge_check_target = data.auth_edge_check_target || 'chatgpt_csrf';\ndata.error_message = errorMessage;\nreturn [{ json: { ...base, success: accepted, auth_edge_accepted: accepted, error_message: errorMessage, data } }];\nfunction responseErrorMessage(response, body, fallback) {\n  if (typeof body === 'string' && body.trim()) return body.trim();\n  if (body?.message) return body.message;\n  if (body?.error) return body.error;\n  if (response?.statusMessage) return response.statusMessage;\n  return fallback;\n}\nfunction httpBody(response) {\n  if (!response || typeof response !== 'object') return response;\n  if (Object.prototype.hasOwnProperty.call(response, 'body')) return response.body;\n  if (Object.prototype.hasOwnProperty.call(response, 'data')) return response.data;\n  return response;\n}\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\n"
+        "jsCode": "const base = $('Auth Edge Check Enabled?').first().json || {};\nconst response = $input.first().json || {};\nconst result = httpBody(response);\nconst body = result?.body && typeof result.body === 'object' ? result.body : result;\nconst checkData = body?.auth_edge_data || {};\nconst accepted = httpOK(response) && (body?.success === true || checkData.auth_edge_accepted === true);\nconst errorMessage = accepted ? '' : (checkData.error_message || body?.error_message || responseErrorMessage(response, body, 'chatgpt csrf edge check rejected'));\nconst data = { ...(base.data || {}), ...checkData };\ndata.auth_edge_accepted = accepted;\ndata.auth_edge_check_target = data.auth_edge_check_target || 'chatgpt_csrf';\ndata.accepted = accepted;\ndata.error_message = errorMessage;\nif (!accepted) data.reason = 'auth_edge_rejected';\nreturn [{ json: { ...base, success: accepted, auth_edge_accepted: accepted, error_message: errorMessage, data } }];\nfunction responseErrorMessage(response, body, fallback) {\n  if (typeof body === 'string' && body.trim()) return body.trim();\n  if (body?.message) return body.message;\n  if (body?.error) return body.error;\n  if (response?.statusMessage) return response.statusMessage;\n  return fallback;\n}\nfunction httpBody(response) {\n  if (!response || typeof response !== 'object') return response;\n  if (Object.prototype.hasOwnProperty.call(response, 'body')) return response.body;\n  if (Object.prototype.hasOwnProperty.call(response, 'data')) return response.data;\n  return response;\n}\nfunction httpOK(response) { return !response?.statusCode || (response.statusCode >= 200 && response.statusCode < 300); }\n"
       },
       "id": "dd95111c-2d02-5485-909c-f4e0a1a4da8c",
       "name": "Evaluate ChatGPT CSRF Edge",
@@ -918,6 +918,45 @@
       "position": [
         8320,
         -500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/' + ($json.action_scope || 'register-protocol') + '/fail-proxy' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $json.job_id, account_id: $json.account_id, n8n_execution_id: $json.n8n_execution_id, error_message: $json.error_message || 'dynamic proxy preflight failed', data: $json.data || {} } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "fail-dynamic-proxy-preflight",
+      "name": "Fail Dynamic Proxy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1280,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "errorType": "errorMessage",
+        "errorMessage": "={{ $('Build Final Proxy Failure').first().json.error_message || 'dynamic proxy preflight failed' }}"
+      },
+      "id": "stop-dynamic-proxy-preflight",
+      "name": "Stop Dynamic Proxy Preflight",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        320
       ]
     }
   ],
@@ -1391,6 +1430,28 @@
         [
           {
             "node": "Loop Proxy Attempts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Final Proxy Failure": {
+      "main": [
+        [
+          {
+            "node": "Fail Dynamic Proxy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Dynamic Proxy": {
+      "main": [
+        [
+          {
+            "node": "Stop Dynamic Proxy Preflight",
             "type": "main",
             "index": 0
           }

@@ -1,209 +1,144 @@
 package activities
 
 import (
-	"orchestrator/db"
-	"orchestrator/internal/jobprojection"
 	"orchestrator/pb"
 )
 
-func jobToProto(job *db.Job, steps []db.JobStep) *pb.Job {
-	return jobprojection.ToProto(job, steps)
-}
-
-func browserStartData(resp *pb.StartRegisterResponse) map[string]any {
+func browserStartData(resp *pb.StartRegisterResponse) *pb.ActivityBrowserStartData {
 	if resp == nil {
-		return map[string]any{"response_present": false}
+		return &pb.ActivityBrowserStartData{ResponsePresent: boolPtr(false)}
 	}
-	return map[string]any{
-		"response_present":                   true,
-		"success":                            resp.GetSuccess(),
-		"error_message":                      resp.GetErrorMessage(),
-		"browser_session_id":                 resp.GetBrowserSessionId(),
-		"otp_required":                       resp.GetOtpRequired(),
-		"otp_issued_after":                   resp.GetOtpIssuedAfterUnix(),
-		"otp_wait_started_at_unix":           resp.GetOtpWaitStartedAtUnix(),
-		"otp_request_action_started_at_unix": resp.GetOtpRequestActionStartedAtUnix(),
-		"stage":                              resp.GetStage(),
-		"status_message":                     resp.GetStatusMessage(),
-		"result":                             registerResultData(resp.GetResult()),
+	return &pb.ActivityBrowserStartData{
+		ResponsePresent:               boolPtr(true),
+		Success:                       boolPtr(resp.GetSuccess()),
+		ErrorMessage:                  resp.GetErrorMessage(),
+		BrowserSessionId:              resp.GetBrowserSessionId(),
+		OtpRequired:                   boolPtr(resp.GetOtpRequired()),
+		OtpIssuedAfter:                resp.GetOtpIssuedAfterUnix(),
+		OtpWaitStartedAtUnix:          resp.GetOtpWaitStartedAtUnix(),
+		OtpRequestActionStartedAtUnix: resp.GetOtpRequestActionStartedAtUnix(),
+		Stage:                         resp.GetStage(),
+		StatusMessage:                 resp.GetStatusMessage(),
+		Result:                        registerResultData(resp.GetResult()),
 	}
 }
 
-func registerResultData(resp *pb.RegisterResponse) map[string]any {
+func registerResultData(resp *pb.RegisterResponse) *pb.ActivityRegisterResultData {
 	if resp == nil {
-		return map[string]any{"response_present": false}
+		return &pb.ActivityRegisterResultData{ResponsePresent: boolPtr(false)}
 	}
-	return map[string]any{
-		"response_present":         true,
-		"success":                  resp.GetSuccess(),
-		"error_message":            resp.GetErrorMessage(),
-		"session_token_present":    resp.GetSessionToken() != "",
-		"access_token_present":     resp.GetAccessToken() != "",
-		"device_id_present":        resp.GetDeviceId() != "",
-		"plus_trial_eligible":      resp.GetPlusTrialEligible(),
-		"plus_trial_checked":       resp.GetPlusTrialChecked(),
-		"checkout_url_present":     resp.GetCheckoutUrl() != "",
-		"sensitive_values_stored":  false,
-		"credential_values_stored": false,
+	return &pb.ActivityRegisterResultData{
+		ResponsePresent:        boolPtr(true),
+		Success:                boolPtr(resp.GetSuccess()),
+		ErrorMessage:           resp.GetErrorMessage(),
+		SessionTokenPresent:    boolPtr(resp.GetSessionToken() != ""),
+		AccessTokenPresent:     boolPtr(resp.GetAccessToken() != ""),
+		DeviceIdPresent:        boolPtr(resp.GetDeviceId() != ""),
+		PlusTrialEligible:      boolPtr(resp.GetPlusTrialEligible()),
+		PlusTrialChecked:       boolPtr(resp.GetPlusTrialChecked()),
+		CheckoutUrlPresent:     boolPtr(resp.GetCheckoutUrl() != ""),
+		SensitiveValuesStored:  boolPtr(false),
+		CredentialValuesStored: boolPtr(false),
 	}
 }
 
-func paymentStartData(resp *pb.StartGoPayResponse) map[string]any {
+func plusTrialProbeData(resp *pb.ProbePlusTrialPaymentResponse) *pb.ActivityProbePlusTrialData {
 	if resp == nil {
-		return map[string]any{"response_present": false}
+		return &pb.ActivityProbePlusTrialData{ResponsePresent: boolPtr(false)}
 	}
-	return map[string]any{
-		"response_present":    true,
-		"success":             resp.GetSuccess(),
-		"error_message":       resp.GetErrorMessage(),
-		"flow_id":             resp.GetFlowId(),
-		"snap_token_present":  resp.GetSnapToken() != "",
-		"issued_after_unix":   resp.GetIssuedAfterUnix(),
-		"expires_at_unix":     resp.GetExpiresAtUnix(),
-		"checkout_url":        resp.GetCheckoutUrl(),
-		"checkout_session_id": resp.GetCheckoutSessionId(),
-		"otp_required":        resp.GetOtpRequired(),
+	return &pb.ActivityProbePlusTrialData{
+		ResponsePresent:    boolPtr(true),
+		Success:            boolPtr(resp.GetSuccess()),
+		ErrorMessage:       resp.GetErrorMessage(),
+		Checked:            boolPtr(resp.GetChecked()),
+		PlusTrialEligible:  boolPtr(resp.GetPlusTrialEligible()),
+		PlusActive:         boolPtr(resp.GetPlusActive()),
+		PlanType:           resp.GetPlanType(),
+		Tier:               normalizeTier(resp.GetPlanType()),
+		Amount:             resp.GetAmount(),
+		Currency:           resp.GetCurrency(),
+		Source:             resp.GetSource(),
+		CheckoutUrlPresent: boolPtr(resp.GetCheckoutUrl() != ""),
+		CheckoutSessionId:  resp.GetCheckoutSessionId(),
 	}
 }
 
-func paymentPrepareData(resp *pb.PrepareGoPayResponse) map[string]any {
+func tierProbeData(resp *pb.ProbeTierPaymentResponse) *pb.ActivityProbeTierData {
 	if resp == nil {
-		return map[string]any{"response_present": false}
+		return &pb.ActivityProbeTierData{ResponsePresent: boolPtr(false)}
 	}
-	return map[string]any{
-		"response_present":         true,
-		"success":                  resp.GetSuccess(),
-		"error_message":            resp.GetErrorMessage(),
-		"flow_id":                  resp.GetFlowId(),
-		"snap_token_present":       resp.GetSnapToken() != "",
-		"checkout_url":             resp.GetCheckoutUrl(),
-		"checkout_session_id":      resp.GetCheckoutSessionId(),
-		"retryable_fresh_checkout": resp.GetRetryableFreshCheckout(),
-		"checkout_attempt":         resp.GetCheckoutAttempt(),
-		"stage":                    resp.GetStage(),
+	return &pb.ActivityProbeTierData{
+		ResponsePresent: boolPtr(true),
+		Success:         boolPtr(resp.GetSuccess()),
+		ErrorMessage:    resp.GetErrorMessage(),
+		Checked:         boolPtr(resp.GetChecked()),
+		Tier:            resp.GetTier(),
+		PlusActive:      boolPtr(resp.GetPlusActive()),
+		Source:          resp.GetSource(),
 	}
 }
 
-func paymentOTPResendData(resp *pb.ResendGoPayOTPResponse) map[string]any {
+func probePlusTrialStepData(accountID string, sessionToken string, accessToken string) *pb.ActivityProbePlusTrialStepData {
+	return &pb.ActivityProbePlusTrialStepData{
+		AccountId:           accountID,
+		SessionTokenPresent: boolPtr(sessionToken != ""),
+		AccessTokenPresent:  boolPtr(accessToken != ""),
+	}
+}
+
+func applyPlusTrialProbeResponse(output *pb.ProbePlusTrialActivityOutput, data *pb.ActivityProbePlusTrialStepData, resp *pb.ProbePlusTrialPaymentResponse) {
+	data.PaymentProbe = plusTrialProbeData(resp)
 	if resp == nil {
-		return map[string]any{"response_present": false}
+		return
 	}
-	return map[string]any{
-		"response_present":  true,
-		"success":           resp.GetSuccess(),
-		"error_message":     resp.GetErrorMessage(),
-		"flow_id":           resp.GetFlowId(),
-		"issued_after_unix": resp.GetIssuedAfterUnix(),
+	output.Success = resp.GetSuccess()
+	output.Checked = resp.GetChecked()
+	output.PlusTrialEligible = resp.GetPlusTrialEligible()
+	output.PlusActive = resp.GetPlusActive()
+	output.Amount = resp.GetAmount()
+	output.Currency = resp.GetCurrency()
+	output.Source = resp.GetSource()
+	output.PlanType = resp.GetPlanType()
+	output.CheckoutUrl = resp.GetCheckoutUrl()
+	output.CheckoutSessionId = resp.GetCheckoutSessionId()
+	output.ErrorMessage = resp.GetErrorMessage()
+	data.Success = boolPtr(resp.GetSuccess())
+	data.Checked = boolPtr(resp.GetChecked())
+	data.PlusTrialEligible = boolPtr(resp.GetPlusTrialEligible())
+	data.PlusActive = boolPtr(resp.GetPlusActive())
+	data.PlanType = resp.GetPlanType()
+	data.Tier = normalizeTier(resp.GetPlanType())
+	data.Amount = resp.GetAmount()
+	data.Currency = resp.GetCurrency()
+	data.Source = resp.GetSource()
+	data.CheckoutUrlPresent = boolPtr(resp.GetCheckoutUrl() != "")
+	data.CheckoutSessionId = resp.GetCheckoutSessionId()
+	data.ErrorMessage = resp.GetErrorMessage()
+}
+
+func probeTierStepData(accountID string, sessionToken string, accessToken string) *pb.ActivityProbeTierStepData {
+	return &pb.ActivityProbeTierStepData{
+		AccountId:           accountID,
+		SessionTokenPresent: boolPtr(sessionToken != ""),
+		AccessTokenPresent:  boolPtr(accessToken != ""),
 	}
 }
 
-func plusTrialProbeData(resp *pb.ProbePlusTrialPaymentResponse) map[string]any {
+func applyTierProbeResponse(output *pb.ProbeTierActivityOutput, data *pb.ActivityProbeTierStepData, resp *pb.ProbeTierPaymentResponse) {
+	data.TierProbe = tierProbeData(resp)
 	if resp == nil {
-		return map[string]any{"response_present": false}
+		return
 	}
-	return map[string]any{
-		"response_present":     true,
-		"success":              resp.GetSuccess(),
-		"error_message":        resp.GetErrorMessage(),
-		"checked":              resp.GetChecked(),
-		"plus_trial_eligible":  resp.GetPlusTrialEligible(),
-		"plus_active":          resp.GetPlusActive(),
-		"plan_type":            resp.GetPlanType(),
-		"tier":                 normalizeTier(resp.GetPlanType()),
-		"amount":               resp.GetAmount(),
-		"currency":             resp.GetCurrency(),
-		"source":               resp.GetSource(),
-		"checkout_url_present": resp.GetCheckoutUrl() != "",
-		"checkout_session_id":  resp.GetCheckoutSessionId(),
-	}
-}
-
-func tierProbeData(resp *pb.ProbeTierPaymentResponse) map[string]any {
-	if resp == nil {
-		return map[string]any{"response_present": false}
-	}
-	return map[string]any{
-		"response_present": true,
-		"success":          resp.GetSuccess(),
-		"error_message":    resp.GetErrorMessage(),
-		"checked":          resp.GetChecked(),
-		"tier":             resp.GetTier(),
-		"plus_active":      resp.GetPlusActive(),
-		"source":           resp.GetSource(),
-	}
-}
-
-func paymentResultData(resp *pb.GoPayResponse) map[string]any {
-	if resp == nil {
-		return map[string]any{"response_present": false}
-	}
-	return map[string]any{
-		"response_present":             true,
-		"success":                      resp.GetSuccess(),
-		"error_message":                resp.GetErrorMessage(),
-		"charge_ref":                   resp.GetChargeRef(),
-		"snap_token_present":           resp.GetSnapToken() != "",
-		"awaiting_manual_confirmation": resp.GetAwaitingManualConfirmation(),
-		"deeplink_url":                 resp.GetDeeplinkUrl(),
-		"qr_code_url":                  resp.GetQrCodeUrl(),
-		"qr_string":                    resp.GetQrString(),
-		"finish_redirect_url":          resp.GetFinishRedirectUrl(),
-		"finish_200_redirect_url":      resp.GetFinish_200RedirectUrl(),
-	}
-}
-
-func replayLinkPaymentData(resp *pb.ReplayLinkPaymentResponse, err error) map[string]any {
-	data := map[string]any{
-		"response_present": resp != nil,
-	}
-	if err != nil {
-		data["error_message"] = err.Error()
-	}
-	if resp == nil {
-		return data
-	}
-	data["success"] = resp.GetSuccess()
-	data["payment_id"] = resp.GetPaymentId()
-	data["status"] = resp.GetStatus()
-	if resp.GetErrorMessage() != "" {
-		data["error_message"] = resp.GetErrorMessage()
-	}
-	if len(resp.GetSteps()) > 0 {
-		steps := make([]map[string]any, 0, len(resp.GetSteps()))
-		for _, step := range resp.GetSteps() {
-			steps = append(steps, map[string]any{
-				"label":         step.GetLabel(),
-				"status_code":   step.GetStatusCode(),
-				"error_message": step.GetErrorMessage(),
-			})
-		}
-		data["steps"] = steps
-	}
-	return data
-}
-
-func cleanupData(success bool, errorMessage string, err error) map[string]any {
-	data := map[string]any{
-		"called":        true,
-		"success":       success,
-		"error_message": errorMessage,
-	}
-	if err != nil {
-		data["rpc_error"] = err.Error()
-	}
-	return data
-}
-
-func cleanupDataFromBrowser(resp *pb.CancelRegisterResponse, err error) map[string]any {
-	if resp == nil {
-		return cleanupData(false, "", err)
-	}
-	return cleanupData(resp.GetSuccess(), resp.GetErrorMessage(), err)
-}
-
-func cleanupDataFromPayment(resp *pb.CancelGoPayResponse, err error) map[string]any {
-	if resp == nil {
-		return cleanupData(false, "", err)
-	}
-	return cleanupData(resp.GetSuccess(), resp.GetErrorMessage(), err)
+	output.Success = resp.GetSuccess()
+	output.Checked = resp.GetChecked()
+	output.Tier = normalizeTier(resp.GetTier())
+	output.PlusActive = resp.GetPlusActive()
+	output.Source = resp.GetSource()
+	output.ErrorMessage = resp.GetErrorMessage()
+	data.Success = boolPtr(resp.GetSuccess())
+	data.Checked = boolPtr(resp.GetChecked())
+	data.Tier = output.Tier
+	data.PlusActive = boolPtr(resp.GetPlusActive())
+	data.Source = resp.GetSource()
+	data.ErrorMessage = resp.GetErrorMessage()
 }

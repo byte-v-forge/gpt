@@ -38,11 +38,6 @@ const actionLabels: DisplayLabelMap = {
   [GPT_ACTIONS.codexOAuth]: '浏览器 auth.json',
   [GPT_ACTIONS.codexOAuthProtocol]: '协议 auth.json',
   [GPT_ACTIONS.codexOAuthAddPhone]: 'Codex OAuth 加手机号',
-  [GPT_ACTIONS.goPayApp]: 'GoPay App',
-  [GPT_ACTIONS.goPayPayment]: 'GoPay 支付',
-  [GPT_ACTIONS.goPayQRISPaymentActivate]: 'QRIS激活',
-  [GPT_ACTIONS.goPayWAPayment]: '纯 GoPay-WA 支付',
-  [GPT_ACTIONS.goPayPaymentRebind]: 'GoPay 支付换绑',
   [GPT_ACTIONS.probeAccount]: '探测账号'
 };
 

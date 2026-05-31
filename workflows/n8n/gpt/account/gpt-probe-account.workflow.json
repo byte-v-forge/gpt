@@ -97,7 +97,7 @@
           "conditions": [
             {
               "id": "token-valid",
-              "leftValue": "={{ $json.token_valid }}",
+              "leftValue": "={{ $json.data?.probe_token?.token_valid }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -126,7 +126,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, error_message: $json.reason || 'token invalid', data: $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, error_message: $json.data?.probe_token?.reason || $json.reason || 'token invalid', data: Object.assign({}, $json.data?.probe_token || {}, { reason: $json.data?.probe_token?.reason || $json.reason || 'token_invalid' }) } }}",
         "options": {}
       },
       "id": "99720810-df93-47f4-9a07-f834576a2b0d",
@@ -153,7 +153,7 @@
           "conditions": [
             {
               "id": "plus-trial-needed",
-              "leftValue": "={{ !$json.account?.plus_active && String($json.account?.tier || '').toLowerCase() !== 'plus' && $json.account?.plus_trial_known !== true }}",
+              "leftValue": "={{ !$json.data?.probe_token?.account?.plus_active && String($json.data?.probe_token?.account?.tier || '').toLowerCase() !== 'plus' && $json.data?.probe_token?.account?.plus_trial_known !== true }}",
               "rightValue": true,
               "operator": {
                 "type": "boolean",
@@ -192,10 +192,7 @@
       "position": [
         2560,
         -180
-      ],
-      "retryOnFail": true,
-      "maxTries": 5,
-      "waitBetweenTries": 5000
+      ]
     },
     {
       "parameters": {
@@ -233,8 +230,8 @@
             },
             {
               "id": "data",
-              "name": "data",
-              "value": "={{ { success: true, checked: true, skipped: true, reason: $('Check Token').first().json.account?.plus_active ? 'plus_active' : (String($('Check Token').first().json.account?.tier || '').toLowerCase() === 'plus' ? 'tier_plus' : 'plus_trial_known'), tier: $('Check Token').first().json.account?.tier || '', plus_active: $('Check Token').first().json.account?.plus_active === true, plus_trial_eligible: $('Check Token').first().json.account?.plus_trial_eligible === true } }}",
+              "name": "plus_trial",
+              "value": "={{ { success: true, checked: true, skipped: true, reason: $('Check Token').first().json.data?.probe_token?.account?.plus_active ? 'plus_active' : (String($('Check Token').first().json.data?.probe_token?.account?.tier || '').toLowerCase() === 'plus' ? 'tier_plus' : 'plus_trial_known'), tier: $('Check Token').first().json.data?.probe_token?.account?.tier || '', plus_active: $('Check Token').first().json.data?.probe_token?.account?.plus_active === true, plus_trial_eligible: $('Check Token').first().json.data?.probe_token?.account?.plus_trial_eligible === true } }}",
               "type": "object"
             },
             {
@@ -307,7 +304,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, plus_trial: $('Probe Plus Trial').first().json, tier: $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, plus_trial: $('Probe Plus Trial').first().json.data?.probe_plus_trial || {}, tier: $json.data?.probe_tier || {} } }}",
         "options": {}
       },
       "id": "5a444c70-2965-4c29-85c4-193858262d2e",
@@ -329,7 +326,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, plus_trial: $('Skip Plus Trial').first().json, tier: $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, plus_trial: $('Skip Plus Trial').first().json.plus_trial || {}, tier: $json.data?.probe_tier || {} } }}",
         "options": {}
       },
       "id": "0f2010ff-4d0e-4f8b-a221-0bf93ee534c0",
@@ -398,7 +395,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data || $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data || {} } }}",
         "options": {}
       },
       "id": "probe-record-dynamic-proxy",
@@ -420,7 +417,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, error_message: $json.error_message || $json.data?.error_message || 'dynamic proxy preflight failed', data: $json.data || $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Probe Input').first().json.job_id, account_id: $('Normalize Probe Input').first().json.account_id, n8n_execution_id: $('Normalize Probe Input').first().json.n8n_execution_id, error_message: $json.error_message || $json.data?.error_message || 'dynamic proxy preflight failed', data: $json.data || {} } }}",
         "options": {}
       },
       "id": "probe-fail-dynamic-proxy",

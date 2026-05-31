@@ -32,8 +32,6 @@ CREATE INDEX IF NOT EXISTS idx_job_steps_status ON job_steps(status);
 CREATE TABLE IF NOT EXISTS job_events (event_id bigserial PRIMARY KEY, job_id text NOT NULL DEFAULT '', event_type text NOT NULL DEFAULT '', snapshot_json text NOT NULL DEFAULT '', created_at bigint NOT NULL DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_job_events_job_id ON job_events(job_id);
 CREATE INDEX IF NOT EXISTS idx_job_events_event_type ON job_events(event_type);
-CREATE TABLE IF NOT EXISTS gopay_user_profiles (state_key text PRIMARY KEY, wa_phone text NOT NULL DEFAULT '', pin text NOT NULL DEFAULT '', created_at bigint NOT NULL DEFAULT 0, updated_at bigint NOT NULL DEFAULT 0);
-ALTER TABLE gopay_user_profiles ADD COLUMN IF NOT EXISTS pin text NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS gpt_runtime_settings (settings_key text PRIMARY KEY, value_json text NOT NULL DEFAULT '', created_at bigint NOT NULL DEFAULT 0, updated_at bigint NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS codex_oauth_phone_leases (activation_id text PRIMARY KEY, phone_e164 text NOT NULL DEFAULT '', phone_national text NOT NULL DEFAULT '', country_iso2 text NOT NULL DEFAULT '', country_calling_code text NOT NULL DEFAULT '', profile_key text NOT NULL DEFAULT '', status text NOT NULL DEFAULT '', label text NOT NULL DEFAULT '', use_count integer NOT NULL DEFAULT 0, max_use_count integer NOT NULL DEFAULT 0, expires_at bigint NOT NULL DEFAULT 0, last_failure_kind text NOT NULL DEFAULT '', last_job_id text NOT NULL DEFAULT '', last_account_id text NOT NULL DEFAULT '', last_error text NOT NULL DEFAULT '', created_at bigint NOT NULL DEFAULT 0, updated_at bigint NOT NULL DEFAULT 0);
 ALTER TABLE codex_oauth_phone_leases ADD COLUMN IF NOT EXISTS expires_at bigint NOT NULL DEFAULT 0;

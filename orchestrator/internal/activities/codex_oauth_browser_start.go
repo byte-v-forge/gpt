@@ -2,6 +2,7 @@ package activities
 
 import (
 	"context"
+	"orchestrator/internal/contracts"
 )
 
 func (s *Server) CodexOAuthStartBrowserActivity(ctx context.Context, input CodexOAuthStartBrowserInput) (CodexOAuthStartBrowserOutput, error) {
@@ -9,33 +10,33 @@ func (s *Server) CodexOAuthStartBrowserActivity(ctx context.Context, input Codex
 	label := cfg.label(input.GetLabel())
 	output := CodexOAuthStartBrowserOutput{PhoneLabel: label}
 	data := codexOAuthBrowserData(label, input.GetPhone())
-	step := s.activityStep(ctx, input.GetJobId(), stepCodexOAuthBrowserStart, false, true)
-	_, err := step.run(func() (any, error) {
-		stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepCodexOAuthBrowserStart, "starting codex oauth browser", data)
+	step := s.activityStep(ctx, input.GetJobId(), contracts.StepCodexOAuthBrowserStart, false, true)
+	_, err := step.run(func() (activityStepResult, error) {
+		stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), contracts.StepCodexOAuthBrowserStart, "starting codex oauth browser", data.messageData())
 		defer stopHeartbeat()
 		account, err := s.codexOAuthBrowserAccount(ctx, input.GetAccountId())
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		flow, err := s.newCodexOAuthBrowserStartFlow(ctx, account, input.GetJobId(), label, input.GetPhone(), cfg, input.GetAllowAddPhone(), data)
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		pkceKey := codexOAuthPKCESecretKey(input.GetJobId(), flow.browserFlow.flowID)
 		if err := s.saveRuntimeSecret(ctx, pkceKey, flow.pkce.verifier); err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
-		data["pkce_secret_key"] = pkceKey
-		data["pkce_secret_written"] = true
+		data.setPKCESecretKey(pkceKey)
+		data.setPKCESecretWritten(true)
 		if err := flow.startSession(); err != nil {
 			_ = s.deleteRuntimeSecret(context.Background(), pkceKey)
 			flow.failure = err.Error()
 			flow.releasePhoneOnFailure()
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		output.Session = &CodexOAuthBrowserSession{
 			FlowId:        flow.browserFlow.flowID,
@@ -43,21 +44,21 @@ func (s *Server) CodexOAuthStartBrowserActivity(ctx context.Context, input Codex
 			State:         flow.state,
 			PkceSecretKey: pkceKey,
 		}
-		data["flow_id"] = output.GetSession().GetFlowId()
-		data["browser_session_started"] = true
+		data.setFlowID(output.GetSession().GetFlowId())
+		data.setBrowserSessionStarted(true)
 		if err := flow.openAuthorizeURL(); err != nil {
 			flow.stopSession()
 			_ = s.deleteRuntimeSecret(context.Background(), pkceKey)
 			flow.releasePhoneOnFailure()
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		output.Success = true
-		output.Data = protoData(data)
-		return data, nil
+		output.Data = data.messageData()
+		return data.messageData(), nil
 	})
 	if output.Data == nil {
-		output.Data = protoData(data)
+		output.Data = data.messageData()
 	}
 	return output, err
 }

@@ -1,12 +1,12 @@
-import { Controller, DashboardField, Input, Label, Switch } from '@byte-v-forge/common-ui';
-import type { Control } from '@byte-v-forge/common-ui';
+import { Badge, Controller, DashboardField, Input, Label, Switch } from '@byte-v-forge/common-ui';
+import type { Control, Path, UseFormRegister } from 'react-hook-form';
 import { GPTPluginConfigFieldKind } from '../proto/orchestrator_settings';
 import type { GPTPluginConfigField, GPTPluginConfigSchema } from '../proto/orchestrator_settings';
 import type { GPTSettingsForm } from './gpt-settings-model';
 
 type PluginSettingsFormApi = {
   control: Control<GPTSettingsForm>;
-  register: (name: any, options?: any) => Record<string, unknown>;
+  register: UseFormRegister<GPTSettingsForm>;
 };
 
 export function GPTPluginSettingsSection({ form, schemas }: {
@@ -15,22 +15,22 @@ export function GPTPluginSettingsSection({ form, schemas }: {
 }) {
   if (!schemas.length) return null;
   return (
-    <section className="grid gap-3 rounded-lg border border-[var(--border-soft)] bg-[var(--surface)] p-4">
-      <div>
-        <h3 className="m-0 text-sm font-semibold">插件配置</h3>
-        <p className="m-0 text-xs text-muted-foreground">私有流程配置从环境变量收敛到这里，由插件声明字段。</p>
-      </div>
-      <div className="grid gap-4">
-        {schemas.map((schema) => (
-          <div key={schema.plugin_key} className="grid gap-3 rounded-md border border-[var(--border-soft)] bg-[var(--surface-soft)] p-3">
-            <h4 className="m-0 text-sm font-semibold">{schema.display_name}</h4>
-            <div className="grid gap-3 md:grid-cols-2">
-              {schema.fields.map((field) => <PluginField key={field.key} form={form} pluginKey={schema.plugin_key} field={field} />)}
+    <>
+      {schemas.map((schema) => (
+        <section key={schema.plugin_key} className="grid w-[360px] max-w-full flex-none gap-3 rounded-xl border border-border/70 bg-background p-4 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="m-0 truncate text-sm font-semibold">{schema.display_name}</h3>
+              <p className="m-0 mt-1 truncate text-xs text-muted-foreground">{schema.plugin_key}</p>
             </div>
+            {schema.owner && <Badge variant="secondary">{schema.owner}</Badge>}
           </div>
-        ))}
-      </div>
-    </section>
+          <div className="grid gap-3">
+            {schema.fields.map((field) => <PluginField key={field.key} form={form} pluginKey={schema.plugin_key} field={field} />)}
+          </div>
+        </section>
+      ))}
+    </>
   );
 }
 
@@ -39,11 +39,11 @@ function PluginField({ form, pluginKey, field }: {
   pluginKey: string;
   field: GPTPluginConfigField;
 }) {
-  const name = `pluginConfigs.${pluginKey}.${field.key}`;
+  const name = pluginConfigPath(pluginKey, field.key);
   if (field.kind === GPTPluginConfigFieldKind.GPT_PLUGIN_CONFIG_FIELD_KIND_BOOLEAN) {
     return (
-      <Controller control={form.control} name={name as any} render={({ field: valueField }) => (
-        <Label className="flex items-center justify-between gap-3 rounded-md border border-[var(--border-soft)] p-3">
+      <Controller control={form.control} name={name} render={({ field: valueField }) => (
+        <Label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-border/70 bg-background p-3">
           <span>{field.label}</span>
           <Switch checked={isTruthy(valueField.value)} onCheckedChange={(checked) => valueField.onChange(checked ? 'true' : 'false')} />
         </Label>
@@ -52,9 +52,14 @@ function PluginField({ form, pluginKey, field }: {
   }
   return (
     <DashboardField label={field.label}>
-      <Input type={inputType(field)} {...form.register(name as any)} />
+      <Input type={inputType(field)} {...form.register(name)} />
+      {field.help_text && <p className="mt-1 text-xs leading-5 text-muted-foreground">{field.help_text}</p>}
     </DashboardField>
   );
+}
+
+function pluginConfigPath(pluginKey: string, fieldKey: string): Path<GPTSettingsForm> {
+  return `pluginConfigs.${pluginKey}.${fieldKey}` as Path<GPTSettingsForm>;
 }
 
 function inputType(field: GPTPluginConfigField) {

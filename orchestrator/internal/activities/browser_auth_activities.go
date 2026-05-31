@@ -3,7 +3,10 @@ package activities
 import (
 	"context"
 	"fmt"
+	"orchestrator/internal/gptaccount"
 	"strings"
+
+	"orchestrator/pb"
 )
 
 const (
@@ -15,7 +18,6 @@ func (s *Server) BrowserAuthStartActivity(ctx context.Context, input BrowserAuth
 	output := BrowserAuthStartOutput{
 		AccountId: input.GetAccountId(),
 	}
-	data := map[string]any{}
 	account, err := s.getAccount(ctx, input.GetAccountId())
 	if err != nil {
 		return output, err
@@ -23,13 +25,12 @@ func (s *Server) BrowserAuthStartActivity(ctx context.Context, input BrowserAuth
 	if err := rejectUserAlreadyExistsAccount(account); err != nil {
 		return output, err
 	}
-	if input.GetMode() == browserAuthModeLogin {
-		if strings.TrimSpace(account.GetEmail()) == "" {
-			return output, fmt.Errorf("email is required")
-		}
-		if strings.TrimSpace(account.GetPassword()) == "" {
-			return output, fmt.Errorf("password is required")
-		}
+	if strings.TrimSpace(gptaccount.Email(account)) == "" {
+		return output, fmt.Errorf("email is required")
+	}
+	password, err := s.getAccountPassword(ctx, gptaccount.ID(account))
+	if err != nil {
+		return output, err
 	}
 
 	stepName, err := browserAuthStartStepName(input.GetMode())
@@ -41,37 +42,37 @@ func (s *Server) BrowserAuthStartActivity(ctx context.Context, input BrowserAuth
 		return output, err
 	}
 
-	data["account_id"] = account.GetAccountId()
-	data["email"] = account.GetEmail()
-	step.progress("starting browser auth", map[string]any{
-		"mode":  input.GetMode(),
-		"email": account.GetEmail(),
-	})
+	data := &pb.ActivityBrowserAuthStartStepData{
+		AccountId: gptaccount.ID(account),
+		Email:     gptaccount.Email(account),
+		Mode:      input.GetMode(),
+	}
+	step.progress("starting browser auth", data)
 	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "starting browser auth", data)
 	defer stopHeartbeat()
 
-	startResp, otpKind, err := s.browserAuthStart(ctx, input.GetMode(), input.GetJobId(), account)
-	data["browser_start"] = browserStartData(startResp)
+	startResp, otpKind, err := s.browserAuthStart(ctx, input.GetMode(), input.GetJobId(), account, password)
+	data.BrowserStart = browserStartData(startResp)
 	if otpKind != "" {
-		data["otp_kind"] = otpKind
+		data.OtpKind = otpKind
 	}
 	if err != nil {
-		output.Data = protoData(data)
+		output.Data = data
 		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 	if startResp == nil {
 		err := fmt.Errorf("browser %s start returned empty response", input.GetMode())
-		output.Data = protoData(data)
+		output.Data = data
 		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 	if !startResp.GetSuccess() {
 		err := fmt.Errorf("browser %s start failed: %s", input.GetMode(), startResp.GetErrorMessage())
-		output.Data = protoData(data)
+		output.Data = data
 		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 
 	output.BrowserSessionId = startResp.GetBrowserSessionId()
-	output.Email = account.GetEmail()
+	output.Email = gptaccount.Email(account)
 	output.OtpRequired = startResp.GetOtpRequired()
 	output.OtpIssuedAfterUnix = startResp.GetOtpIssuedAfterUnix()
 	output.OtpWaitStartedAtUnix = startResp.GetOtpWaitStartedAtUnix()
@@ -79,36 +80,31 @@ func (s *Server) BrowserAuthStartActivity(ctx context.Context, input BrowserAuth
 	output.OtpTimeoutSeconds = s.registrationOtpTimeout(ctx)
 	if output.GetOtpRequired() && otpKind != "" {
 		if err := s.setJobParams(ctx, input.GetJobId(), map[string]string{browserAuthOTPKindParam: otpKind}); err != nil {
-			output.Data = protoData(data)
+			output.Data = data
 			return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 		}
 	}
-	step.progress("browser auth flow created", map[string]any{
-		"mode":               input.GetMode(),
-		"browser_session_id": output.GetBrowserSessionId(),
-		"otp_required":       output.GetOtpRequired(),
-		"otp_kind":           otpKind,
-	})
+	step.progress("browser auth flow created", data)
 
 	if startResp.GetResult() != nil {
 		result := startResp.GetResult()
-		data["browser_complete"] = registerResultData(result)
+		data.BrowserComplete = registerResultData(result)
 		if result == nil {
 			err := fmt.Errorf("browser %s completed without result", input.GetMode())
-			output.Data = protoData(data)
+			output.Data = data
 			return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 		}
 		if !result.GetSuccess() {
 			err := fmt.Errorf("browser %s failed: %s", input.GetMode(), result.GetErrorMessage())
-			output.Data = protoData(data)
+			output.Data = data
 			return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 		}
 		resultOutput := registerActivityOutputFromResponse(result, data)
 		output.Result = &resultOutput
-		output.Data = protoData(data)
+		output.Data = data
 		return output, step.complete(data, nil)
 	}
 
-	output.Data = protoData(data)
+	output.Data = data
 	return output, step.complete(data, nil)
 }

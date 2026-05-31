@@ -2,13 +2,9 @@ syntax = "proto3";
 
 package orchestrator;
 
-import "google/protobuf/struct.proto";
+import "orchestrator_activity_data.proto";
 
 option go_package = "./;pb";
-
-service PaymentWorkflowService {
-  rpc ProbeAccount(ProbeAccountRequest) returns (ProbeAccountResponse);
-}
 
 message ProbePlusTrialActivityInput {
   string job_id = 1;
@@ -36,7 +32,7 @@ message ProbePlusTrialActivityOutput {
   string checkout_url = 9;
   string checkout_session_id = 10;
   string error_message = 11;
-  google.protobuf.Struct data = 12;
+  ActivityProbePlusTrialStepData data = 12;
 }
 
 message ProbeTierActivityOutput {
@@ -46,103 +42,7 @@ message ProbeTierActivityOutput {
   bool plus_active = 4;
   string source = 5;
   string error_message = 6;
-  google.protobuf.Struct data = 7;
-}
-
-message GoPayActivityInput {
-  string job_id = 1;
-  string account_id = 2;
-  string session_token = 3;
-  string access_token = 4;
-  bool use_account_token = 5;
-  string tokenization = 6;
-  string checkout_url = 7;
-  string checkout_session_id = 8;
-  string otp_channel = 9; // sms 时 payment 触发 resend-otp；wa/空值不触发
-  string state_json = 10;
-  string prepared_flow_id = 11;
-  string gopay_phone = 12;
-  string sms_activation_id = 13;
-  string user_id = 14; // WA 接码来源；local 或 tg:<user_id>
-  bool skip_account_balance_check = 15; // 已有 GoPay state 直接支付时跳过余额等待
-  string pin = 16; // GoPay PIN；需要 PIN 的步骤必须由调用方显式传入
-  string country_code = 17; // 电话区号；需要链接 GoPay 的步骤必须由调用方显式传入
-}
-
-message GoPayActivityOutput {
-  string charge_ref = 1;
-  string snap_token = 2;
-  bool plus_trial_eligible = 3;
-  bool plus_trial_checked = 4;
-  bool plus_active = 5;
-  google.protobuf.Struct data = 6;
-  string state_json = 7;
-  bool awaiting_manual_confirmation = 8;
-  string flow_id = 9;
-}
-
-message GoPayPaymentStartOutput {
-  string flow_id = 1;
-  int64 issued_after_unix = 2;
-  int32 otp_timeout_seconds = 3;
-  bool use_account_token = 4;
-  google.protobuf.Struct data = 5;
-  bool otp_required = 6;
-  string state_json = 7;
-}
-
-message GoPayPaymentPrepareOutput {
-  string flow_id = 1;
-  string snap_token = 2;
-  string checkout_url = 3;
-  string checkout_session_id = 4;
-  bool use_account_token = 5;
-  google.protobuf.Struct data = 6;
-  string state_json = 7;
-  bool retryable_fresh_checkout = 8;
-  int32 checkout_attempt = 9;
-  string stage = 10;
-}
-
-message GoPayPaymentCompleteInput {
-  string job_id = 1;
-  string account_id = 2;
-  string flow_id = 3;
-  string otp_param = 4;
-  string submitted_at_param = 5;
-  int64 otp_issued_after_unix = 6;
-  string otp_source = 7;
-  bool use_account_token = 8;
-  google.protobuf.Struct data = 9;
-  string state_json = 10;
-  string pin = 11;
-  bool wait_for_manual_confirmation = 12;
-}
-
-message GoPayPaymentManualConfirmInput {
-  string job_id = 1;
-  string account_id = 2;
-  string flow_id = 3;
-  google.protobuf.Struct data = 4;
-  string state_json = 5;
-}
-
-message GoPayPaymentOTPResendInput {
-  string job_id = 1;
-  string account_id = 2;
-  string flow_id = 3;
-  google.protobuf.Struct data = 4;
-}
-
-message GoPayPaymentOTPResendOutput {
-  bool success = 1;
-  string flow_id = 2;
-  int64 issued_after_unix = 3;
-  google.protobuf.Struct data = 4;
-}
-
-message GoPayPaymentCancelInput {
-  string flow_id = 1;
+  ActivityProbeTierStepData data = 7;
 }
 
 message ProbeAccountRequest {

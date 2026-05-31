@@ -129,7 +129,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data || {} } }}",
         "options": {}
       },
       "id": "868b614d-a4a9-565f-a2f1-b1e37ff19dab",
@@ -148,7 +148,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, error_message: $json.error_message || 'dynamic proxy preflight failed', data: $json.data || $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, error_message: $json.error_message || 'dynamic proxy preflight failed', data: $json.data || {} } }}",
         "options": {}
       },
       "id": "8aca9b69-d4ce-5e9a-b3c0-b7c5f8679a06",
@@ -489,7 +489,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_add_phone', error_message: $json.errorMessage || 'codex oauth phone rejected', data: $json.data || $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_add_phone', error_message: $json.errorMessage || 'codex oauth phone rejected', data: Object.assign({}, $json.data || {}, { reason: 'phone_rejected', error_message: $json.errorMessage || 'codex oauth phone rejected' }) } }}",
         "options": {}
       },
       "id": "b6460e94-3fe7-5b9b-a965-5ebe02130abe",
@@ -561,7 +561,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, result: { auth_secret_key: $json.authSecretKey, data: $json.data, driver: 'protocol', add_phone_confirmed: true } } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, auth_secret_key: $json.authSecretKey, driver: 'protocol', add_phone_confirmed: true, data: $json.data || {} } }}",
         "options": {}
       },
       "id": "5af81393-9c9d-510b-977e-4941c55e98bd",
@@ -580,7 +580,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_detect', error_message: 'codex oauth add phone stage not ready: ' + ($json.stage || 'unknown'), data: $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_detect', error_message: 'codex oauth add phone stage not ready: ' + ($json.stage || 'unknown'), data: Object.assign({}, $json.data || {}, { reason: 'unexpected_stage', error_message: 'codex oauth add phone stage not ready: ' + ($json.stage || 'unknown'), login_stage: $json.stage || 'unknown' }) } }}",
         "options": {}
       },
       "id": "51fcb67d-7202-5ea0-85e6-4713922ea959",

@@ -10,7 +10,6 @@ import (
 	"gorm.io/gorm"
 	"orchestrator/internal/accountfingerprint"
 	"orchestrator/internal/actionregistry"
-	"orchestrator/internal/gopayotp"
 	"orchestrator/internal/jobprojection"
 	"orchestrator/internal/runtimesecrets"
 	"orchestrator/pb"
@@ -18,6 +17,7 @@ import (
 
 type OTPProjection interface {
 	WaitSMSCode(ctx context.Context, activationID string, issuedAfterUnix int64, timeout time.Duration, interval time.Duration) (string, bool, error)
+	WaitWACode(ctx context.Context, e164Number string, issuedAfterUnix int64, timeout time.Duration, interval time.Duration) (string, bool, error)
 	WaitMailboxSignal(ctx context.Context, email string, kind mailboxv1.EmailSignalKind, issuedAfterUnix int64, timeout time.Duration, interval time.Duration) (*mailboxv1.EmailInboxMessage, string, bool, error)
 }
 
@@ -40,8 +40,6 @@ type Config struct {
 	BrowserAuth             BrowserAuthConfig
 	CodexOAuth              CodexOAuthConfig
 	PaymentClient           pb.PaymentServiceClient
-	OTPRelay                gopayotp.Relay
-	GoPayClient             pb.GopayAppServiceClient
 	SmsClient               smsv1.SmsOrderServiceClient
 	SmsCatalogClient        smsv1.SmsCatalogServiceClient
 	MailboxPollRequester    MailboxPollRequester
@@ -61,8 +59,6 @@ type Server struct {
 	browserAuthConfig       BrowserAuthConfig
 	codexOAuthConfig        CodexOAuthConfig
 	paymentClient           pb.PaymentServiceClient
-	otpRelay                gopayotp.Relay
-	gopayClient             pb.GopayAppServiceClient
 	smsClient               smsv1.SmsOrderServiceClient
 	smsCatalogClient        smsv1.SmsCatalogServiceClient
 	mailboxPollRequester    MailboxPollRequester
@@ -72,6 +68,10 @@ type Server struct {
 }
 
 func NewServer(cfg Config) *Server {
+	actionRegistry := cfg.ActionRegistry
+	if actionRegistry == nil {
+		actionRegistry = actionregistry.Default()
+	}
 	return &Server{
 		db:                      cfg.DB,
 		otpProjection:           cfg.OTPProjection,
@@ -83,13 +83,11 @@ func NewServer(cfg Config) *Server {
 		browserAuthConfig:       cfg.BrowserAuth.withDefaults(),
 		codexOAuthConfig:        cfg.CodexOAuth.withDefaults(),
 		paymentClient:           cfg.PaymentClient,
-		otpRelay:                cfg.OTPRelay,
-		gopayClient:             cfg.GoPayClient,
 		smsClient:               cfg.SmsClient,
 		smsCatalogClient:        cfg.SmsCatalogClient,
 		mailboxPollRequester:    cfg.MailboxPollRequester,
 		gptSettings:             cfg.GPTSettings,
 		emailAllocator:          defaultAccountEmailAllocator(cfg.EmailAllocator, cfg.AccountClient),
-		actionRegistry:          actionregistry.RegisterDefault(cfg.ActionRegistry),
+		actionRegistry:          actionRegistry,
 	}
 }

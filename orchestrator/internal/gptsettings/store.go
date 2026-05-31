@@ -90,9 +90,7 @@ func Normalize(in *pb.GPTSettings) *pb.GPTSettings {
 		if preflight.CfCanaryEnabled != nil {
 			out.ProxyPreflight.CfCanaryEnabled = proto.Bool(preflight.GetCfCanaryEnabled())
 		}
-		if score := preflight.GetMinIpPurityScore(); score > 0 {
-			out.ProxyPreflight.MinIpPurityScore = clampPurityScore(score)
-		}
+		out.ProxyPreflight.MinIpPurityScore = clampPurityScore(preflight.GetMinIpPurityScore())
 		if preflight.GetMaxProxyAttempts() > 0 {
 			out.ProxyPreflight.MaxProxyAttempts = preflight.GetMaxProxyAttempts()
 		}
@@ -226,8 +224,8 @@ func normalizePluginKey(value string) string {
 }
 
 func clampPurityScore(score float64) float64 {
-	if score < 90 {
-		return 90
+	if score < 0 {
+		return 0
 	}
 	if score > 100 {
 		return 100

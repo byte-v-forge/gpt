@@ -1,9 +1,11 @@
 package activities
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -12,8 +14,9 @@ import (
 
 	fhttp "github.com/bogdanfinn/fhttp"
 	"github.com/byte-v-forge/common-lib/browserhttp"
-	"github.com/byte-v-forge/common-lib/fingerprinthttp"
 	"github.com/byte-v-forge/common-lib/stringx"
+
+	"orchestrator/pb"
 )
 
 const (
@@ -22,11 +25,16 @@ const (
 	codexOAuthProtocolLanguage       = "en-US"
 )
 
+type gptProtocolHTTPProfile struct {
+	ProxyURL       string
+	TLSProfileName string
+}
+
 type GptClient struct {
 	cfg                     CodexOAuthConfig
-	state                   *codexOAuthProtocolState
-	client                  *fingerprinthttp.Client
-	profile                 fingerprinthttp.Profile
+	state                   *pb.CodexOAuthProtocolState
+	client                  *browserhttp.Client
+	profile                 gptProtocolHTTPProfile
 	lastRequestSentAtUnixMs int64
 }
 
@@ -38,18 +46,15 @@ type codexOAuthProtocolHTTPResponse struct {
 	SentAtUnixMs int64
 }
 
-func newGptClient(cfg CodexOAuthConfig, state *codexOAuthProtocolState, profile fingerprinthttp.Profile) (*GptClient, error) {
+func newGptClient(cfg CodexOAuthConfig, state *pb.CodexOAuthProtocolState, profile gptProtocolHTTPProfile) (*GptClient, error) {
 	cfg = cfg.withDefaults()
-	profile = profile.WithDefaults(codexOAuthProtocolDefaultProfile(cfg))
 	profile = codexOAuthProtocolCleanProfile(cfg, profile)
-	client, err := fingerprinthttp.New(fingerprinthttp.Config{
+	client, err := browserhttp.New(browserhttp.Config{
 		Timeout:            45 * time.Second,
 		ProxyURL:           profile.ProxyURL,
-		Profile:            profile,
+		TLSProfileName:     profile.TLSProfileName,
 		DisableHTTP3:       true,
 		NotFollowRedirects: true,
-		RetryMax:           3,
-		MaxBodyBytes:       4 << 20,
 	})
 	if err != nil {
 		return nil, err
@@ -60,13 +65,13 @@ func newGptClient(cfg CodexOAuthConfig, state *codexOAuthProtocolState, profile 
 	return &GptClient{cfg: cfg, state: state, client: client, profile: profile}, nil
 }
 
-func restoreCodexOAuthProtocolCookies(jar browserhttp.CookieJar, cookies []codexOAuthProtocolCookie) {
+func restoreCodexOAuthProtocolCookies(jar browserhttp.CookieJar, cookies []*pb.CodexOAuthProtocolCookie) {
 	byHost := map[string][]*fhttp.Cookie{}
 	for _, cookie := range cookies {
-		if strings.TrimSpace(cookie.HostKey) == "" || strings.TrimSpace(cookie.Name) == "" || cookie.Value == "" {
+		if cookie == nil || strings.TrimSpace(cookie.GetHostKey()) == "" || strings.TrimSpace(cookie.GetName()) == "" || cookie.GetValue() == "" {
 			continue
 		}
-		byHost[cookie.HostKey] = append(byHost[cookie.HostKey], codexOAuthProtocolCookieFromState(cookie))
+		byHost[cookie.GetHostKey()] = append(byHost[cookie.GetHostKey()], codexOAuthProtocolCookieFromState(cookie))
 	}
 	for hostKey, values := range byHost {
 		u := &url.URL{Scheme: "https", Host: hostKey, Path: "/"}
@@ -76,7 +81,7 @@ func restoreCodexOAuthProtocolCookies(jar browserhttp.CookieJar, cookies []codex
 
 func (c *GptClient) Close() {
 	if c != nil && c.client != nil {
-		c.client.Close()
+		c.client.CloseIdleConnections()
 	}
 }
 
@@ -113,18 +118,31 @@ func (c *GptClient) request(ctx context.Context, method, rawURL, referer string,
 			}
 		}
 	}
-	c.applyGptIdentityHeaders(headers)
-	sentAtUnixMs := time.Now().UnixMilli()
-	c.lastRequestSentAtUnixMs = sentAtUnixMs
-	resp, err := c.client.Request(ctx, method, rawURL, fingerprinthttp.RequestOptions{Headers: headers, Body: body})
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, reader)
 	if err != nil {
 		return nil, err
 	}
-	out := &codexOAuthProtocolHTTPResponse{StatusCode: resp.StatusCode, Header: browserhttp.ToFHTTPHeader(resp.Headers), Body: resp.Body, SentAtUnixMs: sentAtUnixMs}
-	if c.state != nil {
-		c.state.applyCookieSnapshot(c.client.CookieJar().GetAllCookies())
+	req.Header = headers
+	sentAtUnixMs := time.Now().UnixMilli()
+	c.lastRequestSentAtUnixMs = sentAtUnixMs
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, err
 	}
-	if len(out.Body) > 0 && strings.Contains(strings.ToLower(resp.Headers.Get("Content-Type")), "json") {
+	defer resp.Body.Close()
+	out := &codexOAuthProtocolHTTPResponse{StatusCode: resp.StatusCode, Header: browserhttp.ToFHTTPHeader(resp.Header), SentAtUnixMs: sentAtUnixMs}
+	out.Body, err = io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, err
+	}
+	if c.state != nil {
+		applyCodexOAuthProtocolCookieSnapshot(c.state, c.client.CookieJar().GetAllCookies())
+	}
+	if len(out.Body) > 0 && strings.Contains(strings.ToLower(resp.Header.Get("Content-Type")), "json") {
 		_ = json.Unmarshal(out.Body, &out.JSON)
 	}
 	return out, nil
@@ -186,14 +204,8 @@ func (c *GptClient) deviceID() string {
 	if c == nil {
 		return ""
 	}
-	if deviceID := strings.TrimSpace(c.profile.DeviceID); deviceID != "" {
-		if c.state != nil {
-			c.state.DeviceID = deviceID
-		}
-		return deviceID
-	}
 	if c.state != nil {
-		if deviceID := strings.TrimSpace(c.state.DeviceID); deviceID != "" {
+		if deviceID := strings.TrimSpace(c.state.GetDeviceId()); deviceID != "" {
 			return deviceID
 		}
 	}
@@ -203,7 +215,7 @@ func (c *GptClient) deviceID() string {
 				if cookie != nil && strings.EqualFold(cookie.Name, "oai-did") && strings.TrimSpace(cookie.Value) != "" {
 					deviceID := strings.TrimSpace(cookie.Value)
 					if c.state != nil {
-						c.state.DeviceID = deviceID
+						c.state.DeviceId = deviceID
 					}
 					return deviceID
 				}
@@ -214,11 +226,6 @@ func (c *GptClient) deviceID() string {
 }
 
 func (c *GptClient) userAgent() string {
-	if c != nil {
-		if userAgent := strings.TrimSpace(c.profile.UserAgent); userAgent != "" {
-			return userAgent
-		}
-	}
 	return codexOAuthProtocolUserAgent
 }
 
@@ -277,25 +284,19 @@ func protocolCookieHostMatches(hostKey string, hostHints ...string) bool {
 	return false
 }
 
-func codexOAuthProtocolDefaultProfile(cfg CodexOAuthConfig) fingerprinthttp.Profile {
+func codexOAuthProtocolDefaultProfile(cfg CodexOAuthConfig) gptProtocolHTTPProfile {
 	cfg = cfg.withDefaults()
-	return fingerprinthttp.Profile{
-		ProxyURL:       cfg.ProtocolProxyURL,
-		TLSProfileName: cfg.ProtocolTLSProfile,
-		UserAgent:      codexOAuthProtocolUserAgent,
-		AcceptLanguage: codexOAuthProtocolAcceptLanguage,
-	}
+	return gptProtocolHTTPProfile{ProxyURL: cfg.ProtocolProxyURL, TLSProfileName: cfg.ProtocolTLSProfile}
 }
 
-func codexOAuthProtocolCleanProfile(cfg CodexOAuthConfig, profile fingerprinthttp.Profile) fingerprinthttp.Profile {
+func codexOAuthProtocolCleanProfile(cfg CodexOAuthConfig, profile gptProtocolHTTPProfile) gptProtocolHTTPProfile {
 	cfg = cfg.withDefaults()
-	profile.ProxyURL = cfg.ProtocolProxyURL
-	profile.UserAgent = codexOAuthProtocolUserAgent
-	profile.AcceptLanguage = codexOAuthProtocolAcceptLanguage
-	profile.SecCHUA = ""
-	profile.SecCHPlatform = ""
-	profile.Language = ""
-	profile.DeviceID = ""
+	if strings.TrimSpace(profile.ProxyURL) == "" {
+		profile.ProxyURL = cfg.ProtocolProxyURL
+	} else {
+		profile.ProxyURL = strings.TrimSpace(profile.ProxyURL)
+	}
+	profile.TLSProfileName = cfg.ProtocolTLSProfile
 	return profile
 }
 
@@ -379,16 +380,5 @@ func codexOAuthProtocolRefererForStage(stage string) string {
 		return "https://auth.openai.com/sign-in-with-chatgpt/codex/consent"
 	default:
 		return "https://auth.openai.com/"
-	}
-}
-
-func codexOAuthProtocolShortSleep(ctx context.Context) error {
-	timer := time.NewTimer(500 * time.Millisecond)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
 	}
 }

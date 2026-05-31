@@ -89,7 +89,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Build Account Items').first().json.parent_job_id, n8n_execution_id: $execution.id, result: { total_count: $('Build Account Items').all().length, mode: 'child_workflows' } } }}",
+        "jsonBody": "={{ { job_id: $('Build Account Items').first().json.parent_job_id, n8n_execution_id: $execution.id, total_count: $('Build Account Items').all().length, mode: 'child_workflows' } }}",
         "options": {}
       },
       "id": "07a57e61-84cc-5a8e-b3d3-006ce6282700",

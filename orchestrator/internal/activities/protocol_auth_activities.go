@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"orchestrator/internal/contracts"
+	"orchestrator/internal/gptaccount"
 	"strings"
 	"time"
 
@@ -12,6 +14,8 @@ import (
 	fhttp "github.com/bogdanfinn/fhttp"
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/google/uuid"
+
+	"orchestrator/internal/channelotpwait"
 	"orchestrator/pb"
 )
 
@@ -32,23 +36,24 @@ func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input ProtocolAu
 	if err != nil {
 		return output, err
 	}
-	data := protocolAuthData(input.GetMode(), account)
+	data := newProtocolAuthStepData(input.GetMode(), account)
 	step, err := s.startActivityStep(ctx, input.GetJobId(), stepName, false, true)
 	if err != nil {
 		return output, err
 	}
-	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "starting protocol auth", data)
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "starting protocol auth", protocolAuthStepMessage(data))
 	defer stopHeartbeat()
 
 	state, err := newProtocolAuthState()
 	if err != nil {
-		output.Data = protoData(data)
-		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
+		output.Data = protocolAuthOutputData(protocolAuthStepMessage(data))
+		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
 	}
-	client, err := s.newAccountGptClient(ctx, account.GetAccountId(), cfg, state)
+	data.setFlowID(state.FlowId)
+	client, err := s.newAccountGptClient(ctx, gptaccount.ID(account), cfg, state)
 	if err != nil {
-		output.Data = protoData(data)
-		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
+		output.Data = protocolAuthOutputData(protocolAuthStepMessage(data))
+		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
 	}
 	authURL, err := protocolAuthChatGPTAuthURL(ctx, client, state, account, input.GetMode(), data)
 	var issuedAfter int64
@@ -63,35 +68,35 @@ func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input ProtocolAu
 		_, issuedAfter, err = protocolAuthSubmitEmail(ctx, client, state, account, input.GetMode(), data)
 	}
 	if issuedAfter > 0 {
-		state.EmailOTPIssuedAfterUnix = issuedAfter
+		state.EmailOtpIssuedAfterUnix = issuedAfter
 	}
 	if saveErr := s.saveCodexOAuthProtocolState(ctx, input.GetJobId(), state); saveErr != nil && err == nil {
 		err = saveErr
 	}
-	output.FlowId = state.FlowID
-	output.Email = account.GetEmail()
-	output.Data = protoData(data)
+	output.FlowId = state.FlowId
+	output.Email = gptaccount.Email(account)
+	output.Data = protocolAuthOutputData(protocolAuthStepMessage(data))
 	if err != nil {
-		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
+		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
 	}
 	if protocolAuthReadyStage(state.Stage) {
 		result, captureErr := s.protocolAuthCaptureSession(ctx, client, state, data)
 		output.Result = &result
-		output.Data = protoData(data)
+		output.Data = protocolAuthOutputData(protocolAuthStepMessage(data))
 		err = captureErr
 		if err == nil {
-			_ = s.deleteCodexOAuthProtocolState(ctx, input.GetJobId(), &CodexOAuthBrowserSession{FlowId: state.FlowID})
+			_ = s.deleteCodexOAuthProtocolState(ctx, input.GetJobId(), &CodexOAuthBrowserSession{FlowId: state.FlowId})
 		}
 	}
 	if state.Stage == "email_otp" {
 		output.OtpRequired = true
-		output.OtpIssuedAfterUnix = state.EmailOTPIssuedAfterUnix
+		output.OtpIssuedAfterUnix = state.EmailOtpIssuedAfterUnix
 	}
-	data["flow_id"] = state.FlowID
-	data["login_stage"] = state.Stage
-	data["protocol_session_started"] = true
-	output.Data = protoData(data)
-	return output, step.complete(data, err)
+	data.setFlowID(state.FlowId)
+	data.setStage(state.Stage)
+	data.setProtocolSessionStarted(true)
+	output.Data = protocolAuthOutputData(protocolAuthStepMessage(data))
+	return output, step.complete(protocolAuthStepMessage(data), err)
 }
 
 func (s *Server) ProtocolAuthWaitActivity(ctx context.Context, input ProtocolAuthWaitInput) (ProtocolAuthWaitOutput, error) {
@@ -113,19 +118,19 @@ func (s *Server) ProtocolAuthWaitActivity(ctx context.Context, input ProtocolAut
 	if err != nil {
 		return output, err
 	}
-	data := protocolAuthData(input.GetMode(), account)
-	data["flow_id"] = input.GetFlowId()
+	data := newProtocolAuthStepData(input.GetMode(), account)
+	data.setFlowID(input.GetFlowId())
 	step, err := s.startActivityStep(ctx, input.GetJobId(), stepName, false, true)
 	if err != nil {
 		return output, err
 	}
-	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "running protocol auth", data)
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "running protocol auth", protocolAuthStepMessage(data))
 	defer stopHeartbeat()
 
-	state, client, err := s.protocolAuthStateClient(ctx, input.GetJobId(), input.GetFlowId(), account.GetAccountId(), input.GetProxyUrl())
+	state, client, err := s.protocolAuthStateClient(ctx, input.GetJobId(), input.GetFlowId(), gptaccount.ID(account), input.GetProxyUrl())
 	if err != nil {
-		output.Data = protoData(data)
-		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
+		output.Data = protocolAuthStepMessage(data)
+		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
 	}
 	_, err = protocolAuthAdvanceStage(ctx, client, state, data)
 	var issuedAfter int64
@@ -136,7 +141,7 @@ func (s *Server) ProtocolAuthWaitActivity(ctx context.Context, input ProtocolAut
 		case "create_password":
 			_, issuedAfter, err = s.protocolAuthRegisterPassword(ctx, client, state, account, data)
 		case "password":
-			_, issuedAfter, err = protocolAuthLoginPassword(ctx, client, state, account, data)
+			_, issuedAfter, err = s.protocolAuthLoginPassword(ctx, client, state, account, data)
 		case "about_you":
 			if input.GetMode() == browserAuthModeRegister {
 				_, err = s.protocolAuthCreateAccount(ctx, client, state, account, data)
@@ -144,39 +149,39 @@ func (s *Server) ProtocolAuthWaitActivity(ctx context.Context, input ProtocolAut
 		}
 	}
 	if issuedAfter > 0 {
-		state.EmailOTPIssuedAfterUnix = issuedAfter
+		state.EmailOtpIssuedAfterUnix = issuedAfter
 	}
 	if saveErr := s.saveCodexOAuthProtocolState(ctx, input.GetJobId(), state); saveErr != nil && err == nil {
 		err = saveErr
 	}
-	output.Email = account.GetEmail()
-	output.OtpIssuedAfterUnix = state.EmailOTPIssuedAfterUnix
-	output.Data = protoData(data)
+	output.Email = gptaccount.Email(account)
+	output.OtpIssuedAfterUnix = state.EmailOtpIssuedAfterUnix
+	output.Data = protocolAuthStepMessage(data)
 	if err != nil {
-		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
+		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
 	}
 	if protocolAuthReadyStage(state.Stage) {
 		result, captureErr := s.protocolAuthCaptureSession(ctx, client, state, data)
 		output.Result = &result
-		output.Data = protoData(data)
+		output.Data = protocolAuthStepMessage(data)
 		if captureErr == nil {
 			_ = s.deleteCodexOAuthProtocolState(ctx, input.GetJobId(), &CodexOAuthBrowserSession{FlowId: input.GetFlowId()})
 		}
-		return output, step.complete(data, captureErr)
+		return output, step.complete(protocolAuthStepMessage(data), captureErr)
 	}
 	if state.Stage == "email_otp" {
 		output.OtpRequired = true
 		if output.OtpIssuedAfterUnix <= 0 {
 			output.OtpIssuedAfterUnix = time.Now().Add(-time.Second).Unix()
-			state.EmailOTPIssuedAfterUnix = output.OtpIssuedAfterUnix
+			state.EmailOtpIssuedAfterUnix = output.OtpIssuedAfterUnix
 			_ = s.saveCodexOAuthProtocolState(ctx, input.GetJobId(), state)
 		}
-		data["email_otp_issued_after_unix"] = output.OtpIssuedAfterUnix
-		output.Data = protoData(data)
-		return output, step.complete(data, nil)
+		data.setEmailOTPIssuedAfter(output.OtpIssuedAfterUnix)
+		output.Data = protocolAuthStepMessage(data)
+		return output, step.complete(protocolAuthStepMessage(data), nil)
 	}
 	err = fmt.Errorf("protocol auth stage not ready: %s", state.Stage)
-	return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
+	return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
 }
 
 func (s *Server) ProtocolAuthCompleteActivity(ctx context.Context, input ProtocolAuthCompleteInput) (RegisterActivityOutput, error) {
@@ -188,19 +193,19 @@ func (s *Server) ProtocolAuthCompleteActivity(ctx context.Context, input Protoco
 	if err != nil {
 		return RegisterActivityOutput{}, err
 	}
-	data := protocolAuthData(input.GetMode(), account)
-	data["flow_id"] = input.GetFlowId()
-	data["otp_source"] = input.GetOtpSource()
+	data := newProtocolAuthStepData(input.GetMode(), account)
+	data.setFlowID(input.GetFlowId())
+	data.setOTPSource(input.GetOtpSource())
 	step, err := s.startActivityStep(ctx, input.GetJobId(), stepName, false, true)
 	if err != nil {
-		return RegisterActivityOutput{Data: protoData(data)}, err
+		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
 	}
-	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "completing protocol auth", data)
+	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "completing protocol auth", protocolAuthStepMessage(data))
 	defer stopHeartbeat()
 
-	state, client, err := s.protocolAuthStateClient(ctx, input.GetJobId(), input.GetFlowId(), account.GetAccountId(), input.GetProxyUrl())
+	state, client, err := s.protocolAuthStateClient(ctx, input.GetJobId(), input.GetFlowId(), gptaccount.ID(account), input.GetProxyUrl())
 	if err != nil {
-		return RegisterActivityOutput{Data: protoData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
+		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
 	}
 	err = s.protocolAuthValidateEmailOTP(ctx, client, state, input, data)
 	if err == nil && input.GetMode() == browserAuthModeRegister && (state.Stage == "about_you" || state.Stage == "email_otp" || state.Stage == "") {
@@ -216,49 +221,48 @@ func (s *Server) ProtocolAuthCompleteActivity(ctx context.Context, input Protoco
 	if err == nil {
 		output, err = s.protocolAuthCaptureSession(ctx, client, state, data)
 	}
-	output.Data = protoData(data)
+	output.Data = registerOutputData(protocolAuthStepMessage(data))
 	if err != nil {
-		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, account.GetAccountId(), data, err)
+		return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
 	}
 	_ = s.deleteCodexOAuthProtocolState(ctx, input.GetJobId(), &CodexOAuthBrowserSession{FlowId: input.GetFlowId()})
-	return output, step.complete(data, nil)
+	return output, step.complete(protocolAuthStepMessage(data), nil)
 }
 
 func (s *Server) ProtocolAuthCancelActivity(ctx context.Context, input ProtocolAuthCancelInput) error {
 	return s.deleteCodexOAuthProtocolState(ctx, input.GetJobId(), &CodexOAuthBrowserSession{FlowId: input.GetFlowId()})
 }
 
-func newProtocolAuthState() (*codexOAuthProtocolState, error) {
+func newProtocolAuthState() (*pb.CodexOAuthProtocolState, error) {
 	flowID, err := randx.Base64URL(18)
 	if err != nil {
 		return nil, err
 	}
-	return &codexOAuthProtocolState{FlowID: flowID, RedirectURI: protocolAuthChatGPTCallback}, nil
+	return &pb.CodexOAuthProtocolState{FlowId: flowID, RedirectUri: protocolAuthChatGPTCallback}, nil
 }
 
-func protocolAuthChatGPTAuthURL(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, account *pb.Account, mode string, data map[string]any) (string, error) {
+func protocolAuthChatGPTAuthURL(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, account *pb.Account, mode string, data *protocolAuthStepData) (string, error) {
 	csrf, err := protocolAuthChatGPTCSRF(ctx, client, data)
 	if err != nil {
 		return "", err
 	}
-	if strings.TrimSpace(state.DeviceID) == "" {
-		state.DeviceID = client.deviceID()
+	if strings.TrimSpace(state.DeviceId) == "" {
+		state.DeviceId = client.deviceID()
 	}
-	if strings.TrimSpace(state.DeviceID) == "" {
-		state.DeviceID = uuid.NewString()
+	if strings.TrimSpace(state.DeviceId) == "" {
+		state.DeviceId = uuid.NewString()
 	}
 	signinURL := "https://chatgpt.com/api/auth/signin/openai"
-	if account != nil && strings.TrimSpace(account.GetEmail()) != "" {
+	if account != nil && strings.TrimSpace(gptaccount.Email(account)) != "" {
 		query := url.Values{}
 		query.Set("prompt", "login")
-		query.Set("ext-oai-did", state.DeviceID)
+		query.Set("ext-oai-did", state.DeviceId)
 		query.Set("auth_session_logging_id", uuid.NewString())
 		query.Set("ext-passkey-client-capabilities", "1111")
 		query.Set("screen_hint", protocolAuthChatGPTScreenHint(mode))
-		query.Set("login_hint", strings.TrimSpace(account.GetEmail()))
+		query.Set("login_hint", strings.TrimSpace(gptaccount.Email(account)))
 		signinURL += "?" + query.Encode()
-		data["chatgpt_signin_login_hint"] = true
-		data["chatgpt_signin_screen_hint"] = protocolAuthChatGPTScreenHint(mode)
+		data.setChatGPTSignin(true, protocolAuthChatGPTScreenHint(mode))
 	}
 	form := url.Values{}
 	form.Set("csrfToken", csrf)
@@ -275,17 +279,14 @@ func protocolAuthChatGPTAuthURL(ctx context.Context, client *GptClient, state *c
 	if authURL == "" {
 		return "", fmt.Errorf("chatgpt auth url missing")
 	}
-	state.AuthorizeURL = authURL
-	state.RedirectURI = protocolAuthChatGPTCallback
-	state.OAuthState = codexOAuthProtocolQueryFirst(authURL, "state")
-	data["chatgpt_auth_url_ready"] = true
+	state.AuthorizeUrl = authURL
+	state.RedirectUri = protocolAuthChatGPTCallback
+	state.OauthState = codexOAuthProtocolQueryFirst(authURL, "state")
+	data.setChatGPTAuthURLReady(true)
 	return authURL, nil
 }
 
-func protocolAuthChatGPTCSRF(ctx context.Context, client *GptClient, data map[string]any) (string, error) {
-	if data == nil {
-		data = map[string]any{}
-	}
+func protocolAuthChatGPTCSRF(ctx context.Context, client *GptClient, data *protocolAuthStepData) (string, error) {
 	var lastErr error
 	for attempt := 1; attempt <= 3; attempt++ {
 		csrf, err := protocolAuthChatGPTCSRFAttempt(ctx, client, data, attempt)
@@ -307,15 +308,15 @@ func protocolAuthChatGPTCSRF(ctx context.Context, client *GptClient, data map[st
 	return "", fmt.Errorf("chatgpt csrf failed")
 }
 
-func protocolAuthChatGPTCSRFAttempt(ctx context.Context, client *GptClient, data map[string]any, attempt int) (string, error) {
+func protocolAuthChatGPTCSRFAttempt(ctx context.Context, client *GptClient, data chatGPTCSRFStepData, attempt int) (string, error) {
 	resp, err := client.get(ctx, "https://chatgpt.com/api/auth/csrf", protocolAuthChatGPTLoginURL, false)
 	if err != nil {
 		return "", err
 	}
-	data["chatgpt_csrf_status"] = resp.StatusCode
-	data["chatgpt_csrf_attempt"] = attempt
+	data.setChatGPTCSRFStatus(resp.StatusCode)
+	data.setChatGPTCSRFAttempt(attempt)
 	if codexOAuthProtocolEdgeChallenge(resp) {
-		data["chatgpt_csrf_edge_challenge"] = true
+		data.setChatGPTCSRFEdgeChallenge(true)
 		return "", fmt.Errorf("chatgpt csrf failed: edge challenge status %d", resp.StatusCode)
 	}
 	if err := codexOAuthProtocolRequireOK(resp, "chatgpt csrf"); err != nil {
@@ -325,7 +326,7 @@ func protocolAuthChatGPTCSRFAttempt(ctx context.Context, client *GptClient, data
 	if csrf == "" {
 		return "", fmt.Errorf("chatgpt csrf token missing")
 	}
-	data["chatgpt_csrf_ready"] = true
+	data.setChatGPTCSRFReady(true)
 	return csrf, nil
 }
 
@@ -336,7 +337,7 @@ func protocolAuthChatGPTScreenHint(mode string) string {
 	return "login"
 }
 
-func protocolAuthSubmitEmail(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, account *pb.Account, mode string, data map[string]any) (string, int64, error) {
+func protocolAuthSubmitEmail(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, account *pb.Account, mode string, data *protocolAuthStepData) (string, int64, error) {
 	issuedAfter := time.Now().Add(-time.Second).Unix()
 	referer := "https://auth.openai.com/log-in"
 	screenHint := "login"
@@ -345,7 +346,7 @@ func protocolAuthSubmitEmail(ctx context.Context, client *GptClient, state *code
 		screenHint = "signup"
 	}
 	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/authorize/continue", referer, map[string]any{
-		"username":    map[string]any{"value": account.GetEmail(), "kind": "email"},
+		"username":    map[string]any{"value": gptaccount.Email(account), "kind": "email"},
 		"screen_hint": screenHint,
 	}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue"))
 	if err != nil {
@@ -366,12 +367,16 @@ func protocolAuthSubmitEmail(ctx context.Context, client *GptClient, state *code
 	return stage, 0, nil
 }
 
-func (s *Server) protocolAuthRegisterPassword(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
+func (s *Server) protocolAuthRegisterPassword(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, account *pb.Account, data *protocolAuthStepData) (string, int64, error) {
 	_, _ = client.get(ctx, "https://auth.openai.com/create-account/password", "https://auth.openai.com/create-account", true)
 	issuedAfter := time.Now().Add(-time.Second).Unix()
+	password, err := s.getAccountPassword(ctx, gptaccount.ID(account))
+	if err != nil {
+		return "", issuedAfter, err
+	}
 	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/user/register", "https://auth.openai.com/create-account/password", map[string]any{
-		"password": account.GetPassword(),
-		"username": account.GetEmail(),
+		"password": password,
+		"username": gptaccount.Email(account),
 	}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "username_password_create"))
 	if err != nil {
 		return "", issuedAfter, err
@@ -383,9 +388,13 @@ func (s *Server) protocolAuthRegisterPassword(ctx context.Context, client *GptCl
 	return stage, issuedAfter, err
 }
 
-func protocolAuthLoginPassword(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, int64, error) {
+func (s *Server) protocolAuthLoginPassword(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, account *pb.Account, data *protocolAuthStepData) (string, int64, error) {
 	issuedAfter := time.Now().Add(-time.Second).Unix()
-	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/password/verify", "https://auth.openai.com/log-in/password", map[string]any{"password": account.GetPassword()}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue"))
+	password, err := s.getAccountPassword(ctx, gptaccount.ID(account))
+	if err != nil {
+		return "", issuedAfter, err
+	}
+	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/password/verify", "https://auth.openai.com/log-in/password", map[string]any{"password": password}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue"))
 	if err != nil {
 		return "", issuedAfter, err
 	}
@@ -393,7 +402,7 @@ func protocolAuthLoginPassword(ctx context.Context, client *GptClient, state *co
 	return stage, issuedAfter, err
 }
 
-func protocolAuthKickoffRegisterOTP(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any) (string, error) {
+func protocolAuthKickoffRegisterOTP(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *protocolAuthStepData) (string, error) {
 	sentinel := codexOAuthProtocolSentinelHeader(ctx, client, state, data, "username_password_create")
 	attempts := []struct {
 		method  string
@@ -413,25 +422,25 @@ func protocolAuthKickoffRegisterOTP(ctx context.Context, client *GptClient, stat
 			resp, err = client.postJSON(ctx, attempt.url, attempt.referer, map[string]any{}, sentinel)
 		}
 		if err != nil {
-			data["email_otp_send_error"] = codexOAuthProtocolSafeText(err.Error(), 180)
+			data.setEmailOTPSendError(codexOAuthProtocolSafeText(err.Error(), 180))
 			continue
 		}
-		data["email_otp_send_status"] = resp.StatusCode
+		data.setEmailOTPSendStatus(resp.StatusCode)
 		if resp.StatusCode >= 200 && resp.StatusCode <= 299 {
 			state.Stage = "email_otp"
-			data["login_stage"] = state.Stage
+			data.setStage(state.Stage)
 			return state.Stage, nil
 		}
 	}
 	return "", fmt.Errorf("protocol register email otp send failed")
 }
 
-func (s *Server) protocolAuthValidateEmailOTP(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, input ProtocolAuthCompleteInput, data map[string]any) error {
+func (s *Server) protocolAuthValidateEmailOTP(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, input ProtocolAuthCompleteInput, data *protocolAuthStepData) error {
 	otp, err := s.consumeStoredOTP(ctx, input.GetJobId(), input.GetOtpParam(), input.GetSubmittedAtParam(), input.GetOtpIssuedAfterUnix())
 	if err != nil {
 		return err
 	}
-	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/email-otp/validate", "https://auth.openai.com/email-verification", map[string]any{"code": normalizeOTP(otp)}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue"))
+	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/email-otp/validate", "https://auth.openai.com/email-verification", map[string]any{"code": channelotpwait.NormalizeCode(otp)}, codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue"))
 	if err != nil {
 		return err
 	}
@@ -439,10 +448,9 @@ func (s *Server) protocolAuthValidateEmailOTP(ctx context.Context, client *GptCl
 	return err
 }
 
-func (s *Server) protocolAuthCreateAccount(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, account *pb.Account, data map[string]any) (string, error) {
+func (s *Server) protocolAuthCreateAccount(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, account *pb.Account, data *protocolAuthStepData) (string, error) {
 	profile := protocolAuthProfile(account)
-	data["profile_name_present"] = profile.Name != ""
-	data["profile_birthdate_present"] = profile.Birthdate != ""
+	data.setProfilePresence(profile.Name != "", profile.Birthdate != "")
 	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/create_account", "https://auth.openai.com/about-you", map[string]any{
 		"name":      profile.Name,
 		"birthdate": profile.Birthdate,
@@ -453,7 +461,7 @@ func (s *Server) protocolAuthCreateAccount(ctx context.Context, client *GptClien
 	return protocolAuthAdvanceJSON(ctx, client, state, resp, "https://auth.openai.com/about-you", "about_you", data)
 }
 
-func protocolAuthAdvanceJSON(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, resp *codexOAuthProtocolHTTPResponse, referer, sourceStage string, data map[string]any) (string, error) {
+func protocolAuthAdvanceJSON(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, resp *codexOAuthProtocolHTTPResponse, referer, sourceStage string, data *protocolAuthStepData) (string, error) {
 	if err := codexOAuthProtocolRequireOK(resp, sourceStage); err != nil {
 		return "", err
 	}
@@ -462,60 +470,60 @@ func protocolAuthAdvanceJSON(ctx context.Context, client *GptClient, state *code
 	if stage != "" {
 		state.Stage = stage
 		state.LastPageType = codexOAuthProtocolPageType(payload)
-		data["login_stage"] = stage
+		data.setStage(stage)
 	}
 	if continueURL != "" {
-		state.LastContinueURL = continueURL
+		state.LastContinueUrl = continueURL
 		return runCodexOAuthProtocolURL(ctx, client, state, continueURL, referer, data)
 	}
 	return state.Stage, nil
 }
 
-func protocolAuthAdvanceStage(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any) (string, error) {
-	if state.Stage == "" && state.LastURL != "" {
-		state.Stage = codexOAuthProtocolStageFromURL(state.LastURL, "")
+func protocolAuthAdvanceStage(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *protocolAuthStepData) (string, error) {
+	if state.Stage == "" && state.LastUrl != "" {
+		state.Stage = codexOAuthProtocolStageFromURL(state.LastUrl, "")
 	}
-	if state.Stage == "" && state.LastContinueURL != "" {
-		return runCodexOAuthProtocolURL(ctx, client, state, state.LastContinueURL, codexOAuthProtocolRefererForStage(state.Stage), data)
+	if state.Stage == "" && state.LastContinueUrl != "" {
+		return runCodexOAuthProtocolURL(ctx, client, state, state.LastContinueUrl, codexOAuthProtocolRefererForStage(state.Stage), data)
 	}
 	return state.Stage, nil
 }
 
-func (s *Server) protocolAuthCaptureSession(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any) (RegisterActivityOutput, error) {
+func (s *Server) protocolAuthCaptureSession(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *protocolAuthStepData) (RegisterActivityOutput, error) {
 	if _, err := protocolAuthCallbackURL(ctx, client, state, data); err != nil {
 		if session, sessionErr := protocolAuthSession(ctx, client, state, data); sessionErr == nil {
 			return session, nil
 		}
-		return RegisterActivityOutput{Data: protoData(data)}, err
+		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
 	}
 	if err := protocolAuthConsumeCallback(ctx, client, state); err != nil {
-		return RegisterActivityOutput{Data: protoData(data)}, err
+		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
 	}
 	return protocolAuthSession(ctx, client, state, data)
 }
 
-func protocolAuthCallbackURL(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any) (string, error) {
-	if codexOAuthProtocolIsCallbackURL(state.LastURL, state.RedirectURI) {
-		data["callback_url_captured"] = true
-		return state.LastURL, nil
+func protocolAuthCallbackURL(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *protocolAuthStepData) (string, error) {
+	if codexOAuthProtocolIsCallbackURL(state.LastUrl, state.RedirectUri) {
+		data.setCallbackURLCaptured(true)
+		return state.LastUrl, nil
 	}
-	for _, candidate := range []string{state.LastContinueURL, state.AuthorizeURL} {
+	for _, candidate := range []string{state.LastContinueUrl, state.AuthorizeUrl} {
 		if strings.TrimSpace(candidate) == "" {
 			continue
 		}
 		if _, err := runCodexOAuthProtocolURL(ctx, client, state, candidate, codexOAuthProtocolRefererForStage(state.Stage), data); err != nil {
 			return "", err
 		}
-		if codexOAuthProtocolIsCallbackURL(state.LastURL, state.RedirectURI) {
-			data["callback_url_captured"] = true
-			return state.LastURL, nil
+		if codexOAuthProtocolIsCallbackURL(state.LastUrl, state.RedirectUri) {
+			data.setCallbackURLCaptured(true)
+			return state.LastUrl, nil
 		}
 	}
 	return "", fmt.Errorf("protocol auth callback stage not ready: %s", state.Stage)
 }
 
-func protocolAuthConsumeCallback(ctx context.Context, client *GptClient, state *codexOAuthProtocolState) error {
-	currentURL := state.LastURL
+func protocolAuthConsumeCallback(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState) error {
+	currentURL := state.LastUrl
 	lastReferer := "https://auth.openai.com/"
 	for hop := 0; hop < 6 && strings.TrimSpace(currentURL) != ""; hop++ {
 		resp, err := client.get(ctx, currentURL, lastReferer, true)
@@ -535,30 +543,30 @@ func protocolAuthConsumeCallback(ctx context.Context, client *GptClient, state *
 	return nil
 }
 
-func protocolAuthSession(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any) (RegisterActivityOutput, error) {
+func protocolAuthSession(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *protocolAuthStepData) (RegisterActivityOutput, error) {
 	resp, err := client.get(ctx, protocolAuthChatGPTSessionURL, "https://chatgpt.com/", false)
 	if err != nil {
-		return RegisterActivityOutput{Data: protoData(data)}, err
+		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
 	}
 	if err := codexOAuthProtocolRequireOK(resp, "chatgpt auth session"); err != nil {
-		return RegisterActivityOutput{Data: protoData(data)}, err
+		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
 	}
 	sessionToken := client.sessionTokenValue("chatgpt.com")
 	accessToken := strings.TrimSpace(stringAny(codexOAuthProtocolResponseJSON(resp)["accessToken"]))
-	data["session_token_present"] = sessionToken != ""
-	data["access_token_present"] = accessToken != ""
+	data.setSessionTokenPresent(sessionToken != "")
+	data.setAccessTokenPresent(accessToken != "")
 	if accessToken == "" {
-		return RegisterActivityOutput{Data: protoData(data)}, fmt.Errorf("protocol auth session missing access token")
+		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, fmt.Errorf("protocol auth session missing access token")
 	}
 	return RegisterActivityOutput{
 		SessionToken: sessionToken,
 		AccessToken:  accessToken,
-		DeviceId:     state.DeviceID,
-		Data:         protoData(data),
+		DeviceId:     state.DeviceId,
+		Data:         registerOutputData(protocolAuthStepMessage(data)),
 	}, nil
 }
 
-func (s *Server) protocolAuthStateClient(ctx context.Context, jobID, flowID, accountID string, proxyURL string) (*codexOAuthProtocolState, *GptClient, error) {
+func (s *Server) protocolAuthStateClient(ctx context.Context, jobID, flowID, accountID string, proxyURL string) (*pb.CodexOAuthProtocolState, *GptClient, error) {
 	state, err := s.loadCodexOAuthProtocolState(ctx, jobID, &CodexOAuthBrowserSession{FlowId: flowID})
 	if err != nil {
 		return nil, nil, err
@@ -584,22 +592,10 @@ func (s *Server) protocolAuthAccount(ctx context.Context, accountID, mode string
 			return nil, err
 		}
 	}
-	if strings.TrimSpace(account.GetEmail()) == "" {
+	if strings.TrimSpace(gptaccount.Email(account)) == "" {
 		return nil, fmt.Errorf("email is required")
 	}
-	if strings.TrimSpace(account.GetPassword()) == "" {
-		return nil, fmt.Errorf("password is required")
-	}
 	return account, nil
-}
-
-func protocolAuthData(mode string, account *pb.Account) map[string]any {
-	data := map[string]any{"driver": "protocol", "mode": mode}
-	if account != nil {
-		data["account_id"] = account.GetAccountId()
-		data["email"] = account.GetEmail()
-	}
-	return data
 }
 
 func protocolAuthReadyStage(stage string) bool {
@@ -609,9 +605,9 @@ func protocolAuthReadyStage(stage string) bool {
 func protocolAuthStartStepName(mode string) (string, error) {
 	switch mode {
 	case browserAuthModeRegister:
-		return stepRegisterAccountProtocolStart, nil
+		return contracts.StepRegisterAccountProtocolStart, nil
 	case browserAuthModeLogin:
-		return stepLoginSessionProtocolStart, nil
+		return contracts.StepLoginSessionProtocolStart, nil
 	default:
 		return "", fmt.Errorf("unsupported protocol auth mode: %s", mode)
 	}
@@ -620,9 +616,9 @@ func protocolAuthStartStepName(mode string) (string, error) {
 func protocolAuthWaitStepName(mode string) (string, error) {
 	switch mode {
 	case browserAuthModeRegister:
-		return stepRegisterAccountProtocol, nil
+		return contracts.StepRegisterAccountProtocol, nil
 	case browserAuthModeLogin:
-		return stepLoginSessionProtocol, nil
+		return contracts.StepLoginSessionProtocol, nil
 	default:
 		return "", fmt.Errorf("unsupported protocol auth mode: %s", mode)
 	}
@@ -631,9 +627,9 @@ func protocolAuthWaitStepName(mode string) (string, error) {
 func protocolAuthCompleteStepName(mode string) (string, error) {
 	switch mode {
 	case browserAuthModeRegister:
-		return stepRegisterAccountProtocolComplete, nil
+		return contracts.StepRegisterAccountProtocolComplete, nil
 	case browserAuthModeLogin:
-		return stepLoginSessionProtocolComplete, nil
+		return contracts.StepLoginSessionProtocolComplete, nil
 	default:
 		return "", fmt.Errorf("unsupported protocol auth mode: %s", mode)
 	}

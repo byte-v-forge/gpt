@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/byte-v-forge/common-lib/protojsonx"
+	"google.golang.org/protobuf/proto"
 )
 
 type n8nWebhookClient struct {
@@ -33,25 +36,11 @@ func newN8NWebhookClient(name string, baseURL string, path string) *n8nWebhookCl
 	}
 }
 
-func (c *n8nWebhookClient) triggerProbeAccount(ctx context.Context, jobID string, accountID string) error {
-	return c.trigger(ctx, map[string]string{
-		"job_id":     strings.TrimSpace(jobID),
-		"account_id": strings.TrimSpace(accountID),
-	})
-}
-
-func (c *n8nWebhookClient) triggerRegisterProtocol(ctx context.Context, jobID string, accountID string) error {
-	return c.trigger(ctx, map[string]string{
-		"job_id":     strings.TrimSpace(jobID),
-		"account_id": strings.TrimSpace(accountID),
-	})
-}
-
 func (c *n8nWebhookClient) trigger(ctx context.Context, payload any) error {
 	if c == nil || c.webhookURL == "" {
 		return fmt.Errorf("n8n %s workflow is not configured", c.workflowName())
 	}
-	body, err := json.Marshal(payload)
+	body, err := marshalN8NWebhookPayload(payload)
 	if err != nil {
 		return err
 	}
@@ -76,4 +65,11 @@ func (c *n8nWebhookClient) workflowName() string {
 		return "webhook"
 	}
 	return c.name
+}
+
+func marshalN8NWebhookPayload(payload any) ([]byte, error) {
+	if message, ok := payload.(proto.Message); ok {
+		return protojsonx.Marshal(message)
+	}
+	return json.Marshal(payload)
 }

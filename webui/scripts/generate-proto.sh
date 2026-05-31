@@ -40,8 +40,9 @@ protoc "${PROTO_INCLUDES[@]}" \
   --plugin="protoc-gen-ts_proto=${PLUGIN}" \
   --ts_proto_out="${OUT_DIR}" \
   --ts_proto_opt=onlyTypes=true,outputServices=none,esModuleInterop=true,useJsonWireFormat=true,snakeToCamel=false \
+  --ts_proto_opt=Mbyte/v/forge/contracts/account/v1/account.proto=@byte-v-forge/common-ui/proto/byte/v/forge/contracts/account/v1/account \
   --ts_proto_opt=Mbyte/v/forge/contracts/mailbox/v1/mailbox.proto=@byte-v-forge/common-ui/proto/byte/v/forge/contracts/mailbox/v1/mailbox \
+  --ts_proto_opt=Mbyte/v/forge/contracts/proxyruntime/v1/proxy_runtime.proto=@byte-v-forge/common-ui/proto/byte/v/forge/contracts/proxyruntime/v1/proxy_runtime \
   "${GPT_PROTO_DIR}/gpt_account.proto" \
-  "${GPT_PROTO_DIR}/gopay_app.proto" \
   "${GPT_PROTO_DIR}/payment.proto" \
   "${ORCHESTRATOR_PROTOS[@]}"

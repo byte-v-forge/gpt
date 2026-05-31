@@ -6,8 +6,6 @@ import (
 	"orchestrator/internal/jobstatus"
 )
 
-const protocolRegisterMode = "register"
-
 func registerProtocolFailureStatus(err error) string {
 	if isRegisterProtocolAlreadyExistsError(err) {
 		return jobstatus.FailedFinal

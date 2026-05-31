@@ -7,6 +7,8 @@ import (
 	"time"
 
 	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
+
+	"orchestrator/internal/channelotpwait"
 )
 
 const (
@@ -127,7 +129,7 @@ func (f *browserAuthFlow) runLoginUntilCheckpoint(client browserautomationv1.Bro
 }
 
 func (f *browserAuthFlow) completeFromCheckpoint(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, otp, otpKind string) error {
-	code := normalizeOTP(otp)
+	code := channelotpwait.NormalizeCode(otp)
 	if code == "" {
 		return fmt.Errorf("otp is required")
 	}

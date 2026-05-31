@@ -2,15 +2,14 @@ package app
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
-	"github.com/byte-v-forge/common-lib/eventcatalog"
 	"github.com/byte-v-forge/common-lib/grpchealth"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -36,55 +35,34 @@ func Run() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	dashboardWorkflowConn, err := newGRPCClientConn("GPT dashboard workflow API", dashboardSelfTarget(cfg.ListenAddr))
-	if err != nil {
-		log.Fatalf("failed to connect GPT dashboard workflow API: %v", err)
-	}
-	defer dashboardWorkflowConn.Close()
-
 	activityServer := newActivityServer(cfg, deps)
 	apiServer := api.NewServer(api.Config{
-		DB:                   deps.db,
 		JobStore:             deps.jobStore,
-		JobEvents:            deps.jobEvents,
 		RuntimeSecrets:       deps.secrets,
 		Fingerprints:         deps.fingerprints,
+		AccountProxyUsages:   deps.accountProxyUsage,
 		GPTSettings:          deps.gptSettings,
 		Activities:           activityServer,
 		AccountClient:        deps.accountClient,
 		PaymentClient:        deps.paymentClient,
 		MailboxPollRequester: deps.mailboxPollRequester,
 		OTPProjection:        deps.otpProjection,
-		EmailOTPWaits:        deps.emailOTPWaits,
-		SMSOTPWaits:          deps.smsOTPWaits,
-		PaymentOTPWaits:      deps.paymentOTPWaits,
-		GoPayClient:          deps.gopayClient,
-		ActionRegistry:       deps.actionRegistry,
+		ChannelOTPWaits:      deps.channelOTPWaits,
 	})
 
 	dashboardServer, err := dashboard.Start(rootCtx, dashboard.Config{
-		ListenAddr:                     cfg.DashboardHTTPAddr,
-		N8NWebhookBaseURL:              cfg.N8NWebhookBaseURL,
-		N8NProbeActions:                apiServer,
-		N8NCodexOAuthActions:           apiServer,
-		N8NCodexOAuthProtocolActions:   apiServer,
-		N8NCodexOAuthAddPhoneActions:   apiServer,
-		N8NCodexOAuthBatchActions:      apiServer,
-		N8NRegisterActions:             apiServer,
-		N8NRegisterProtocolActions:     apiServer,
-		N8NLoginSessionActions:         apiServer,
-		N8NLoginSessionProtocolActions: apiServer,
-		N8NActionInvoker:               apiServer,
-		N8NWorkflowStarter:             apiServer,
-		AccountClient:                  deps.accountClient,
-		PaymentClient:                  deps.paymentClient,
-		RuntimeSecrets:                 deps.secrets,
-		Fingerprints:                   deps.fingerprints,
-		DB:                             deps.db,
-		Settings:                       deps.gptSettings,
-		WorkflowConn:                   dashboardWorkflowConn,
-		HotStream:                      deps.hotStream,
-		ActionRegistry:                 deps.actionRegistry,
+		ListenAddr:         cfg.DashboardHTTPAddr,
+		N8NWebhookBaseURL:  cfg.N8NWebhookBaseURL,
+		N8NActions:         apiServer,
+		AccountClient:      deps.accountClient,
+		PaymentClient:      deps.paymentClient,
+		RuntimeSecrets:     deps.secrets,
+		Fingerprints:       deps.fingerprints,
+		AccountProxyUsages: deps.accountProxyUsage,
+		WorkflowAPI:        apiServer,
+		Settings:           deps.gptSettings,
+		HotStream:          deps.hotStream,
+		ActionRegistry:     deps.actionRegistry,
 	})
 	if err != nil {
 		log.Fatalf("failed to start GPT dashboard BFF: %v", err)
@@ -93,8 +71,7 @@ func Run() {
 
 	grpcServer := grpc.NewServer()
 	pb.RegisterAccountWorkflowServiceServer(grpcServer, apiServer)
-	pb.RegisterPaymentWorkflowServiceServer(grpcServer, apiServer)
-	pb.RegisterGoPayAppWorkflowServiceServer(grpcServer, apiServer)
+	registerPrivateWorkflowServices(grpcServer, apiServer)
 	pb.RegisterOTPServiceServer(grpcServer, apiServer)
 	pb.RegisterJobServiceServer(grpcServer, apiServer)
 	grpchealth.RegisterServing(grpcServer)
@@ -104,8 +81,10 @@ func Run() {
 	group.Go(func() error {
 		return startOTPProjectionConsumers(groupCtx, deps.platformBus, cfg, deps.otpProjection, deps.mailboxState)
 	})
-	group.Go(func() error { return runEmailOTPResumeWorker(groupCtx, cfg, deps, apiServer) })
-	group.Go(func() error { return runSMSOTPResumeWorker(groupCtx, cfg, deps, apiServer) })
+	for _, worker := range api.N8NChannelOTPResumeWorkerSpecs() {
+		worker := worker
+		group.Go(func() error { return runOTPResumeWorker(groupCtx, cfg, deps, apiServer, worker) })
+	}
 	go func() {
 		<-groupCtx.Done()
 		grpcServer.GracefulStop()
@@ -124,45 +103,19 @@ func Run() {
 	}
 }
 
-func runEmailOTPResumeWorker(ctx context.Context, cfg orchestratorConfig, deps *orchestratorDependencies, apiServer *api.Server) error {
+func runOTPResumeWorker(ctx context.Context, cfg orchestratorConfig, deps *orchestratorDependencies, apiServer *api.Server, worker api.N8NChannelOTPResumeWorkerSpec) error {
 	consumer, err := deps.platformBus.PullWorkerConsumer(
 		cfg.EventStreamName,
-		eventcatalog.MailboxEmailReceived.Subject,
-		api.N8NEmailOTPResumeConsumerDurable,
+		worker.Subject,
+		worker.Durable,
 		10,
 		30*time.Second,
 	)
 	if err != nil {
 		return err
 	}
-	return api.StartN8NEmailOTPResumeWorker(ctx, consumer, apiServer)
-}
-
-func runSMSOTPResumeWorker(ctx context.Context, cfg orchestratorConfig, deps *orchestratorDependencies, apiServer *api.Server) error {
-	consumer, err := deps.platformBus.PullWorkerConsumer(
-		cfg.EventStreamName,
-		eventcatalog.SMSCodeReceived.Subject,
-		api.N8NSMSOTPResumeConsumerDurable,
-		10,
-		30*time.Second,
-	)
-	if err != nil {
-		return err
+	if worker.Run == nil {
+		return errors.New("n8n channel otp resume worker runner is required")
 	}
-	return api.StartN8NSMSOTPResumeWorker(ctx, consumer, apiServer)
-}
-
-func dashboardSelfTarget(listenAddr string) string {
-	addr := strings.TrimSpace(listenAddr)
-	if strings.HasPrefix(addr, ":") {
-		return "127.0.0.1" + addr
-	}
-	host, port, err := net.SplitHostPort(addr)
-	if err != nil || port == "" {
-		return addr
-	}
-	if host == "" || host == "0.0.0.0" || host == "::" {
-		host = "127.0.0.1"
-	}
-	return net.JoinHostPort(host, port)
+	return worker.Run(ctx, consumer, apiServer)
 }

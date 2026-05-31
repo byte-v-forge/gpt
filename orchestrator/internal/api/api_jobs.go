@@ -3,10 +3,12 @@ package api
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"orchestrator/internal/jobdata"
 	"orchestrator/internal/jobprojection"
 	"orchestrator/internal/jobstatus"
 	"orchestrator/pb"
-	"strings"
 )
 
 func (s *Server) GetJob(ctx context.Context, req *pb.GetJobRequest) (*pb.GetJobResponse, error) {
@@ -53,16 +55,18 @@ func (s *Server) CancelJob(ctx context.Context, req *pb.CancelJobRequest) (*pb.C
 		snapshot, _ := s.jobStore.GetSnapshot(ctx, jobID)
 		return &pb.CancelJobResponse{Success: true, JobId: jobID, Snapshot: snapshot}, nil
 	}
-	if !strings.EqualFold(job.Status, statusRunning) {
+	if !strings.EqualFold(job.Status, jobstatus.Running) {
 		return &pb.CancelJobResponse{JobId: jobID, ErrorMessage: "job is not running: " + job.Status}, nil
 	}
-	cancelData := map[string]any{"canceled": true, "reason": strings.TrimSpace(req.GetReason())}
-	cancelData["engine"] = "n8n"
 	reason := strings.TrimSpace(req.GetReason())
 	if reason == "" {
 		reason = "manual job cancel"
 	}
-	cancelData["reason"] = reason
+	cancelData := jobdata.Message(&pb.JobCancelResultData{
+		Canceled: true,
+		Reason:   reason,
+		Engine:   "n8n",
+	})
 	if err := s.jobStore.Cancel(ctx, jobID, reason, cancelData); err != nil {
 		return &pb.CancelJobResponse{JobId: jobID, ErrorMessage: err.Error()}, nil
 	}

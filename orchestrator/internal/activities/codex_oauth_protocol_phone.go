@@ -3,7 +3,12 @@ package activities
 import (
 	"context"
 	"fmt"
+	"orchestrator/internal/contracts"
+	"orchestrator/internal/gptaccount"
 	"strings"
+
+	"orchestrator/internal/channelotpwait"
+	"orchestrator/pb"
 )
 
 func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input CodexOAuthAddPhoneBrowserInput) (CodexOAuthAddPhoneBrowserOutput, error) {
@@ -11,55 +16,55 @@ func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input C
 	label := cfg.label(input.GetLabel())
 	output := CodexOAuthAddPhoneBrowserOutput{PhoneReuseCount: input.GetPhone().GetReuseCount(), PhoneReuseLimit: input.GetPhone().GetReuseLimit()}
 	data := codexOAuthBrowserData(label, input.GetPhone())
-	data["driver"] = "protocol"
-	step := s.activityStep(ctx, input.GetJobId(), stepCodexOAuthProtocolAddPhone, false, true)
-	_, err := step.run(func() (any, error) {
-		stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepCodexOAuthProtocolAddPhone, "handling codex oauth protocol add phone", data)
+	data.setDriver("protocol")
+	step := s.activityStep(ctx, input.GetJobId(), contracts.StepCodexOAuthProtocolAddPhone, false, true)
+	_, err := step.run(func() (activityStepResult, error) {
+		stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), contracts.StepCodexOAuthProtocolAddPhone, "handling codex oauth protocol add phone", data.messageData())
 		defer stopHeartbeat()
 		account, err := s.codexOAuthBrowserAccount(ctx, input.GetAccountId())
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		if !input.GetAllowAddPhone() {
-			data["add_phone_required"] = true
-			if err := s.markCodexOAuthNeedPhone(ctx, account.GetAccountId(), label, data); err != nil {
-				data["account_phone_need_write_error"] = err.Error()
+			data.setAddPhoneRequired(true)
+			if err := s.markCodexOAuthNeedPhone(ctx, gptaccount.ID(account), label, data); err != nil {
+				data.setAccountPhoneNeedWriteError(err)
 			}
-			return data, codexOAuthAddPhoneRequiredError()
+			return data.messageData(), codexOAuthAddPhoneRequiredError()
 		}
 		if err := ensureCodexOAuthPhoneUsableForSMS(input.GetPhone(), cfg); err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		state, err := s.loadCodexOAuthProtocolState(ctx, input.GetJobId(), input.GetSession())
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		client, err := s.newAccountGptClient(ctx, input.GetAccountId(), cfg, state)
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		phoneUsed, err := s.codexOAuthProtocolAddPhone(ctx, client, state, input, cfg, data)
 		if saveErr := s.saveCodexOAuthProtocolState(ctx, input.GetJobId(), state); saveErr != nil && err == nil {
 			err = saveErr
 		}
 		if err != nil {
-			_ = s.releaseCodexPhone(ctx, input.GetPhone(), account.GetAccountId(), input.GetJobId(), label, phoneUsed, err.Error())
+			_ = s.releaseCodexPhone(ctx, input.GetPhone(), gptaccount.ID(account), input.GetJobId(), label, phoneUsed, err.Error())
 			output.ErrorMessage = err.Error()
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
-		if err := s.markCodexPhoneSuccess(ctx, input.GetPhone(), account.GetAccountId(), input.GetJobId(), label); err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+		if err := s.markCodexPhoneSuccess(ctx, input.GetPhone(), gptaccount.ID(account), input.GetJobId(), label); err != nil {
+			data.setError(err)
+			return data.messageData(), err
 		}
 		if state.PhonePresent {
-			if err := s.markCodexOAuthPhoneConfirmed(ctx, account.GetAccountId(), label, data); err != nil {
-				data["error_message"] = err.Error()
-				return data, err
+			if err := s.markCodexOAuthPhoneConfirmed(ctx, gptaccount.ID(account), label, data); err != nil {
+				data.setError(err)
+				return data.messageData(), err
 			}
 		}
 		output.Success = true
@@ -67,16 +72,16 @@ func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input C
 		output.AddPhoneRequired = !state.PhonePresent
 		output.PhoneReuseCount = input.GetPhone().GetReuseCount()
 		output.PhoneReuseLimit = input.GetPhone().GetReuseLimit()
-		output.Data = protoData(data)
-		return data, nil
+		output.Data = data.messageData()
+		return data.messageData(), nil
 	})
 	if output.Data == nil {
-		output.Data = protoData(data)
+		output.Data = data.messageData()
 	}
 	return output, err
 }
 
-func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, input CodexOAuthAddPhoneBrowserInput, cfg CodexOAuthConfig, data map[string]any) (bool, error) {
+func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, input CodexOAuthAddPhoneBrowserInput, cfg CodexOAuthConfig, data *codexOAuthStepData) (bool, error) {
 	phone := input.GetPhone()
 	phoneNumber := strings.TrimSpace(phone.GetPhoneE164())
 	if phoneNumber == "" {
@@ -85,17 +90,17 @@ func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *GptClie
 	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/add-phone/send", "https://auth.openai.com/add-phone", map[string]any{"phone_number": phoneNumber})
 	smsIssuedAfter := codexOAuthProtocolResponseSentAtUnix(client, resp)
 	if smsIssuedAfter > 0 {
-		data["phone_otp_issued_after_unix"] = smsIssuedAfter
+		data.setPhoneOTPIssuedAfter(smsIssuedAfter)
 	}
 	if err != nil {
 		return false, err
 	}
 	if err := codexOAuthProtocolRequireOK(resp, "add-phone/send"); err != nil {
-		data["phone_validity_confirmed"] = false
-		data["phone_validity_failure"] = codexOAuthProtocolPhoneFailure(resp)
+		data.setPhoneValidityConfirmed(false)
+		data.setPhoneValidityFailure(codexOAuthProtocolPhoneFailure(resp))
 		return false, err
 	}
-	data["phone_validity_confirmed"] = true
+	data.setPhoneValidityConfirmed(true)
 	stage, err := advanceCodexOAuthProtocolJSON(ctx, client, state, resp, "add_phone", data)
 	if err != nil {
 		return false, err
@@ -103,31 +108,31 @@ func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *GptClie
 	state.Stage = stage
 	if phone.GetReused() {
 		if err := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-additional-"+input.GetJobId()); err != nil {
-			data["sms_request_additional_error"] = err.Error()
+			data.setSMSRequestAdditionalError(err)
 			return false, fmt.Errorf("phone_expired: request additional sms code failed: %w", err)
 		}
 	} else if err := s.markSMSMessageSent(ctx, phone.GetActivationId(), "codex-oauth-sent-"+input.GetJobId()); err != nil {
-		data["sms_mark_sent_error"] = err.Error()
+		data.setSMSMarkSentError(err)
 	}
 	code, err := s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneWaitSeconds, smsIssuedAfter)
 	if err != nil {
-		data["sms_first_wait_error"] = err.Error()
+		data.setSMSFirstWaitError(err)
 		resend, _ := client.postJSON(ctx, "https://auth.openai.com/api/accounts/phone-otp/resend", "https://auth.openai.com/phone-verification", map[string]any{})
 		resendIssuedAfter := codexOAuthProtocolResponseSentAtUnix(client, resend)
 		if resendIssuedAfter > 0 {
 			smsIssuedAfter = resendIssuedAfter
-			data["phone_otp_resend_issued_after_unix"] = resendIssuedAfter
+			data.setPhoneOTPResendIssuedAfter(resendIssuedAfter)
 		}
 		if addErr := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-resend-"+input.GetJobId()); addErr != nil {
-			data["sms_resend_request_error"] = addErr.Error()
+			data.setSMSResendRequestError(addErr)
 		}
 		code, err = s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneWaitSeconds, smsIssuedAfter)
 		if err != nil {
 			return false, fmt.Errorf("phone_sms_timeout: %w", err)
 		}
 	}
-	data["phone_otp_received"] = true
-	validate, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/phone-otp/validate", "https://auth.openai.com/phone-verification", map[string]any{"code": normalizeOTP(code)})
+	data.setPhoneOTPReceived(true)
+	validate, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/phone-otp/validate", "https://auth.openai.com/phone-verification", map[string]any{"code": channelotpwait.NormalizeCode(code)})
 	if err != nil {
 		return true, err
 	}
@@ -143,12 +148,12 @@ func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *GptClie
 	if codexOAuthProtocolAddPhoneConfirmedByStage(state.Stage) {
 		state.PhonePresent = true
 	}
-	data["post_add_phone_stage"] = state.Stage
-	data["add_phone_confirmed"] = state.PhonePresent
-	data["add_phone_required"] = !state.PhonePresent
+	data.setPostAddPhoneStage(state.Stage)
+	data.setAddPhoneConfirmed(state.PhonePresent)
+	data.setAddPhoneRequired(!state.PhonePresent)
 	if !state.PhonePresent {
 		if err := s.markCodexOAuthNeedPhone(ctx, input.GetAccountId(), input.GetLabel(), data); err != nil {
-			data["account_phone_need_write_error"] = err.Error()
+			data.setAccountPhoneNeedWriteError(err)
 		}
 		return true, fmt.Errorf("phone_rejected: add phone status not confirmed")
 	}

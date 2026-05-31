@@ -1,0 +1,450 @@
+syntax = "proto3";
+
+package orchestrator;
+
+import "byte/v/forge/contracts/proxyruntime/v1/proxy_runtime.proto";
+import "orchestrator_activity_data.proto";
+
+option go_package = "./;pb";
+
+message N8NWorkflowTriggerPayload {
+  string job_id = 1;
+  string account_id = 2;
+  repeated string account_ids = 3;
+  string label = 4;
+  int32 max_reuse_count = 5;
+}
+
+message N8NActionCompleteResult {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string action = 4;
+  bool started = 5;
+  bool success = 6;
+  string error_message = 7;
+  N8NActionCompleteData result = 8;
+}
+
+message N8NActionCompleteData {
+  N8NAuthFinishData auth_finish = 1;
+  N8NAuthFailureData auth_failure = 2;
+  ActivityCodexOAuthStepData codex_oauth = 3;
+  N8NCodexOAuthBatchCompleteData codex_oauth_batch = 4;
+  N8NProbeCompleteData probe_complete = 5;
+  N8NProbeTokenData probe_token = 6;
+}
+
+message N8NActionStepData {
+  N8NProbeTokenData probe_token = 1;
+  ActivityProbePlusTrialStepData probe_plus_trial = 2;
+  ActivityProbeTierStepData probe_tier = 3;
+}
+
+message N8NActionStepResult {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string step = 4;
+  bool success = 5;
+  N8NActionStepData data = 6;
+}
+
+message N8NActionSuccessResult {
+  bool success = 1;
+  string job_id = 2;
+  string parent_job_id = 3;
+  string account_id = 4;
+  string activation_id = 5;
+  string label = 6;
+  int32 max_reuse_count = 7;
+  string n8n_execution_id = 8;
+}
+
+message N8NAuthStepResult {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string step = 4;
+  string flow_id = 5;
+  string email = 6;
+  string channel = 7;
+  string target = 8;
+  bool otp_required = 9;
+  bool otp_found = 10;
+  int64 otp_issued_after_unix = 11;
+  int32 otp_timeout_seconds = 12;
+  string otp_source = 13;
+  string message_id = 14;
+  bool result_ready = 15;
+  string result_ref = 16;
+  bool waiting = 17;
+  bool success = 18;
+  string result_secret_error = 19;
+}
+
+message N8NAuthFinishData {
+  string account_id = 1;
+  string n8n_execution_id = 2;
+  string driver = 3;
+  string mode = 4;
+  bool session_token_present = 5;
+  bool access_token_present = 6;
+  optional bool plus_trial_checked = 7;
+  optional bool plus_trial_eligible = 8;
+}
+
+message N8NAuthFailureData {
+  string account_id = 1;
+  string n8n_execution_id = 2;
+  string flow_id = 3;
+  string reason = 4;
+  string error_message = 5;
+  string stage = 6;
+  string mode = 7;
+}
+
+message N8NAuthEdgeData {
+  string account_id = 1;
+  string n8n_execution_id = 2;
+  string auth_edge_check_target = 3;
+  optional bool auth_edge_accepted = 4;
+  string error_message = 5;
+  optional bool access_token_cached = 6;
+  int64 access_token_expires_at_unix = 7;
+  int64 access_token_ttl_seconds = 8;
+  string driver = 9;
+  string mode = 10;
+  int32 chatgpt_csrf_status = 11;
+  int32 chatgpt_csrf_attempt = 12;
+  optional bool chatgpt_csrf_edge_challenge = 13;
+  optional bool chatgpt_csrf_ready = 14;
+}
+
+message N8NDynamicProxyResult {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string step = 4;
+  bool success = 5;
+  string proxy_url = 6;
+  N8NDynamicProxyPreflightData preflight_data = 7;
+  N8NAuthEdgeData auth_edge_data = 8;
+}
+
+message N8NChannelOTPWaitResult {
+  reserved 7;
+
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string flow_id = 4;
+  string action = 5;
+  string operation = 6;
+  string step = 8;
+  string channel = 9;
+  string target = 10;
+  bool otp_required = 11;
+  bool otp_found = 12;
+  string otp_source = 13;
+  int64 otp_issued_after_unix = 14;
+  int32 otp_timeout_seconds = 15;
+  string message_id = 16;
+  bool waiting = 17;
+  bool success = 18;
+  N8NChannelOTPWaitData data = 19;
+}
+
+message N8NChannelOTPResumePayload {
+  reserved 4;
+
+  string job_id = 1;
+  string account_id = 2;
+  string operation = 3;
+  string flow_id = 5;
+  string channel = 6;
+  string target = 7;
+  string otp_source = 8;
+  int64 otp_issued_after_unix = 9;
+  string n8n_execution_id = 10;
+  string message_id = 11;
+}
+
+message N8NChannelOTPMetadata {
+  string message_id = 1;
+  string provider_key = 2;
+  bool manual_otp_submitted = 3;
+}
+
+message N8NChannelOTPWaitDetail {
+  reserved 3;
+
+  string action = 1;
+  string operation = 2;
+  string account_id = 4;
+  string flow_id = 5;
+  string channel = 6;
+  string target = 7;
+  int32 timeout_seconds = 8;
+  int64 otp_issued_after_unix = 9;
+  bool resume_url_registered = 10;
+  string n8n_execution_id = 11;
+  string wait_index = 12;
+  bool mailbox_poll_requested = 13;
+}
+
+message N8NChannelOTPCompleteData {
+  string channel = 1;
+  string target = 2;
+  bool found = 3;
+  string source = 4;
+  int32 timeout_seconds = 5;
+  int64 issued_after_unix = 6;
+  int64 received_at_unix = 7;
+  string n8n_execution_id = 8;
+  bool resume_event_received = 9;
+  string account_id = 10;
+  string flow_id = 11;
+  string message_id = 12;
+  string provider_key = 13;
+  bool manual_otp_submitted = 14;
+}
+
+message N8NChannelOTPWaitData {
+  N8NChannelOTPWaitDetail detail = 1;
+  N8NChannelOTPCompleteData complete = 2;
+}
+
+message N8NDynamicProxySettings {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string purpose = 4;
+  string country_code = 5;
+  string region = 6;
+  string state = 7;
+  string geo_source = 8;
+  bool preflight_enabled = 9;
+  bool require_residential = 10;
+  double min_ip_purity_score = 11;
+  bool cf_canary_enabled = 12;
+  uint32 max_proxy_attempts = 13;
+  repeated string target_connectivity_urls = 14;
+  bool auth_edge_check_enabled = 15;
+  string auth_edge_check_target = 16;
+  byte.v.forge.contracts.proxyruntime.v1.AcquireProxyLeaseRequest lease_request = 17;
+}
+
+message N8NDynamicProxyPreflightDetail {
+  string account_id = 1;
+  string n8n_execution_id = 2;
+  string purpose = 3;
+  string geo_source = 4;
+  string country_code = 5;
+  string region = 6;
+  uint32 max_proxy_attempts = 7;
+  repeated string target_connectivity_urls = 8;
+  string proxy_preflight_step = 9;
+  bool preflight_enabled = 10;
+  bool cf_canary_enabled = 11;
+  bool require_residential = 12;
+  double min_ip_purity_score = 13;
+  bool auth_edge_check_enabled = 14;
+  string auth_edge_check_target = 15;
+}
+
+message N8NDynamicProxyGeoData {
+  string account_id = 1;
+  string n8n_execution_id = 2;
+  string country_code = 3;
+  string region = 4;
+  string geo_source = 5;
+}
+
+message N8NDynamicProxyPreflightData {
+  string account_id = 1;
+  string n8n_execution_id = 2;
+  string purpose = 3;
+  uint32 attempt = 4;
+  uint32 max_proxy_attempts = 5;
+  bool accepted = 6;
+  bool success = 7;
+  string reason = 8;
+  string error_message = 9;
+  bool preflight_enabled = 10;
+  bool cf_canary_enabled = 11;
+  bool require_residential = 12;
+  double min_ip_purity_score = 13;
+  string proxy_session_hash = 14;
+  string exit_ip = 15;
+  byte.v.forge.contracts.proxyruntime.v1.ProxyExitGeo exit_geo = 16;
+  byte.v.forge.contracts.proxyruntime.v1.ProxyIPFraudCheck ip_fraud_check = 17;
+  byte.v.forge.contracts.proxyruntime.v1.ProxyEdgeAccessCheck edge_access_check = 18;
+  byte.v.forge.contracts.proxyruntime.v1.ProxyDynamicLease proxy_runtime_lease = 19;
+  byte.v.forge.contracts.proxyruntime.v1.ProxyChainPlan chain_plan = 20;
+  byte.v.forge.contracts.proxyruntime.v1.ProxyTargetConnectivityCheck target_connectivity_check = 21;
+  bool target_connectivity_enabled = 22;
+  bool target_connectivity_reachable = 23;
+}
+
+message N8NAuthStepRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string flow_id = 4;
+  string email = 5;
+  string proxy_url = 6;
+}
+
+message N8NAuthOTPWaitRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string flow_id = 4;
+  string channel = 5;
+  string target = 6;
+  int32 timeout_seconds = 7;
+  int64 otp_issued_after_unix = 8;
+  string resume_url = 9;
+}
+
+message N8NAuthCompleteRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string flow_id = 4;
+  string otp_source = 5;
+  int64 otp_issued_after_unix = 6;
+}
+
+message N8NAuthFinishRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string result_ref = 4;
+}
+
+message N8NAuthFailRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string flow_id = 4;
+  string error_message = 5;
+  N8NAuthFailureData data = 6;
+}
+
+message N8NDynamicProxyRecordRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string proxy_url = 4;
+  N8NDynamicProxyPreflightData data = 5;
+}
+
+message N8NDynamicProxyCheckRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string proxy_url = 4;
+  N8NDynamicProxyPreflightData data = 5;
+}
+
+message N8NDynamicProxyFailRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string error_message = 4;
+  N8NDynamicProxyPreflightData data = 5;
+}
+
+message N8NCodexOAuthBindRequest {
+  string job_id = 1;
+  string n8n_execution_id = 2;
+}
+
+message N8NCodexOAuthCompleteRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string auth_secret_key = 4;
+  string driver = 5;
+  optional bool add_phone_confirmed = 6;
+  ActivityCodexOAuthStepData data = 7;
+}
+
+message N8NCodexOAuthFailRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string step = 4;
+  string error_message = 5;
+  ActivityCodexOAuthStepData data = 6;
+}
+
+message N8NCodexOAuthBatchChildRequest {
+  string parent_job_id = 1;
+  string account_id = 2;
+  string label = 3;
+  int32 max_reuse_count = 4;
+  string n8n_execution_id = 5;
+}
+
+message N8NCodexOAuthBatchCompleteRequest {
+  string job_id = 1;
+  string n8n_execution_id = 2;
+  int32 total_count = 3;
+  string mode = 4;
+}
+
+message N8NCodexOAuthBatchCompleteData {
+  string n8n_execution_id = 1;
+  int32 total_count = 2;
+  string mode = 3;
+}
+
+message N8NProbeAccountFacts {
+  string account_id = 1;
+  bool plus_trial_known = 2;
+  bool plus_trial_eligible = 3;
+  string tier = 4;
+  bool plus_active = 5;
+}
+
+message N8NProbeTokenData {
+  string account_id = 1;
+  string n8n_execution_id = 2;
+  string proxy_url = 3;
+  N8NProbeAccountFacts account = 4;
+  optional bool token_valid = 5;
+  optional bool access_token_cached = 6;
+  optional bool requires_login = 7;
+  int64 expires_at_unix = 8;
+  int64 ttl_seconds = 9;
+  string reason = 10;
+}
+
+message N8NProbeCompleteRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  ActivityProbePlusTrialStepData plus_trial = 4;
+  ActivityProbeTierStepData tier = 5;
+}
+
+message N8NProbeCompleteData {
+  string account_id = 1;
+  string n8n_execution_id = 2;
+  ActivityProbePlusTrialStepData probe_plus_trial = 3;
+  ActivityProbeTierStepData probe_tier = 4;
+  optional bool account_updated = 5;
+  string account_update_error = 6;
+}
+
+message N8NProbeFailRequest {
+  string job_id = 1;
+  string account_id = 2;
+  string n8n_execution_id = 3;
+  string step = 4;
+  string error_message = 5;
+  N8NProbeTokenData data = 6;
+}

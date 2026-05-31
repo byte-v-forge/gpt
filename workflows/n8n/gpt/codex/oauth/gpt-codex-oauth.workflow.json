@@ -351,7 +351,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_browser_add_phone', error_message: $json.errorMessage || $json.error_message || 'codex oauth add phone required', data: $json.data || $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_browser_add_phone', error_message: $json.errorMessage || $json.error_message || 'codex oauth add phone required', data: Object.assign({}, $json.data || {}, { reason: 'add_phone_required', error_message: $json.errorMessage || $json.error_message || 'codex oauth add phone required', add_phone_required: true, add_phone_pending_stage: $json.stage || '' }) } }}",
         "options": {}
       },
       "id": "6a816265-480d-5ee0-8916-996381a01ebc",
@@ -423,7 +423,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, result: { auth_secret_key: $json.authSecretKey, data: $json.data, driver: 'browser' } } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, auth_secret_key: $json.authSecretKey, driver: 'browser', data: $json.data || {} } }}",
         "options": {}
       },
       "id": "cc956d22-999f-5a0f-a134-d0761ab59a23",
@@ -442,7 +442,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_browser_detect', error_message: 'codex oauth browser stage not ready: ' + ($json.stage || 'unknown'), data: $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_browser_detect', error_message: 'codex oauth browser stage not ready: ' + ($json.stage || 'unknown'), data: Object.assign({}, $json.data || {}, { reason: 'unexpected_stage', error_message: 'codex oauth browser stage not ready: ' + ($json.stage || 'unknown'), login_stage: $json.stage || 'unknown' }) } }}",
         "options": {}
       },
       "id": "ae297fb6-d6da-5eff-8bcc-1111b5bb4e24",

@@ -63,7 +63,7 @@ func (s *server) handleAccountAccessToken(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, account)
+	writeProtoJSON(w, http.StatusOK, &pb.GetAccountResponse{Account: account})
 }
 
 func (s *server) handleAccountCheckoutLink(w http.ResponseWriter, r *http.Request, accountID string) {
@@ -114,5 +114,5 @@ func (s *server) handleAccountCheckoutLink(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadGateway, errors.New(msg))
 		return
 	}
-	writeJSON(w, http.StatusOK, resp)
+	writeProtoJSON(w, http.StatusOK, resp)
 }

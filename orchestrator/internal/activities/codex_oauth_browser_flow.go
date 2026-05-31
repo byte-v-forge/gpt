@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"github.com/byte-v-forge/common-lib/randx"
+	"orchestrator/internal/contracts"
+	"orchestrator/internal/gptaccount"
 	"strings"
 
 	"orchestrator/pb"
@@ -24,7 +26,7 @@ type codexOAuthBrowserFlow struct {
 	cfg                CodexOAuthConfig
 	allowAddPhone      bool
 	markPhoneConfirmed bool
-	data               map[string]any
+	data               *codexOAuthStepData
 
 	pkce         codexOAuthPKCE
 	state        string
@@ -40,7 +42,7 @@ type codexOAuthBrowserFlow struct {
 	phoneNeeded bool
 }
 
-func (s *Server) newCodexOAuthBrowserStartFlow(ctx context.Context, account *pb.Account, jobID, label string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, allowAddPhone bool, data map[string]any) (*codexOAuthBrowserFlow, error) {
+func (s *Server) newCodexOAuthBrowserStartFlow(ctx context.Context, account *pb.Account, jobID, label string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, allowAddPhone bool, data *codexOAuthStepData) (*codexOAuthBrowserFlow, error) {
 	if s.browserAutomationClient == nil {
 		return nil, fmt.Errorf("browser automation client is not configured")
 	}
@@ -57,6 +59,10 @@ func (s *Server) newCodexOAuthBrowserStartFlow(ctx context.Context, account *pb.
 	if err != nil {
 		return nil, err
 	}
+	password, err := s.getAccountPassword(ctx, gptaccount.ID(account))
+	if err != nil {
+		return nil, err
+	}
 	return &codexOAuthBrowserFlow{
 		server:        s,
 		ctx:           ctx,
@@ -70,12 +76,12 @@ func (s *Server) newCodexOAuthBrowserStartFlow(ctx context.Context, account *pb.
 		pkce:          pkce,
 		state:         state,
 		authorizeURL:  buildCodexOAuthAuthorizeURL(cfg, pkce, state),
-		browserFlow:   newCodexOAuthBrowserAuthFlow(ctx, jobID, account, stepCodexOAuthBrowserStart),
+		browserFlow:   newCodexOAuthBrowserAuthFlow(ctx, jobID, account, password, contracts.StepCodexOAuthBrowserStart),
 		failure:       "codex oauth browser did not complete",
 	}, nil
 }
 
-func (s *Server) newCodexOAuthBrowserSessionFlow(ctx context.Context, account *pb.Account, jobID, label string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, allowAddPhone bool, markPhoneConfirmed bool, session *CodexOAuthBrowserSession, data map[string]any, taskScope string) (*codexOAuthBrowserFlow, error) {
+func (s *Server) newCodexOAuthBrowserSessionFlow(ctx context.Context, account *pb.Account, jobID, label string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, allowAddPhone bool, markPhoneConfirmed bool, session *CodexOAuthBrowserSession, data *codexOAuthStepData, taskScope string) (*codexOAuthBrowserFlow, error) {
 	if s.browserAutomationClient == nil {
 		return nil, fmt.Errorf("browser automation client is not configured")
 	}
@@ -87,7 +93,11 @@ func (s *Server) newCodexOAuthBrowserSessionFlow(ctx context.Context, account *p
 			return nil, err
 		}
 	}
-	browserFlow := newCodexOAuthBrowserAuthFlow(ctx, jobID, account, taskScope)
+	password, err := s.getAccountPassword(ctx, gptaccount.ID(account))
+	if err != nil {
+		return nil, err
+	}
+	browserFlow := newCodexOAuthBrowserAuthFlow(ctx, jobID, account, password, taskScope)
 	browserFlow.flowID = strings.TrimSpace(session.GetFlowId())
 	browserFlow.sessionID = strings.TrimSpace(session.GetSessionId())
 	return &codexOAuthBrowserFlow{
@@ -107,8 +117,8 @@ func (s *Server) newCodexOAuthBrowserSessionFlow(ctx context.Context, account *p
 	}, nil
 }
 
-func newCodexOAuthBrowserAuthFlow(ctx context.Context, jobID string, account *pb.Account, taskScope string) *browserAuthFlow {
-	flow := newBrowserAuthFlow(codexOAuthBrowserMode, jobID, account)
+func newCodexOAuthBrowserAuthFlow(ctx context.Context, jobID string, account *pb.Account, password string, taskScope string) *browserAuthFlow {
+	flow := newBrowserAuthFlow(codexOAuthBrowserMode, jobID, account, password)
 	flow.setTaskScope(taskScope)
 	flow.cancel()
 	flow.ctx, flow.cancel = context.WithCancel(ctx)
@@ -127,7 +137,7 @@ func (f *codexOAuthBrowserFlow) releasePhoneOnFailure() {
 	if f.success {
 		return
 	}
-	_ = f.server.releaseCodexPhone(f.ctx, f.phone, f.account.GetAccountId(), f.jobID, f.label, f.phoneUsed, f.failure)
+	_ = f.server.releaseCodexPhone(f.ctx, f.phone, gptaccount.ID(f.account), f.jobID, f.label, f.phoneUsed, f.failure)
 }
 
 func (f *codexOAuthBrowserFlow) fail(err error) error {

@@ -1,20 +1,16 @@
 import { createHotStreamURL, useHotStreamInvalidation } from '@byte-v-forge/common-ui';
 import type { QueryKey } from '@tanstack/react-query';
 import type { HotStreamEvent } from '@byte-v-forge/common-ui';
-import type { JobSnapshot } from '../proto/orchestrator_job';
 
-export type JobSnapshotListTarget = {
+export type JobListInvalidationTarget = {
   queryKey: QueryKey;
-  include?: (snapshot: JobSnapshot) => boolean;
-  limit?: number;
-  shape?: 'array' | 'infinite';
 };
 
 export type JobEventCacheOptions = {
   apiBase?: string;
   enabled?: boolean;
   jobIds?: string[];
-  lists?: JobSnapshotListTarget[];
+  lists?: JobListInvalidationTarget[];
   details?: QueryKey[];
   onEvent?: (event: HotStreamEvent) => void;
 };

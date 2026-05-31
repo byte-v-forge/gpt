@@ -28,43 +28,6 @@
 .registrationSummary.good { background: var(--success-soft); color: var(--success); }
 .registrationSummary.mid { background: var(--warning-soft); color: var(--warning); }
 .registrationSummary.bad { background: var(--danger-soft); color: var(--danger); border-color: #f2c7c1; }
-.goPayStatusCard {
-  margin: 12px 0;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  padding: 12px;
-  display: grid;
-  gap: 10px;
-  background: var(--surface-soft);
-}
-.goPayStatusCard.good { background: var(--success-soft); color: var(--success); border-color: #bfe7cc; }
-.goPayStatusCard.mid { background: var(--warning-soft); color: var(--warning); border-color: #f1dc9b; }
-.goPayStatusCard.bad { background: var(--danger-soft); color: var(--danger); border-color: #f2c7c1; }
-.goPayStatusHead,
-.goPayCurrentFlow {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.goPayStatusHead div {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.goPayStatusHead span,
-.goPayCurrentFlow em {
-  min-width: 0;
-  color: var(--muted-foreground);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.goPayCurrentFlow span {
-  color: var(--muted-foreground);
-  font-size: 12px;
-  font-weight: 700;
-}
 .accountStatePill {
   min-width: 0;
   height: 25px;

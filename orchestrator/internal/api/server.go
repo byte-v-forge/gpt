@@ -2,219 +2,81 @@ package api
 
 import (
 	"context"
-	"strings"
 	"time"
-
-	"gorm.io/gorm"
 
 	"orchestrator/db"
 	"orchestrator/internal/accountfingerprint"
-	"orchestrator/internal/actionregistry"
+	"orchestrator/internal/accountproxyusage"
 	"orchestrator/internal/activities"
-	"orchestrator/internal/contracts"
-	"orchestrator/internal/jobevents"
+	"orchestrator/internal/channelotpwait"
 	"orchestrator/internal/jobprojection"
-	"orchestrator/internal/jobstatus"
 	"orchestrator/internal/mailboxevents"
-	"orchestrator/internal/paymentotpwait"
 	"orchestrator/internal/runtimesecrets"
-	"orchestrator/internal/smsotpwait"
 	"orchestrator/pb"
 )
 
 type Config struct {
-	DB                   *gorm.DB
 	JobStore             *jobprojection.Store
-	JobEvents            *jobevents.Store
 	RuntimeSecrets       runtimesecrets.Store
 	Fingerprints         *accountfingerprint.Store
+	AccountProxyUsages   accountProxyUsageRecorder
 	GPTSettings          GPTSettingsReader
 	Activities           *activities.Server
 	AccountClient        pb.GPTAccountServiceClient
 	PaymentClient        pb.PaymentServiceClient
 	MailboxPollRequester *mailboxevents.Requester
 	OTPProjection        OTPProjection
-	EmailOTPWaits        emailOTPWaitStore
-	SMSOTPWaits          smsOTPWaitStore
-	PaymentOTPWaits      paymentOTPWaitStore
-	GoPayClient          pb.GopayAppServiceClient
-	ActionRegistry       *actionregistry.Registry
+	ChannelOTPWaits      channelOTPWaitStore
 }
 
-type smsOTPWaitStore interface {
-	Register(context.Context, smsotpwait.Entry, time.Duration) error
-	PendingForActivation(context.Context, string, int64) ([]smsotpwait.Entry, error)
-	Get(context.Context, string) (smsotpwait.Entry, bool, error)
-	Delete(context.Context, smsotpwait.Entry) error
-	Claim(context.Context, string, time.Duration) (bool, error)
-	ReleaseClaim(context.Context, string) error
-}
-
-type paymentOTPWaitStore interface {
-	Register(context.Context, paymentotpwait.Entry, time.Duration) error
-	RecordCode(context.Context, paymentotpwait.CodeRecord, time.Duration) error
-	LatestCode(context.Context, string, int64) (paymentotpwait.CodeRecord, bool, error)
-	PendingForQueue(context.Context, string, int64) ([]paymentotpwait.Entry, error)
-	Get(context.Context, string) (paymentotpwait.Entry, bool, error)
-	Delete(context.Context, paymentotpwait.Entry) error
+type channelOTPWaitStore interface {
+	Register(context.Context, channelotpwait.Entry, time.Duration) error
+	Pending(context.Context, string, string, int64) ([]channelotpwait.Entry, error)
+	Get(context.Context, string) (channelotpwait.Entry, bool, error)
+	Delete(context.Context, channelotpwait.Entry) error
 	Claim(context.Context, string, time.Duration) (bool, error)
 	ReleaseClaim(context.Context, string) error
 }
 
 type Server struct {
 	pb.UnimplementedAccountWorkflowServiceServer
-	pb.UnimplementedPaymentWorkflowServiceServer
-	pb.UnimplementedGoPayAppWorkflowServiceServer
 	pb.UnimplementedOTPServiceServer
 	pb.UnimplementedJobServiceServer
 
-	db                   *gorm.DB
 	jobStore             *jobprojection.Store
-	jobEvents            *jobevents.Store
 	runtimeSecrets       runtimesecrets.Store
 	fingerprints         *accountfingerprint.Store
+	accountProxyUsages   accountProxyUsageRecorder
 	gptSettings          GPTSettingsReader
 	activities           *activities.Server
 	accountClient        pb.GPTAccountServiceClient
 	paymentClient        pb.PaymentServiceClient
 	mailboxPollRequester *mailboxevents.Requester
 	otpProjection        OTPProjection
-	emailOTPWaits        emailOTPWaitStore
-	smsOTPWaits          smsOTPWaitStore
-	paymentOTPWaits      paymentOTPWaitStore
-	gopayClient          pb.GopayAppServiceClient
-	actionRegistry       *actionregistry.Registry
+	channelOTPWaits      channelOTPWaitStore
+}
+
+type accountProxyUsageRecorder interface {
+	Record(context.Context, accountproxyusage.RecordInput) error
 }
 
 type GPTSettingsReader interface {
 	Get(ctx context.Context) (*pb.GPTSettings, error)
 }
 
-const (
-	actionRegister                 = contracts.ActionRegister
-	actionGoPayApp                 = contracts.ActionGoPayApp
-	actionGoPayPayment             = contracts.ActionGoPayPayment
-	actionGoPayQRISPaymentActivate = contracts.ActionGoPayQRISPaymentActivate
-	actionGoPayWAPayment           = contracts.ActionGoPayWAPayment
-	actionGoPayPaymentRebind       = contracts.ActionGoPayPaymentRebind
-	actionProbeAccount             = contracts.ActionProbeAccount
-	actionLoginSession             = contracts.ActionLoginSession
-	actionRegisterProtocol         = contracts.ActionRegisterProtocol
-	actionLoginSessionProtocol     = contracts.ActionLoginSessionProtocol
-	actionCodexOAuth               = contracts.ActionCodexOAuth
-	actionCodexOAuthProtocol       = contracts.ActionCodexOAuthProtocol
-	actionCodexOAuthAddPhone       = contracts.ActionCodexOAuthAddPhone
-	actionCodexOAuthBatchAddPhone  = contracts.ActionCodexOAuthBatchAddPhone
-
-	statusRunning                       = jobstatus.Running
-	statusSucceeded                     = jobstatus.Succeeded
-	stepRegisterAccount                 = contracts.StepRegisterAccount
-	stepRegisterAccountStart            = contracts.StepRegisterAccountStart
-	stepRegisterAccountBrowser          = contracts.StepRegisterAccountBrowser
-	stepProtocolUseProxy                = contracts.StepProtocolUseProxy
-	stepProtocolAuthEdgeCheck           = contracts.StepProtocolAuthEdgeCheck
-	stepDynamicIPCreateSession          = contracts.StepDynamicIPCreateSession
-	stepDynamicIPExitGeo                = contracts.StepDynamicIPExitGeo
-	stepDynamicIPPreflight              = contracts.StepDynamicIPPreflight
-	stepRegisterAccountProtocol         = contracts.StepRegisterAccountProtocol
-	stepRegisterAccountProtocolStart    = contracts.StepRegisterAccountProtocolStart
-	stepRegisterAccountProtocolOTPWait  = contracts.StepRegisterAccountProtocolOTPWait
-	stepRegisterAccountProtocolComplete = contracts.StepRegisterAccountProtocolComplete
-	stepRegisterAccountOTPRequest       = contracts.StepRegisterAccountOTPRequest
-	stepRegisterAccountOTPWait          = contracts.StepRegisterAccountOTPWait
-	stepRegisterAccountComplete         = contracts.StepRegisterAccountComplete
-	stepEnsureLogon                     = contracts.StepEnsureLogon
-	stepGoPayAppLogin                   = contracts.StepGoPayAppLogin
-	stepGoPayAppChangePhone             = contracts.StepGoPayAppChangePhone
-	stepGoPayAppChangePhoneGetNumber    = contracts.StepGoPayAppChangePhoneGetNumber
-	stepGoPayAppChangePhoneStart        = contracts.StepGoPayAppChangePhoneStart
-	stepGoPayAppChangePhoneSMSWait      = contracts.StepGoPayAppChangePhoneSMSWait
-	stepGoPayAppChangePhoneRetry        = contracts.StepGoPayAppChangePhoneRetry
-	stepGoPayAppChangePhoneCancel       = contracts.StepGoPayAppChangePhoneCancel
-	stepGoPayAppChangePhoneComplete     = contracts.StepGoPayAppChangePhoneComplete
-	stepGoPayAppSignupPhone             = contracts.StepGoPayAppSignupPhone
-	stepGoPayAppGenerateDeviceProxy     = contracts.StepGoPayAppGenerateDeviceProxy
-	stepGoPayAppCheckPhone              = contracts.StepGoPayAppCheckPhone
-	stepGoPayResolveWAPhone             = contracts.StepGoPayResolveWAPhone
-	stepGoPayAppDeactivate              = contracts.StepGoPayAppDeactivate
-	stepGoPayAppDeactivateStart         = contracts.StepGoPayAppDeactivateStart
-	stepGoPayAppDeactivateSMSWait       = contracts.StepGoPayAppDeactivateSMSWait
-	stepGoPayAppDeactivateSMSFinish     = contracts.StepGoPayAppDeactivateSMSFinish
-	stepGoPayAppDeactivateComplete      = contracts.StepGoPayAppDeactivateComplete
-	stepGoPayAppSignup                  = contracts.StepGoPayAppSignup
-	stepGoPayAppSignupRetry             = contracts.StepGoPayAppSignupRetry
-	stepGoPayAppSignupPhoneCancel       = contracts.StepGoPayAppSignupPhoneCancel
-	stepGoPayAppStatus                  = contracts.StepGoPayAppStatus
-	stepGoPayAppEnsurePINSetup          = contracts.StepGoPayAppEnsurePINSetup
-	stepGoPayAppEnsureBalance           = contracts.StepGoPayAppEnsureBalance
-	stepGoPayAppEnsureBalanceConfirm    = contracts.StepGoPayAppEnsureBalanceConfirm
-	stepGoPayAppSMSFinish               = contracts.StepGoPayAppSMSFinish
-	stepGoPayAppSMSRequestMore          = contracts.StepGoPayAppSMSRequestMore
-	stepGoPayPaymentPrepare             = contracts.StepGoPayPaymentPrepare
-	stepGoPayPaymentPrepareCheckout     = contracts.StepGoPayPaymentPrepareCheckout
-	stepGoPayPaymentPrepareRefresh      = contracts.StepGoPayPaymentPrepareRefresh
-	stepGoPayPaymentPrepareLink         = contracts.StepGoPayPaymentPrepareLink
-	stepGoPayPayment                    = contracts.StepGoPayPayment
-	stepProbePlusTrial                  = contracts.StepProbePlusTrial
-	stepProbeTier                       = contracts.StepProbeTier
-	stepLoginSession                    = contracts.StepLoginSession
-	stepLoginSessionStart               = contracts.StepLoginSessionStart
-	stepLoginSessionBrowser             = contracts.StepLoginSessionBrowser
-	stepLoginSessionProtocol            = contracts.StepLoginSessionProtocol
-	stepLoginSessionProtocolStart       = contracts.StepLoginSessionProtocolStart
-	stepLoginSessionProtocolOTPWait     = contracts.StepLoginSessionProtocolOTPWait
-	stepLoginSessionProtocolComplete    = contracts.StepLoginSessionProtocolComplete
-	stepLoginSessionOTPRequest          = contracts.StepLoginSessionOTPRequest
-	stepLoginSessionOTPWait             = contracts.StepLoginSessionOTPWait
-	stepLoginSessionComplete            = contracts.StepLoginSessionComplete
-	stepCodexOAuthAcquirePhone          = contracts.StepCodexOAuthAcquirePhone
-	stepCodexOAuthProtocolStart         = contracts.StepCodexOAuthProtocolStart
-	stepCodexOAuthProtocolDetect        = contracts.StepCodexOAuthProtocolDetect
-	stepCodexOAuthProtocolEmail         = contracts.StepCodexOAuthProtocolEmail
-	stepCodexOAuthProtocolPassword      = contracts.StepCodexOAuthProtocolPassword
-	stepCodexOAuthProtocolEmailOTP      = contracts.StepCodexOAuthProtocolEmailOTP
-	stepCodexOAuthProtocolAddPhone      = contracts.StepCodexOAuthProtocolAddPhone
-	stepCodexOAuthProtocolComplete      = contracts.StepCodexOAuthProtocolComplete
-	stepCodexOAuthBrowserStart          = contracts.StepCodexOAuthBrowserStart
-	stepCodexOAuthBrowserDetect         = contracts.StepCodexOAuthBrowserDetect
-	stepCodexOAuthBrowserEmail          = contracts.StepCodexOAuthBrowserEmail
-	stepCodexOAuthBrowserPassword       = contracts.StepCodexOAuthBrowserPassword
-	stepCodexOAuthBrowserEmailOTP       = contracts.StepCodexOAuthBrowserEmailOTP
-	stepCodexOAuthBrowserAddPhone       = contracts.StepCodexOAuthBrowserAddPhone
-	stepCodexOAuthBrowserComplete       = contracts.StepCodexOAuthBrowserComplete
-	stepCodexOAuthReleasePhone          = contracts.StepCodexOAuthReleasePhone
-	registrationOTPParam                = "registration_otp"
-	paymentOTPParam                     = "payment_otp"
-	manualAddBalanceConfirmParam        = contracts.ManualAddBalanceConfirmationParam
-	goPayAddBalanceSelectionParam       = contracts.GoPayAddBalanceSelectionParam
-	manualGoPayPaymentConfirmParam      = contracts.ManualGoPayPaymentConfirmationParam
-	registrationOTPSubmit               = "registration_otp_submitted_at_unix"
-	paymentOTPSubmit                    = "payment_otp_submitted_at_unix"
-)
-
-const (
-	registrationOTPSubmittedAtParam = registrationOTPSubmit
-	paymentOTPSubmittedAtParam      = paymentOTPSubmit
-)
-
 func NewServer(cfg Config) *Server {
 	server := &Server{
-		db:                   cfg.DB,
 		jobStore:             cfg.JobStore,
-		jobEvents:            cfg.JobEvents,
 		runtimeSecrets:       cfg.RuntimeSecrets,
 		fingerprints:         cfg.Fingerprints,
+		accountProxyUsages:   cfg.AccountProxyUsages,
 		gptSettings:          cfg.GPTSettings,
 		activities:           cfg.Activities,
 		accountClient:        cfg.AccountClient,
 		paymentClient:        cfg.PaymentClient,
 		mailboxPollRequester: cfg.MailboxPollRequester,
 		otpProjection:        cfg.OTPProjection,
-		emailOTPWaits:        cfg.EmailOTPWaits,
-		smsOTPWaits:          cfg.SMSOTPWaits,
-		paymentOTPWaits:      cfg.PaymentOTPWaits,
-		gopayClient:          cfg.GoPayClient,
-		actionRegistry:       actionregistry.RegisterDefault(cfg.ActionRegistry),
+		channelOTPWaits:      cfg.ChannelOTPWaits,
 	}
 	return server
 }
@@ -225,9 +87,4 @@ func (s *Server) setJobParams(ctx context.Context, jobID string, params map[stri
 
 func (s *Server) getJob(ctx context.Context, jobID string) (*db.Job, error) {
 	return s.jobStore.Get(ctx, jobID)
-}
-
-func normalizeOTP(value string) string {
-	replacer := strings.NewReplacer(" ", "", "\t", "", "\n", "", "\r", "", "-", "")
-	return strings.TrimSpace(replacer.Replace(value))
 }

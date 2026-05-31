@@ -3,6 +3,8 @@ package activities
 import (
 	"context"
 	"fmt"
+	"orchestrator/internal/accountmail"
+	"orchestrator/internal/gptaccount"
 	"time"
 
 	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
@@ -27,20 +29,20 @@ func (f *browserAuthFlow) openCodexOAuthEntry(client browserautomationv1.Browser
 	return nil
 }
 
-func (f *browserAuthFlow) ensureCodexOAuthLoggedIn(ctx context.Context, s *Server, account *pb.Account, jobID string, data map[string]any) error {
+func (f *browserAuthFlow) ensureCodexOAuthLoggedIn(ctx context.Context, s *Server, account *pb.Account, jobID string, data *codexOAuthStepData) error {
 	cfg := s.browserAuthConfig
 	stage, err := f.detectCodexOAuthStage(s.browserAutomationClient, cfg)
 	if err != nil {
 		return err
 	}
 	if stage != "email" {
-		data["login_stage"] = stage
+		data.setStage(stage)
 		return nil
 	}
-	if _, err := f.submitCodexOAuthEmail(s.browserAutomationClient, cfg, account.GetEmail()); err != nil {
+	if _, err := f.submitCodexOAuthEmail(s.browserAutomationClient, cfg, gptaccount.Email(account)); err != nil {
 		return err
 	}
-	issuedAfter, err := f.submitCodexOAuthPassword(s.browserAutomationClient, cfg, account.GetPassword())
+	issuedAfter, err := f.submitCodexOAuthPassword(s.browserAutomationClient, cfg, f.password)
 	if err != nil {
 		return err
 	}
@@ -49,7 +51,7 @@ func (f *browserAuthFlow) ensureCodexOAuthLoggedIn(ctx context.Context, s *Serve
 		return err
 	}
 	if stage == "email_otp" {
-		otp, err := s.waitCodexOAuthEmailOTP(ctx, jobID, account.GetEmail(), issuedAfter)
+		otp, err := s.waitCodexOAuthEmailOTP(ctx, jobID, gptaccount.Email(account), issuedAfter)
 		if err != nil {
 			return err
 		}
@@ -61,7 +63,7 @@ func (f *browserAuthFlow) ensureCodexOAuthLoggedIn(ctx context.Context, s *Serve
 			return err
 		}
 	}
-	data["login_stage"] = stage
+	data.setStage(stage)
 	return nil
 }
 
@@ -137,7 +139,7 @@ func (s *Server) waitCodexOAuthEmailOTP(ctx context.Context, _ string, email str
 		return "", err
 	}
 	if code == "" {
-		code = extractOTPFromEmailMessage(message)
+		code = accountmail.OTPCode(message)
 	}
 	if !found || code == "" {
 		return "", fmt.Errorf("codex oauth email otp not found")

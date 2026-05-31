@@ -1,6 +1,9 @@
 package activities
 
-import "strings"
+import (
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
+	"strings"
+)
 
 func isAccountAlreadyExistsError(err error) bool {
 	if err == nil {
@@ -19,16 +22,9 @@ func isAccountAlreadyExistsMessage(message string) bool {
 
 func isUserAlreadyExistsStatus(status string) bool {
 	switch strings.ToUpper(strings.TrimSpace(status)) {
-	case accountStatusUserAlreadyExists, "EMAIL_ALREADY_EXISTS":
+	case gptplugin.AccountStatusUserAlreadyExists, gptplugin.AccountStatusEmailAlreadyExists:
 		return true
 	default:
 		return false
 	}
-}
-
-func registerFailurePolicy(err error) (status string, recoverable bool, retryable bool) {
-	if isAccountAlreadyExistsError(err) {
-		return statusFailedFinal, false, false
-	}
-	return statusFailedRetryable, false, true
 }

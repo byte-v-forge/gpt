@@ -117,7 +117,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data || {} } }}",
         "options": {}
       },
       "id": "39e81851-a9df-42c2-8c0f-66360afe5ec6",
@@ -139,7 +139,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, error_message: $json.error_message || 'dynamic proxy preflight failed', data: $json.data || $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, error_message: $json.error_message || 'dynamic proxy preflight failed', data: $json.data || {} } }}",
         "options": {}
       },
       "id": "88eed32b-169e-4389-9006-005187b6f474",
@@ -373,7 +373,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $json.flow_id, email: $json.email, timeout_seconds: $json.otp_timeout_seconds || 300, otp_issued_after_unix: $json.otp_issued_after_unix || 0, resume_url: $execution.resumeUrl } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $json.flow_id, channel: 'email', target: $json.email, timeout_seconds: $json.otp_timeout_seconds || 300, otp_issued_after_unix: $json.otp_issued_after_unix || 0, resume_url: $execution.resumeUrl } }}",
         "options": {}
       },
       "id": "ab744337-6f54-4988-83d4-05665c1e7fbf",
@@ -493,7 +493,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Advance Protocol Auth').first().json.flow_id, error_message: 'login session protocol OTP wait timed out', data: { reason: 'otp_wait_timeout' } } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Advance Protocol Auth').first().json.flow_id, error_message: 'login session protocol OTP wait timed out', data: { reason: 'otp_wait_timeout', error_message: 'login session protocol OTP wait timed out' } } }}",
         "options": {}
       },
       "id": "b170b723-6e93-469d-9f3c-e8046c4af01b",
@@ -515,7 +515,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Advance Protocol Auth').first().json.flow_id, error_message: 'login session protocol did not reach terminal or OTP state', data: $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Advance Protocol Auth').first().json.flow_id, error_message: 'login session protocol did not reach terminal or OTP state', data: Object.assign({}, $json.data || {}, { reason: 'unexpected_state', error_message: 'login session protocol did not reach terminal or OTP state', stage: $json.stage || $json.state || '' }) } }}",
         "options": {}
       },
       "id": "c58912f7-b95b-4c80-a993-ddd703d1b6d1",

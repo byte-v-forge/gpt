@@ -5,10 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/byte-v-forge/common-lib/stringx"
 	"net/url"
 	"regexp"
 	"strings"
+
+	"github.com/byte-v-forge/common-lib/stringx"
+
+	"orchestrator/pb"
 )
 
 var codexOAuthProtocolDeviceIDRE = regexp.MustCompile(`"deviceId"\s*:\s*"([^"]+)"`)
@@ -19,7 +22,7 @@ var codexOAuthProtocolWorkspaceIDPatterns = []*regexp.Regexp{
 }
 var codexOAuthProtocolUnifiedSessionRE = regexp.MustCompile(`us_[A-Za-z0-9]{16,}`)
 
-func runCodexOAuthProtocolURL(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, startURL, referer string, data map[string]any) (string, error) {
+func runCodexOAuthProtocolURL(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, startURL, referer string, data codexOAuthProtocolNavigationData) (string, error) {
 	currentURL := codexOAuthProtocolAbsoluteURL(startURL)
 	if currentURL == "" {
 		return state.Stage, nil
@@ -28,17 +31,17 @@ func runCodexOAuthProtocolURL(ctx context.Context, client *GptClient, state *cod
 	workspaceSelected := false
 	accountSelected := false
 	for hop := 0; hop < 16; hop++ {
-		if codexOAuthProtocolIsCallbackURL(currentURL, state.RedirectURI) {
-			state.LastURL = currentURL
+		if codexOAuthProtocolIsCallbackURL(currentURL, state.RedirectUri) {
+			state.LastUrl = currentURL
 			state.Stage = "callback"
-			data["login_stage"] = state.Stage
+			data.setStage(state.Stage)
 			return state.Stage, nil
 		}
 		resp, err := client.get(ctx, currentURL, lastReferer, true)
 		if err != nil {
 			return "", err
 		}
-		state.LastURL = currentURL
+		state.LastUrl = currentURL
 		if location := codexOAuthProtocolRedirectLocation(resp, currentURL); location != "" {
 			lastReferer = currentURL
 			currentURL = location
@@ -48,13 +51,13 @@ func runCodexOAuthProtocolURL(ctx context.Context, client *GptClient, state *cod
 			return "", fmt.Errorf("codex oauth protocol navigation failed: status %d %s", resp.StatusCode, codexOAuthProtocolSafeText(string(resp.Body), 360))
 		}
 		body := string(resp.Body)
-		if deviceID := codexOAuthProtocolDeviceID(body); deviceID != "" && strings.TrimSpace(state.DeviceID) == "" {
-			state.DeviceID = deviceID
+		if deviceID := codexOAuthProtocolDeviceID(body); deviceID != "" && strings.TrimSpace(state.DeviceId) == "" {
+			state.DeviceId = deviceID
 		}
 		stage := codexOAuthProtocolStageFromURL(currentURL, body)
 		if stage != "" {
 			state.Stage = stage
-			data["login_stage"] = stage
+			data.setStage(stage)
 		}
 		if stage == "choose_account" && !accountSelected {
 			accountSelected = true
@@ -79,7 +82,7 @@ func runCodexOAuthProtocolURL(ctx context.Context, client *GptClient, state *cod
 	return "", fmt.Errorf("codex oauth protocol redirect limit exceeded")
 }
 
-func advanceCodexOAuthProtocolJSON(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, resp *codexOAuthProtocolHTTPResponse, sourceStage string, data map[string]any) (string, error) {
+func advanceCodexOAuthProtocolJSON(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, resp *codexOAuthProtocolHTTPResponse, sourceStage string, data codexOAuthProtocolNavigationData) (string, error) {
 	if err := codexOAuthProtocolRequireOK(resp, sourceStage); err != nil {
 		return "", err
 	}
@@ -88,10 +91,10 @@ func advanceCodexOAuthProtocolJSON(ctx context.Context, client *GptClient, state
 	if stage != "" {
 		state.Stage = stage
 		state.LastPageType = codexOAuthProtocolPageType(payload)
-		data["login_stage"] = stage
+		data.setStage(stage)
 	}
 	if continueURL != "" {
-		state.LastContinueURL = continueURL
+		state.LastContinueUrl = continueURL
 		stage, err := runCodexOAuthProtocolURL(ctx, client, state, continueURL, codexOAuthProtocolRefererForStage(sourceStage), data)
 		if err != nil {
 			return stage, err
@@ -223,7 +226,7 @@ func codexOAuthProtocolDeviceID(body string) string {
 	return strings.TrimSpace(match[1])
 }
 
-func codexOAuthProtocolWorkspaceContinue(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, currentURL, body string, data map[string]any) (string, bool) {
+func codexOAuthProtocolWorkspaceContinue(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, currentURL, body string, data codexOAuthProtocolNavigationData) (string, bool) {
 	workspaceID := codexOAuthProtocolWorkspaceIDFromState(state)
 	if workspaceID == "" {
 		workspaceID = codexOAuthProtocolQueryFirst(currentURL, "workspace_id", "id")
@@ -236,10 +239,10 @@ func codexOAuthProtocolWorkspaceContinue(ctx context.Context, client *GptClient,
 	}
 	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/workspace/select", "https://auth.openai.com/sign-in-with-chatgpt/codex/consent", map[string]any{"workspace_id": workspaceID})
 	if err != nil {
-		data["workspace_select_error"] = codexOAuthProtocolSafeText(err.Error(), 180)
+		data.setWorkspaceSelectError(codexOAuthProtocolSafeText(err.Error(), 180))
 		return "", false
 	}
-	data["workspace_select_status"] = resp.StatusCode
+	data.setWorkspaceSelectStatus(resp.StatusCode)
 	if resp.StatusCode < 200 || resp.StatusCode > 399 {
 		return "", false
 	}
@@ -250,22 +253,22 @@ func codexOAuthProtocolWorkspaceContinue(ctx context.Context, client *GptClient,
 	if nextURL == "" {
 		return "", false
 	}
-	data["workspace_selected"] = true
-	state.LastContinueURL = nextURL
+	data.setWorkspaceSelected(true)
+	state.LastContinueUrl = nextURL
 	return nextURL, true
 }
 
-func codexOAuthProtocolChooseAccountContinue(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, currentURL, body string, data map[string]any) (string, bool) {
+func codexOAuthProtocolChooseAccountContinue(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, currentURL, body string, data codexOAuthProtocolNavigationData) (string, bool) {
 	match := codexOAuthProtocolUnifiedSessionRE.FindString(body)
 	if match == "" {
 		return "", false
 	}
 	resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/session/select", "https://auth.openai.com/choose-an-account", map[string]any{"session_id": match})
 	if err != nil {
-		data["choose_account_error"] = codexOAuthProtocolSafeText(err.Error(), 180)
+		data.setChooseAccountError(codexOAuthProtocolSafeText(err.Error(), 180))
 		return "", false
 	}
-	data["choose_account_status"] = resp.StatusCode
+	data.setChooseAccountStatus(resp.StatusCode)
 	if resp.StatusCode < 200 || resp.StatusCode > 399 {
 		return "", false
 	}
@@ -276,20 +279,20 @@ func codexOAuthProtocolChooseAccountContinue(ctx context.Context, client *GptCli
 	if nextURL == "" {
 		nextURL = currentURL
 	}
-	data["choose_account_selected"] = true
-	state.LastContinueURL = nextURL
+	data.setChooseAccountSelected(true)
+	state.LastContinueUrl = nextURL
 	return nextURL, true
 }
 
-func codexOAuthProtocolWorkspaceIDFromState(state *codexOAuthProtocolState) string {
+func codexOAuthProtocolWorkspaceIDFromState(state *pb.CodexOAuthProtocolState) string {
 	if state == nil {
 		return ""
 	}
 	for _, cookie := range state.Cookies {
-		if !strings.EqualFold(cookie.Name, "oai-client-auth-session") || strings.TrimSpace(cookie.Value) == "" {
+		if cookie == nil || !strings.EqualFold(cookie.GetName(), "oai-client-auth-session") || strings.TrimSpace(cookie.GetValue()) == "" {
 			continue
 		}
-		parts := strings.Split(cookie.Value, ".")
+		parts := strings.Split(cookie.GetValue(), ".")
 		if len(parts) > 2 {
 			parts = parts[:2]
 		}
@@ -372,18 +375,4 @@ func codexOAuthProtocolIsCallbackURL(rawURL, redirectURI string) bool {
 		return true
 	}
 	return parsed.Host == redirect.Host && parsed.Path == redirect.Path
-}
-
-func codexOAuthProtocolJSONSnippet(resp *codexOAuthProtocolHTTPResponse) string {
-	if resp == nil || len(resp.Body) == 0 {
-		return ""
-	}
-	var out map[string]any
-	if err := json.Unmarshal(resp.Body, &out); err != nil {
-		return codexOAuthProtocolSafeText(string(resp.Body), 220)
-	}
-	delete(out, "phone_number")
-	delete(out, "email")
-	payload, _ := json.Marshal(out)
-	return codexOAuthProtocolSafeText(string(payload), 220)
 }

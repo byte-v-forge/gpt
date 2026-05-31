@@ -81,3 +81,68 @@
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.proxyUsageGroupWide {
+  grid-column: 1 / -1;
+}
+.proxyChainHopList {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 8px;
+}
+.proxyChainHop {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 10px;
+}
+.proxyChainHopHeader {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.proxyChainHopTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground);
+  font-size: 12px;
+}
+.proxyChainRoleBadge.line {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-soft));
+  color: var(--accent);
+}
+.proxyChainRoleBadge.gateway {
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border-soft));
+  color: var(--warning);
+}
+.proxyChainRoleBadge.exit {
+  border-color: color-mix(in srgb, var(--success) 45%, var(--border-soft));
+  color: var(--success);
+}
+.proxyChainHopMeta {
+  display: grid;
+  gap: 5px;
+}
+.proxyChainHopMeta p {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  margin: 0;
+}
+.proxyChainHopMeta span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+}
+.proxyChainHopMeta strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 650;
+}

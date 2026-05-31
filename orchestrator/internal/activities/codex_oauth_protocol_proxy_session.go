@@ -3,6 +3,8 @@ package activities
 import (
 	"log"
 	"strings"
+
+	"orchestrator/pb"
 )
 
 type codexOAuthProtocolProxyGeo struct {
@@ -25,18 +27,18 @@ func codexOAuthProtocolProxyGeoFromInput(countryCode string, region string) code
 	}
 }
 
-func recordCodexOAuthProtocolProxyRequestGeo(data map[string]any, geo codexOAuthProtocolProxyGeo) {
+func recordCodexOAuthProtocolProxyRequestGeo(data *pb.ActivityProtocolProxyUseData, geo codexOAuthProtocolProxyGeo) {
 	if data == nil {
 		return
 	}
 	if geo.CountryCode != "" {
-		data["protocol_proxy_requested_country"] = geo.CountryCode
+		data.ProtocolProxyRequestedCountry = geo.CountryCode
 	}
 	if geo.Region != "" {
-		data["protocol_proxy_requested_region"] = geo.Region
+		data.ProtocolProxyRequestedRegion = geo.Region
 	}
 	if geo.State != "" {
-		data["protocol_proxy_requested_state"] = geo.State
+		data.ProtocolProxyRequestedState = geo.State
 	}
 }
 
@@ -72,11 +74,11 @@ func codexOAuthProtocolProxyState(countryCode string, region string) string {
 	return strings.ToUpper(strings.TrimSpace(state))
 }
 
-func logCodexOAuthProtocolProxyUse(accountID string, mode string, data map[string]any) {
+func logCodexOAuthProtocolProxyUse(accountID string, mode string, source string) {
 	log.Printf(
 		"[protocol-proxy] use proxy account_id=%s mode=%s source=%s",
 		strings.TrimSpace(accountID),
 		strings.TrimSpace(mode),
-		strings.TrimSpace(stringAny(data["protocol_proxy_url_source"])),
+		strings.TrimSpace(source),
 	)
 }

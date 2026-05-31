@@ -69,13 +69,6 @@ func NewDefault() *Registry {
 	return registry
 }
 
-func RegisterDefault(registry *Registry) *Registry {
-	if registry == nil {
-		return NewDefault()
-	}
-	return registry
-}
-
 func (r *Registry) Register(defs ...ActionDefinition) error {
 	if r == nil {
 		return fmt.Errorf("action registry is nil")
@@ -455,16 +448,130 @@ func cloneConfigSchema(schema ConfigSchema) ConfigSchema {
 	return schema
 }
 
+type builtinN8NActionSpec struct {
+	ActionID         string
+	DisplayName      string
+	WorkflowIDPrefix string
+	StartPath        string
+	RequestProto     string
+	ResponseProto    string
+	ButtonLabel      string
+	Placement        string
+	RequiredStatuses []string
+	RequiredFields   []string
+	Capabilities     []string
+}
+
 func BuiltinActions() []ActionDefinition {
 	return []ActionDefinition{
-		withCapabilities(withRequiredStatuses(n8nAction(contracts.ActionProbeAccount, "Probe Account", "probe-account", "probe-", "/workflows/probe", "probe-account", "gpt/probe-account", "/actions/probe-account", "orchestrator.ProbeAccountRequest", "orchestrator.ProbeAccountResponse", "探测账号", "account_header_tools"), "REGISTERED", "ACTIVATED"), contracts.CapabilityAccountProbe, contracts.CapabilityN8NWorkflow),
-		withCapabilities(withRequiredFields(n8nAction(contracts.ActionLoginSession, "Login Session", "login-session", "login-session-", "/workflows/login-session", "login-session", "gpt/login-session", "/actions/login-session", "orchestrator.LoginAccountRequest", "orchestrator.LoginAccountResponse", "浏览器登录", "account_header_browser"), "email", "password"), contracts.CapabilityLogin, contracts.CapabilityBrowserAuth, contracts.CapabilityN8NWorkflow),
-		withCapabilities(withRequiredFields(n8nAction(contracts.ActionLoginSessionProtocol, "Login Session Protocol", "login-session-protocol", "login-session-protocol-", "/workflows/login-session-protocol", "login-session-protocol", "gpt/login-session-protocol", "/actions/login-session-protocol", "orchestrator.LoginAccountRequest", "orchestrator.LoginAccountResponse", "协议登录", "account_header_protocol"), "email", "password"), contracts.CapabilityLogin, contracts.CapabilityProtocolAuth, contracts.CapabilityN8NWorkflow),
-		withCapabilities(withRequiredFields(n8nAction(contracts.ActionCodexOAuth, "Codex OAuth", "codex-oauth", "codex-oauth-", "/workflows/codex-oauth", "codex-oauth", "gpt/codex-oauth", "/actions/codex-oauth", "orchestrator.CodexOAuthRequest", "orchestrator.CodexOAuthResponse", "浏览器 auth.json", "account_header_browser"), "email", "password"), contracts.CapabilityCodexOAuth, contracts.CapabilityBrowserAuth, contracts.CapabilityN8NWorkflow),
-		withCapabilities(withRequiredFields(n8nAction(contracts.ActionCodexOAuthProtocol, "Codex OAuth Protocol", "codex-oauth-protocol", "codex-oauth-protocol-", "/workflows/codex-oauth-protocol", "codex-oauth-protocol", "gpt/codex-oauth-protocol", "/actions/codex-oauth-protocol", "orchestrator.CodexOAuthRequest", "orchestrator.CodexOAuthResponse", "协议 auth.json", "account_header_protocol"), "email", "password"), contracts.CapabilityCodexOAuth, contracts.CapabilityProtocolAuth, contracts.CapabilityN8NWorkflow),
-		withCapabilities(withRequiredFields(n8nAction(contracts.ActionCodexOAuthAddPhone, "Codex OAuth Add Phone", "codex-oauth-add-phone", "codex-oauth-add-phone-", "/workflows/codex-oauth-add-phone", "codex-oauth-add-phone", "gpt/codex-oauth-add-phone", "/actions/codex-oauth-add-phone", "orchestrator.CodexOAuthAddPhoneRequest", "orchestrator.CodexOAuthAddPhoneResponse", "Add Phone", "account_header_tools"), "email", "password"), contracts.CapabilityCodexOAuth, contracts.CapabilityPhoneBinding, contracts.CapabilityN8NWorkflow),
-		withCapabilities(n8nAction(contracts.ActionCodexOAuthBatchAddPhone, "Codex OAuth Batch Add Phone", "codex-oauth-batch-add-phone", "codex-oauth-batch-add-phone-", "/workflows/codex-oauth-add-phone/batch", "codex-oauth-batch-add-phone", "gpt/codex-oauth-batch-add-phone", "/actions/codex-oauth-batch-add-phone", "orchestrator.CodexOAuthBatchAddPhoneRequest", "orchestrator.CodexOAuthBatchAddPhoneResponse", "批量 Add Phone", "account_bulk"), contracts.CapabilityCodexOAuth, contracts.CapabilityPhoneBinding, contracts.CapabilityN8NWorkflow),
+		builtinN8NAction(builtinN8NActionSpec{
+			ActionID:         contracts.ActionProbeAccount,
+			DisplayName:      "Probe Account",
+			WorkflowIDPrefix: "probe-",
+			StartPath:        "/workflows/probe",
+			RequestProto:     "orchestrator.ProbeAccountRequest",
+			ResponseProto:    "orchestrator.ProbeAccountResponse",
+			ButtonLabel:      "探测账号",
+			Placement:        "account_header_tools",
+			RequiredStatuses: []string{gptplugin.AccountStatusRegistered, gptplugin.AccountStatusActivated},
+			Capabilities:     []string{contracts.CapabilityAccountProbe, contracts.CapabilityN8NWorkflow},
+		}),
+		builtinN8NAction(builtinN8NActionSpec{
+			ActionID:       contracts.ActionLoginSession,
+			DisplayName:    "Login Session",
+			RequestProto:   "orchestrator.LoginAccountRequest",
+			ResponseProto:  "orchestrator.LoginAccountResponse",
+			ButtonLabel:    "浏览器登录",
+			Placement:      "account_header_browser",
+			RequiredFields: []string{"email", "password"},
+			Capabilities:   []string{contracts.CapabilityLogin, contracts.CapabilityBrowserAuth, contracts.CapabilityN8NWorkflow},
+		}),
+		builtinN8NAction(builtinN8NActionSpec{
+			ActionID:       contracts.ActionLoginSessionProtocol,
+			DisplayName:    "Login Session Protocol",
+			RequestProto:   "orchestrator.LoginAccountRequest",
+			ResponseProto:  "orchestrator.LoginAccountResponse",
+			ButtonLabel:    "协议登录",
+			Placement:      "account_header_protocol",
+			RequiredFields: []string{"email", "password"},
+			Capabilities:   []string{contracts.CapabilityLogin, contracts.CapabilityProtocolAuth, contracts.CapabilityN8NWorkflow},
+		}),
+		builtinN8NAction(builtinN8NActionSpec{
+			ActionID:       contracts.ActionCodexOAuth,
+			DisplayName:    "Codex OAuth",
+			RequestProto:   "orchestrator.CodexOAuthRequest",
+			ResponseProto:  "orchestrator.CodexOAuthResponse",
+			ButtonLabel:    "浏览器 auth.json",
+			Placement:      "account_header_browser",
+			RequiredFields: []string{"email", "password"},
+			Capabilities:   []string{contracts.CapabilityCodexOAuth, contracts.CapabilityBrowserAuth, contracts.CapabilityN8NWorkflow},
+		}),
+		builtinN8NAction(builtinN8NActionSpec{
+			ActionID:       contracts.ActionCodexOAuthProtocol,
+			DisplayName:    "Codex OAuth Protocol",
+			RequestProto:   "orchestrator.CodexOAuthRequest",
+			ResponseProto:  "orchestrator.CodexOAuthResponse",
+			ButtonLabel:    "协议 auth.json",
+			Placement:      "account_header_protocol",
+			RequiredFields: []string{"email", "password"},
+			Capabilities:   []string{contracts.CapabilityCodexOAuth, contracts.CapabilityProtocolAuth, contracts.CapabilityN8NWorkflow},
+		}),
+		builtinN8NAction(builtinN8NActionSpec{
+			ActionID:       contracts.ActionCodexOAuthAddPhone,
+			DisplayName:    "Codex OAuth Add Phone",
+			RequestProto:   "orchestrator.CodexOAuthAddPhoneRequest",
+			ResponseProto:  "orchestrator.CodexOAuthAddPhoneResponse",
+			ButtonLabel:    "Add Phone",
+			Placement:      "account_header_tools",
+			RequiredFields: []string{"email", "password"},
+			Capabilities:   []string{contracts.CapabilityCodexOAuth, contracts.CapabilityPhoneBinding, contracts.CapabilityN8NWorkflow},
+		}),
+		builtinN8NAction(builtinN8NActionSpec{
+			ActionID:      contracts.ActionCodexOAuthBatchAddPhone,
+			DisplayName:   "Codex OAuth Batch Add Phone",
+			StartPath:     "/workflows/codex-oauth-add-phone/batch",
+			RequestProto:  "orchestrator.CodexOAuthBatchAddPhoneRequest",
+			ResponseProto: "orchestrator.CodexOAuthBatchAddPhoneResponse",
+			ButtonLabel:   "批量 Add Phone",
+			Placement:     "account_bulk",
+			Capabilities:  []string{contracts.CapabilityCodexOAuth, contracts.CapabilityPhoneBinding, contracts.CapabilityN8NWorkflow},
+		}),
 	}
+}
+
+func builtinN8NAction(spec builtinN8NActionSpec) ActionDefinition {
+	profile := contracts.ResolveActionProfile(spec.ActionID)
+	workflowLabel := profile.WorkflowLabelOrDefault()
+	apiLabel := profile.APILabelOrDefault()
+	workflowIDPrefix := strings.TrimSpace(spec.WorkflowIDPrefix)
+	if workflowIDPrefix == "" {
+		workflowIDPrefix = workflowLabel + "-"
+	}
+	startPath := strings.TrimSpace(spec.StartPath)
+	if startPath == "" {
+		startPath = "/workflows/" + apiLabel
+	}
+	def := n8nAction(
+		profile.ActionID,
+		spec.DisplayName,
+		workflowLabel,
+		workflowIDPrefix,
+		startPath,
+		workflowLabel,
+		"gpt/"+workflowLabel,
+		"/actions/"+workflowLabel,
+		spec.RequestProto,
+		spec.ResponseProto,
+		spec.ButtonLabel,
+		spec.Placement,
+	)
+	if len(spec.RequiredStatuses) > 0 {
+		def = withRequiredStatuses(def, spec.RequiredStatuses...)
+	}
+	if len(spec.RequiredFields) > 0 {
+		def = withRequiredFields(def, spec.RequiredFields...)
+	}
+	return withCapabilities(def, spec.Capabilities...)
 }
 
 func BuiltinPluginConfigs() []ConfigSchema {
@@ -502,7 +609,7 @@ func BuiltinPluginConfigs() []ConfigSchema {
 				configField("protocol_tls_profile", "Protocol TLS Profile", ConfigFieldString, "chrome_146"),
 				configField("protocol_session_dump_enabled", "Protocol Session Dump", ConfigFieldBoolean, "true"),
 				configField("scope", "Scope", ConfigFieldString, "openid profile email offline_access api.connectors.read api.connectors.invoke"),
-				configField("phone_label", "Phone Label", ConfigFieldString, "codex-oauth-add-phone"),
+				configField("phone_label", "Phone Label", ConfigFieldString, contracts.WorkflowLabelForAction(contracts.ActionCodexOAuthAddPhone)),
 				configField("phone_profile_key", "Phone Profile Key", ConfigFieldString, "openai-th"),
 				configField("phone_max_reuse_count", "Phone Max Reuse Count", ConfigFieldInteger, "3"),
 				configField("phone_country_iso2", "Phone Country ISO2", ConfigFieldString, "TH"),
@@ -542,9 +649,9 @@ func baseAction(actionID string, displayName string, workflowKey string, workflo
 		UIButtons:  []UIButton{{ID: strings.ToLower(strings.ReplaceAll(actionID, "_", "-")), Label: buttonLabel, Placement: placement}},
 		StaleSteps: defaultJobClaimStaleSteps(),
 		BlockedAccountStatuses: []string{
-			"DEACTIVATED",
-			"EMAIL_ALREADY_EXISTS",
-			"USER_ALREADY_EXISTS",
+			gptplugin.AccountStatusDeactivated,
+			gptplugin.AccountStatusEmailAlreadyExists,
+			gptplugin.AccountStatusUserAlreadyExists,
 		},
 	}
 }

@@ -3,12 +3,14 @@ package activities
 import (
 	"context"
 	"fmt"
-	"orchestrator/pb"
-	"sort"
 	"strings"
+
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
+
+	"orchestrator/pb"
 )
 
-const accountEmailAllocatorLimit int32 = 500
+const accountEmailAllocatorPageLimit int32 = 100
 
 type AccountEmailAllocator interface {
 	Allocate(ctx context.Context, accountID string, excludes []string, strategy pb.AccountEmailStrategy) (string, error)
@@ -46,56 +48,29 @@ func (a *accountDBEmailAllocator) Allocate(ctx context.Context, accountID string
 	}
 
 	excludeSet := normalizedSet(excludes)
-	available, err := a.listAllocations(ctx, emailStatusAvailable, false)
+	email, found, err := a.claimAvailablePrimary(ctx, accountID, excludeSet)
 	if err != nil {
 		return "", err
 	}
-	sortAllocationsOldestFirst(available)
-
-	for _, allocation := range available {
-		if !eligibleAvailablePrimaryAllocation(allocation, excludeSet) {
-			continue
-		}
-		email, claimed, err := a.claim(ctx, allocation.GetEmail(), accountID, false)
-		if err != nil {
-			return "", err
-		}
-		if claimed {
-			return email, nil
-		}
+	if found {
+		return email, nil
 	}
 
 	if strategyAllowsAlias(strategy) {
-		for _, allocation := range available {
-			if !eligibleAvailableAliasAllocation(allocation, excludeSet) {
-				continue
-			}
-			email, claimed, err := a.claim(ctx, allocation.GetEmail(), accountID, true)
-			if err != nil {
-				return "", err
-			}
-			if claimed {
-				return email, nil
-			}
-		}
-
-		registered, err := a.listAllocations(ctx, emailStatusRegistered, true)
+		email, found, err := a.claimAvailableAlias(ctx, accountID, excludeSet)
 		if err != nil {
 			return "", err
 		}
-		sortAllocationsOldestFirst(registered)
+		if found {
+			return email, nil
+		}
 
-		for _, allocation := range registered {
-			if !eligibleRegisteredPrimaryAllocation(allocation, excludeSet) {
-				continue
-			}
-			email, created, err := a.createAlias(ctx, allocation.GetEmail(), accountID)
-			if err != nil {
-				return "", err
-			}
-			if created {
-				return email, nil
-			}
+		email, found, err = a.createRegisteredPrimaryAlias(ctx, accountID, excludeSet)
+		if err != nil {
+			return "", err
+		}
+		if found {
+			return email, nil
 		}
 	}
 
@@ -113,29 +88,95 @@ func strategyAllowsAlias(strategy pb.AccountEmailStrategy) bool {
 	return normalizeEmailStrategy(strategy) == pb.AccountEmailStrategy_ACCOUNT_EMAIL_STRATEGY_POOLED_ALIAS
 }
 
-func (a *accountDBEmailAllocator) listAllocations(ctx context.Context, status string, splittableOnly bool) ([]*pb.GPTEmailAllocation, error) {
-	resp, err := a.accountClient.ListGPTEmailAllocations(ctx, &pb.ListGPTEmailAllocationsRequest{
-		Status:         status,
-		Limit:          accountEmailAllocatorLimit,
-		SplittableOnly: splittableOnly,
+func (a *accountDBEmailAllocator) claimAvailablePrimary(
+	ctx context.Context,
+	accountID string,
+	excludes map[string]struct{},
+) (string, bool, error) {
+	options := allocationPageOptions{status: gptplugin.EmailStatusAvailable, isPrimary: boolPtr(true)}
+	return a.findAndClaimAllocation(ctx, options, func(allocation *pb.GPTEmailAllocation) (string, bool, error) {
+		if eligibleAvailablePrimaryAllocation(allocation, excludes) {
+			return a.claim(ctx, allocation.GetEmail(), accountID, false)
+		}
+		return "", false, nil
 	})
-	if err != nil {
-		return nil, err
+}
+
+func (a *accountDBEmailAllocator) claimAvailableAlias(
+	ctx context.Context,
+	accountID string,
+	excludes map[string]struct{},
+) (string, bool, error) {
+	options := allocationPageOptions{status: gptplugin.EmailStatusAvailable, isPrimary: boolPtr(false)}
+	return a.findAndClaimAllocation(ctx, options, func(allocation *pb.GPTEmailAllocation) (string, bool, error) {
+		if eligibleAvailableAliasAllocation(allocation, excludes) {
+			return a.claim(ctx, allocation.GetEmail(), accountID, true)
+		}
+		return "", false, nil
+	})
+}
+
+func (a *accountDBEmailAllocator) createRegisteredPrimaryAlias(
+	ctx context.Context,
+	accountID string,
+	excludes map[string]struct{},
+) (string, bool, error) {
+	options := allocationPageOptions{status: gptplugin.EmailStatusRegistered, splittableOnly: true}
+	return a.findAndClaimAllocation(ctx, options, func(allocation *pb.GPTEmailAllocation) (string, bool, error) {
+		if eligibleRegisteredPrimaryAllocation(allocation, excludes) {
+			return a.createAlias(ctx, allocation.GetEmail(), accountID)
+		}
+		return "", false, nil
+	})
+}
+
+type allocationPageOptions struct {
+	status         string
+	splittableOnly bool
+	isPrimary      *bool
+}
+
+func (a *accountDBEmailAllocator) findAndClaimAllocation(
+	ctx context.Context,
+	options allocationPageOptions,
+	claim func(*pb.GPTEmailAllocation) (string, bool, error),
+) (string, bool, error) {
+	cursor := ""
+	for {
+		resp, err := a.accountClient.ListGPTEmailAllocations(ctx, &pb.ListGPTEmailAllocationsRequest{
+			Status:         options.status,
+			Limit:          accountEmailAllocatorPageLimit,
+			SplittableOnly: options.splittableOnly,
+			IsPrimary:      options.isPrimary,
+			Cursor:         cursor,
+		})
+		if err != nil {
+			return "", false, err
+		}
+		for _, allocation := range resp.GetAllocations() {
+			email, claimed, err := claim(allocation)
+			if err != nil || claimed {
+				return email, claimed, err
+			}
+		}
+		cursor = strings.TrimSpace(resp.GetNextCursor())
+		if cursor == "" {
+			return "", false, nil
+		}
 	}
-	return resp.GetAllocations(), nil
 }
 
 func (a *accountDBEmailAllocator) claim(ctx context.Context, email string, accountID string, requirePrimarySplittable bool) (string, bool, error) {
 	req := &pb.ClaimGPTEmailAllocationRequest{
 		Email:                    strings.TrimSpace(email),
 		AccountId:                strings.TrimSpace(accountID),
-		ExpectedStatus:           emailStatusAvailable,
-		Status:                   emailStatusAssigned,
+		ExpectedStatus:           gptplugin.EmailStatusAvailable,
+		Status:                   gptplugin.EmailStatusAssigned,
 		RequirePrimarySplittable: requirePrimarySplittable,
 		ExpectedPrimaryStatus:    "",
 	}
 	if requirePrimarySplittable {
-		req.ExpectedPrimaryStatus = emailStatusRegistered
+		req.ExpectedPrimaryStatus = gptplugin.EmailStatusRegistered
 	}
 	resp, err := a.accountClient.ClaimGPTEmailAllocation(ctx, req)
 	if err != nil {
@@ -169,7 +210,7 @@ func eligibleAvailablePrimaryAllocation(allocation *pb.GPTEmailAllocation, exclu
 	if _, ok := excludes[email]; ok {
 		return false
 	}
-	return allocation.GetIsPrimary() && strings.TrimSpace(allocation.GetStatus()) == emailStatusAvailable
+	return allocation.GetIsPrimary() && strings.TrimSpace(allocation.GetStatus()) == gptplugin.EmailStatusAvailable
 }
 
 func eligibleAvailableAliasAllocation(allocation *pb.GPTEmailAllocation, excludes map[string]struct{}) bool {
@@ -181,7 +222,7 @@ func eligibleAvailableAliasAllocation(allocation *pb.GPTEmailAllocation, exclude
 		return false
 	}
 	return !allocation.GetIsPrimary() &&
-		strings.TrimSpace(allocation.GetStatus()) == emailStatusAvailable &&
+		strings.TrimSpace(allocation.GetStatus()) == gptplugin.EmailStatusAvailable &&
 		normalizedEmail(allocation.GetPrimaryEmail()) != ""
 }
 
@@ -195,7 +236,7 @@ func eligibleRegisteredPrimaryAllocation(allocation *pb.GPTEmailAllocation, excl
 	}
 	return allocation.GetIsPrimary() &&
 		allocation.GetSplittable() &&
-		strings.TrimSpace(allocation.GetStatus()) == emailStatusRegistered
+		strings.TrimSpace(allocation.GetStatus()) == gptplugin.EmailStatusRegistered
 }
 
 func normalizedSet(values []string) map[string]struct{} {
@@ -210,18 +251,4 @@ func normalizedSet(values []string) map[string]struct{} {
 
 func normalizedEmail(value string) string {
 	return strings.ToLower(strings.TrimSpace(value))
-}
-
-func sortAllocationsOldestFirst(allocations []*pb.GPTEmailAllocation) {
-	sort.SliceStable(allocations, func(i, j int) bool {
-		left := allocations[i]
-		right := allocations[j]
-		if left.GetUpdatedAt() != right.GetUpdatedAt() {
-			return left.GetUpdatedAt() < right.GetUpdatedAt()
-		}
-		if left.GetCreatedAt() != right.GetCreatedAt() {
-			return left.GetCreatedAt() < right.GetCreatedAt()
-		}
-		return strings.TrimSpace(left.GetEmail()) < strings.TrimSpace(right.GetEmail())
-	})
 }

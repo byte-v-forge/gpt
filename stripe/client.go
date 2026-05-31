@@ -14,7 +14,6 @@ import (
 const (
 	StripeBaseURL   = "https://api.stripe.com"
 	MidtransBaseURL = "https://app.midtrans.com"
-	GatewayBaseURL  = "https://gwa.gopayapi.com"
 	DefaultStripePK = "pk_live_51HOrSwC6h1nxGoI3lTAgRjYVrz4dU3fVOabyCcKR3pbEJguCVAlqCxdxCUvoRh1XWwRacViovU3kLKvpkjh7IqkW00iXQsjo3n"
 	DefaultTimeout  = 30 * time.Second
 )
@@ -22,7 +21,6 @@ const (
 type ClientSet struct {
 	Stripe   *httpjson.Client
 	Midtrans *httpjson.Client
-	GoPayGWA *httpjson.Client
 }
 
 type ClientSetConfig struct {
@@ -55,11 +53,7 @@ func NewClientSet(cfg ClientSetConfig) (*ClientSet, error) {
 	if err != nil {
 		return nil, err
 	}
-	gwa, err := httpjson.NewClient(GatewayBaseURL, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return &ClientSet{Stripe: stripe, Midtrans: midtrans, GoPayGWA: gwa}, nil
+	return &ClientSet{Stripe: stripe, Midtrans: midtrans}, nil
 }
 
 func ProbeTierFromAccessToken(ctx context.Context, client *GptClient, accessToken string) (map[string]any, error) {

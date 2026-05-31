@@ -2,18 +2,21 @@ package jobprojection
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"log"
 	"strings"
 	"time"
 
 	"github.com/byte-v-forge/common-lib/gormx"
+	"github.com/byte-v-forge/common-lib/pagex"
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"gorm.io/gorm"
 
 	"orchestrator/db"
 	"orchestrator/internal/actionregistry"
+	"orchestrator/internal/jobdata"
 	"orchestrator/internal/jobstatus"
 	"orchestrator/pb"
 )
@@ -35,13 +38,14 @@ type StepFailure struct {
 	Recoverable  bool
 	Retryable    bool
 	ErrorMessage string
-	Result       any
+	Result       proto.Message
 }
 
 type ListFilter struct {
 	Limit           int
 	Status          string
 	Action          string
+	Actions         []string
 	AccountID       string
 	BeforeUpdatedAt int64
 	BeforeJobID     string
@@ -170,7 +174,7 @@ func (s *Store) Params(ctx context.Context, jobID string) (map[string]string, er
 	return params, nil
 }
 
-func (s *Store) Update(ctx context.Context, jobID, statusValue, errorMessage string, result any) {
+func (s *Store) Update(ctx context.Context, jobID, statusValue, errorMessage string, result proto.Message) {
 	updates := map[string]any{
 		"status":        statusValue,
 		"recoverable":   statusValue == jobstatus.FailedRecoverable,
@@ -178,8 +182,8 @@ func (s *Store) Update(ctx context.Context, jobID, statusValue, errorMessage str
 		"error_message": errorMessage,
 	}
 	if result != nil {
-		if b, err := json.Marshal(result); err == nil {
-			updates["result_json"] = string(b)
+		if resultJSON := marshalStepResult(jobID, "job", result); resultJSON != "" {
+			updates["result_json"] = resultJSON
 		}
 	}
 	if err := s.db.WithContext(ctx).Model(&db.Job{}).Where("id = ?", jobID).Updates(updates).Error; err != nil {
@@ -188,7 +192,7 @@ func (s *Store) Update(ctx context.Context, jobID, statusValue, errorMessage str
 	s.publish(ctx, "job_updated", jobID)
 }
 
-func (s *Store) Cancel(ctx context.Context, jobID string, reason string, result any) error {
+func (s *Store) Cancel(ctx context.Context, jobID string, reason string, result proto.Message) error {
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		reason = "workflow canceled"
@@ -201,8 +205,8 @@ func (s *Store) Cancel(ctx context.Context, jobID string, reason string, result 
 		"error_message": reason,
 	}
 	if result != nil {
-		if b, err := json.Marshal(result); err == nil {
-			jobUpdates["result_json"] = string(b)
+		if resultJSON := marshalStepResult(jobID, "job", result); resultJSON != "" {
+			jobUpdates["result_json"] = resultJSON
 		}
 	}
 	stepUpdates := map[string]any{
@@ -235,16 +239,15 @@ func (s *Store) Get(ctx context.Context, jobID string) (*db.Job, error) {
 }
 
 func (s *Store) List(ctx context.Context, filter ListFilter) ([]db.Job, *pb.JobListCursor, bool, error) {
-	limit := filter.Limit
-	if limit <= 0 || limit > 500 {
-		limit = 100
-	}
+	limit := pagex.NormalizePageLimit(filter.Limit)
 
 	query := s.db.WithContext(ctx).Model(&db.Job{})
 	if value := strings.TrimSpace(filter.Status); value != "" {
 		query = query.Where("status = ?", value)
 	}
-	if value := strings.TrimSpace(filter.Action); value != "" {
+	if actions := compactFilterValues(filter.Actions); len(actions) > 0 {
+		query = query.Where("action IN ?", actions)
+	} else if value := strings.TrimSpace(filter.Action); value != "" {
 		query = query.Where("action = ?", value)
 	}
 	if value := strings.TrimSpace(filter.AccountID); value != "" {
@@ -262,16 +265,34 @@ func (s *Store) List(ctx context.Context, filter ListFilter) ([]db.Job, *pb.JobL
 	if err := query.Order("updated_at DESC, id DESC").Limit(limit + 1).Find(&jobs).Error; err != nil {
 		return nil, nil, false, err
 	}
-	hasMore := len(jobs) > limit
-	if hasMore {
-		jobs = jobs[:limit]
-	}
+	jobs, hasMore := pagex.TrimLimit(jobs, limit)
 	var next *pb.JobListCursor
 	if hasMore && len(jobs) > 0 {
 		last := jobs[len(jobs)-1]
 		next = &pb.JobListCursor{UpdatedAt: last.UpdatedAt, JobId: last.ID}
 	}
 	return jobs, next, hasMore, nil
+}
+
+func IsNotFound(err error) bool {
+	return errors.Is(err, gorm.ErrRecordNotFound)
+}
+
+func compactFilterValues(values []string) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func (s *Store) Steps(ctx context.Context, jobID string) ([]db.JobStep, error) {
@@ -329,7 +350,7 @@ func (s *Store) ListSnapshots(ctx context.Context, filter ListFilter) ([]*pb.Job
 	return snapshots, next, hasMore, nil
 }
 
-func (s *Store) RunAtomicStep(ctx context.Context, jobID, stepName string, recoverable bool, retryable bool, fn func() (any, error)) (any, error) {
+func (s *Store) RunAtomicStep(ctx context.Context, jobID, stepName string, recoverable bool, retryable bool, fn func() (proto.Message, error)) (proto.Message, error) {
 	if err := s.StartStep(ctx, jobID, stepName, recoverable, retryable); err != nil {
 		return nil, err
 	}
@@ -375,7 +396,7 @@ func (s *Store) StartStep(ctx context.Context, jobID, stepName string, recoverab
 	return nil
 }
 
-func (s *Store) CompleteStep(ctx context.Context, jobID, stepName string, recoverable bool, retryable bool, result any, stepErr error) error {
+func (s *Store) CompleteStep(ctx context.Context, jobID, stepName string, recoverable bool, retryable bool, result proto.Message, stepErr error) error {
 	completedAt := time.Now().Unix()
 	statusValue := jobstatus.Succeeded
 	errorMessage := ""
@@ -389,7 +410,7 @@ func (s *Store) CompleteStep(ctx context.Context, jobID, stepName string, recove
 		"recoverable":   recoverable,
 		"retryable":     retryable,
 		"error_message": errorMessage,
-		"result_json":   MarshalStepResult(jobID, stepName, result),
+		"result_json":   marshalStepResult(jobID, stepName, result),
 		"completed_at":  completedAt,
 	}
 	if err := s.db.WithContext(ctx).Model(&db.JobStep{}).
@@ -415,8 +436,8 @@ func (s *Store) CompleteStep(ctx context.Context, jobID, stepName string, recove
 	return stepErr
 }
 
-func (s *Store) UpdateRunningStepData(ctx context.Context, jobID, stepName string, result any) {
-	resultJSON := MarshalStepResult(jobID, stepName, result)
+func (s *Store) UpdateRunningStepData(ctx context.Context, jobID, stepName string, result proto.Message) {
+	resultJSON := marshalStepResult(jobID, stepName, result)
 	if resultJSON == "" {
 		return
 	}
@@ -448,7 +469,7 @@ func (s *Store) MarkStepFailed(ctx context.Context, input StepFailure) error {
 		"completed_at":  now,
 	}
 	if input.Result != nil {
-		if resultJSON := MarshalStepResult(input.JobID, input.StepName, input.Result); resultJSON != "" {
+		if resultJSON := marshalStepResult(input.JobID, input.StepName, input.Result); resultJSON != "" {
 			updates["result_json"] = resultJSON
 		}
 	}
@@ -472,7 +493,7 @@ func ToProto(job *db.Job, steps []db.JobStep) *pb.Job {
 		Retryable:      job.Retryable,
 		LastStep:       job.LastStep,
 		ErrorMessage:   job.ErrorMessage,
-		Result:         structFromJSON(job.ResultJSON),
+		Result:         jobdata.FromJSON(job.ResultJSON),
 		CreatedAt:      job.CreatedAt,
 		UpdatedAt:      job.UpdatedAt,
 		Steps:          make([]*pb.JobStep, 0, len(steps)),
@@ -485,7 +506,7 @@ func ToProto(job *db.Job, steps []db.JobStep) *pb.Job {
 			Recoverable:  steps[i].Recoverable,
 			Retryable:    steps[i].Retryable,
 			ErrorMessage: steps[i].ErrorMessage,
-			Detail:       structFromJSON(steps[i].ResultJSON),
+			Detail:       jobdata.FromJSON(steps[i].ResultJSON),
 			StartedAt:    steps[i].StartedAt,
 			CompletedAt:  steps[i].CompletedAt,
 		})
@@ -493,29 +514,20 @@ func ToProto(job *db.Job, steps []db.JobStep) *pb.Job {
 	return out
 }
 
-func structFromJSON(raw string) *structpb.Struct {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil
-	}
-	var data map[string]any
-	if err := json.Unmarshal([]byte(raw), &data); err != nil {
-		data = map[string]any{"raw": raw, "parse_error": err.Error()}
-	}
-	out, err := structpb.NewStruct(data)
-	if err != nil {
-		out, _ = structpb.NewStruct(map[string]any{"raw": raw, "marshal_error": err.Error()})
-	}
-	return out
-}
-
-func MarshalStepResult(jobID, stepName string, result any) string {
+func marshalStepResult(jobID, stepName string, result proto.Message) string {
 	if result == nil {
 		return ""
 	}
-	b, err := json.Marshal(result)
+	return marshalJobData(jobID, stepName, jobdata.Message(result))
+}
+
+func marshalJobData(jobID, stepName string, data *pb.JobData) string {
+	if jobdata.Unwrap(data) == nil {
+		return ""
+	}
+	b, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(data)
 	if err != nil {
-		log.Printf("[orchestrator] marshal step result failed job=%s step=%s: %v", jobID, stepName, err)
+		log.Printf("[orchestrator] marshal typed step result failed job=%s step=%s: %v", jobID, stepName, err)
 		return ""
 	}
 	return string(b)
@@ -561,7 +573,10 @@ func progressFromJob(registry *actionregistry.Registry, job *db.Job) *pb.Workflo
 	if job == nil {
 		return nil
 	}
-	workflowID, _ := actionregistry.RegisterDefault(registry).WorkflowID(job.Action, job.ID)
+	if registry == nil {
+		registry = actionregistry.Default()
+	}
+	workflowID, _ := registry.WorkflowID(job.Action, job.ID)
 	stepName := strings.TrimSpace(job.LastStep)
 	if stepName == "" {
 		stepName = "created"

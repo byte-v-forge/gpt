@@ -1,16 +1,13 @@
 import { statusText } from './labels';
 import type { Account } from './types';
+import { accountCarrierEmail, accountCarrierStatusValue } from '@byte-v-forge/common-ui';
 
 const INVALID_GPT_ACCOUNT_STATUS = 'DEACTIVATED';
 
-export function isInvalidGptAccount(account: Account) { return account.status === INVALID_GPT_ACCOUNT_STATUS; }
+export function isInvalidGptAccount(account: Account) { return accountCarrierStatusValue(account) === INVALID_GPT_ACCOUNT_STATUS; }
 
 export function canRegister(account: Account) {
   return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && !hasRegisteredSession(account);
-}
-
-export function canGoPayPayment(account: Account) {
-  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && !accountIsActivated(account) && hasRegisteredSession(account);
 }
 
 export function canProbeAccount(account: Account) {
@@ -28,7 +25,7 @@ export function canUpdateWebAccessToken(account: Account) {
 }
 
 export function canLoginSession(account: Account) {
-  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && !!account.email && !!account.password;
+  return !isInvalidGptAccount(account) && !isUserAlreadyExistsAccount(account) && !!accountCarrierEmail(account);
 }
 
 export function loginActionLabel(account: Account) {
@@ -43,7 +40,7 @@ export function loginActionHint(account: Account) {
 
 export function accountSignalText(account: Account) {
   if (isInvalidGptAccount(account)) return '失效';
-  if (account.status.includes('FAILED') || account.status.includes('EXISTS')) return statusText(account.status);
+  if (accountCarrierStatusValue(account).includes('FAILED') || accountCarrierStatusValue(account).includes('EXISTS')) return statusText(accountCarrierStatusValue(account));
   if (accountIsActivated(account)) {
     const plan = accountPlanText(account);
     return plan === '未知' || plan === 'Free' ? 'Plus' : plan;
@@ -56,20 +53,20 @@ export function accountSignalText(account: Account) {
 export function accountSignalTone(account: Account) {
   const signal = accountSignalText(account);
   if (['Plus', 'Pro', 'Team', 'Enterprise', '可试用'].includes(signal)) return 'good';
-  if (signal === '不可试用' || signal === '失效' || account.status.includes('FAILED') || account.status.includes('EXISTS')) return 'bad';
+  if (signal === '不可试用' || signal === '失效' || accountCarrierStatusValue(account).includes('FAILED') || accountCarrierStatusValue(account).includes('EXISTS')) return 'bad';
   return 'mid';
 }
 
 export function accountIsActivated(account: Account) {
   if (isInvalidGptAccount(account)) return false;
   const tier = normalizeTier(account.tier);
-  return account.status === 'ACTIVATED' || account.plus_active === true || (!!tier && tier !== 'free' && tier !== 'unknown');
+  return accountCarrierStatusValue(account) === 'ACTIVATED' || account.plus_active === true || (!!tier && tier !== 'free' && tier !== 'unknown');
 }
 
 export function accountActivationText(account: Account) {
-  if (isInvalidGptAccount(account)) return statusText(account.status);
+  if (isInvalidGptAccount(account)) return statusText(accountCarrierStatusValue(account));
   if (accountIsActivated(account)) return '已激活';
-  return statusText(account.status);
+  return statusText(accountCarrierStatusValue(account));
 }
 
 export function accountPlanText(account: Account) {
@@ -96,11 +93,11 @@ export function tierText(tier: string) {
 }
 
 export function isUserAlreadyExistsAccount(account: Account) {
-  return account.status === 'USER_ALREADY_EXISTS' || account.status === 'EMAIL_ALREADY_EXISTS';
+  return accountCarrierStatusValue(account) === 'USER_ALREADY_EXISTS' || accountCarrierStatusValue(account) === 'EMAIL_ALREADY_EXISTS';
 }
 
 export function hasRegisteredSession(account: Account) {
-  return account.status === 'REGISTERED' || account.status === 'ACTIVATED';
+  return accountCarrierStatusValue(account) === 'REGISTERED' || accountCarrierStatusValue(account) === 'ACTIVATED';
 }
 
 export function normalizeTier(tier: string) {

@@ -8,6 +8,7 @@ import (
 	mailboxv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/mailbox/v1"
 
 	"orchestrator/internal/accountmail"
+	"orchestrator/internal/gptaccount"
 	"orchestrator/pb"
 )
 
@@ -50,10 +51,9 @@ func (s *Server) ensureAccountPrimaryMailbox(ctx context.Context, account *pb.Ac
 	if accountmail.NormalizeEmail(account.GetPrimaryMailboxEmail()) == accountmail.NormalizeEmail(primaryMailbox) {
 		return account, nil
 	}
-	resp, err := s.accountClient.UpdateAccount(ctx, &pb.UpdateAccountRequest{Account: &pb.Account{
-		AccountId:           account.GetAccountId(),
-		PrimaryMailboxEmail: primaryMailbox,
-	}})
+	update := gptaccount.Patch(gptaccount.ID(account))
+	update.PrimaryMailboxEmail = primaryMailbox
+	resp, err := s.accountClient.UpdateAccount(ctx, &pb.UpdateAccountRequest{Account: update})
 	if err != nil {
 		return account, fmt.Errorf("update account primary mailbox: %w", err)
 	}
@@ -82,7 +82,7 @@ func projectedMailbox(email string) *mailboxv1.EmailMailbox {
 }
 
 func accountOTPEmail(account *pb.Account, primaryMailbox string) string {
-	if value := accountmail.NormalizeEmail(account.GetEmail()); value != "" {
+	if value := accountmail.NormalizeEmail(gptaccount.Email(account)); value != "" {
 		return value
 	}
 	return primaryMailbox

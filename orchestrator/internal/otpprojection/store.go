@@ -10,16 +10,19 @@ import (
 	"github.com/byte-v-forge/common-lib/emailx"
 	mailboxv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/mailbox/v1"
 	smsv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/sms/v1"
+	wav1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/wa/v1"
 	"github.com/byte-v-forge/common-lib/redisx"
 	"github.com/byte-v-forge/common-lib/timex"
 	"github.com/redis/go-redis/v9"
 
 	"orchestrator/internal/accountmail"
+	"orchestrator/internal/channelotpwait"
 )
 
 const (
 	SourceSMS     = "sms"
 	SourceMailbox = "mailbox"
+	SourceWA      = "wa"
 	DefaultTTL    = 5 * time.Minute
 )
 
@@ -33,7 +36,11 @@ type otpRecord struct {
 	Source         string `json:"source"`
 	SMSOrderID     string `json:"sms_order_id,omitempty"`
 	EmailAddress   string `json:"email_address,omitempty"`
+	E164Number     string `json:"e164_number,omitempty"`
 	SignalKind     string `json:"signal_kind,omitempty"`
+	WASource       string `json:"wa_source,omitempty"`
+	MessageID      string `json:"message_id,omitempty"`
+	CandidateID    string `json:"candidate_id,omitempty"`
 	Code           string `json:"code"`
 	ReceivedAtUnix int64  `json:"received_at_unix"`
 }
@@ -57,7 +64,7 @@ func (s *Store) RecordSMSCode(ctx context.Context, event *smsv1.SmsCodeReceivedE
 		return nil
 	}
 	activationID := strings.TrimSpace(event.GetOrderId())
-	code := strings.TrimSpace(event.GetCode().GetValue())
+	code := channelotpwait.NormalizeCode(event.GetCode().GetValue())
 	if activationID == "" || code == "" {
 		return nil
 	}
@@ -102,6 +109,35 @@ func (s *Store) RecordMailboxEmail(ctx context.Context, event *mailboxv1.Mailbox
 	return nil
 }
 
+func (s *Store) RecordWAOTP(ctx context.Context, event *wav1.WaOtpReceivedEvent) error {
+	if s == nil || event == nil {
+		return nil
+	}
+	number := channelotpwait.NormalizeNumber(event.GetE164Number())
+	code := channelotpwait.NormalizeCode(event.GetOtp())
+	if number == "" || code == "" {
+		return nil
+	}
+	record := otpRecord{
+		Source:         SourceWA,
+		E164Number:     number,
+		SignalKind:     "otp",
+		WASource:       event.GetSource().String(),
+		MessageID:      strings.TrimSpace(event.GetMessageId()),
+		CandidateID:    strings.TrimSpace(event.GetCandidateId()),
+		Code:           code,
+		ReceivedAtUnix: waReceivedAt(event),
+	}
+	for _, candidate := range channelotpwait.PhoneCandidates(number) {
+		next := record
+		next.E164Number = candidate
+		if err := s.set(ctx, s.waKey(candidate), next); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (s *Store) LatestSMSCode(ctx context.Context, activationID string, issuedAfterUnix int64) (string, bool, error) {
 	activationID = strings.TrimSpace(activationID)
 	if activationID == "" {
@@ -129,6 +165,58 @@ func (s *Store) WaitSMSCode(ctx context.Context, activationID string, issuedAfte
 			return "", false, err
 		}
 	}
+}
+
+func (s *Store) LatestWACode(ctx context.Context, e164Number string, issuedAfterUnix int64) (string, bool, error) {
+	code, _, ok, err := s.LatestWASignal(ctx, e164Number, issuedAfterUnix)
+	return code, ok, err
+}
+
+func (s *Store) LatestWASignal(ctx context.Context, e164Number string, issuedAfterUnix int64) (string, string, bool, error) {
+	record, ok, err := s.latestWARecord(ctx, e164Number, issuedAfterUnix)
+	if err != nil || !ok || record.Code == "" {
+		return "", "", false, err
+	}
+	return record.Code, normalizeWASource(record.WASource), true, nil
+}
+
+func (s *Store) WaitWACode(ctx context.Context, e164Number string, issuedAfterUnix int64, timeout time.Duration, interval time.Duration) (string, bool, error) {
+	if len(channelotpwait.PhoneCandidates(e164Number)) == 0 {
+		return "", false, errors.New("wa e164 number missing")
+	}
+	deadline := deadlineFromTimeout(timeout)
+	for {
+		record, ok, err := s.latestWARecord(ctx, e164Number, issuedAfterUnix)
+		if err != nil || ok || !time.Now().Before(deadline) {
+			return record.Code, ok && record.Code != "", err
+		}
+		if err := timex.Sleep(ctx, waitInterval(interval)); err != nil {
+			return "", false, err
+		}
+	}
+}
+
+func (s *Store) latestWARecord(ctx context.Context, e164Number string, issuedAfterUnix int64) (otpRecord, bool, error) {
+	var best otpRecord
+	found := false
+	candidates := channelotpwait.PhoneCandidates(e164Number)
+	if len(candidates) == 0 {
+		return otpRecord{}, false, errors.New("wa e164 number missing")
+	}
+	for _, candidate := range candidates {
+		record, ok, err := s.get(ctx, s.waKey(candidate))
+		if err != nil {
+			return otpRecord{}, false, err
+		}
+		if !ok || record.Code == "" || record.ReceivedAtUnix < issuedAfterUnix {
+			continue
+		}
+		if !found || record.ReceivedAtUnix > best.ReceivedAtUnix {
+			best = record
+			found = true
+		}
+	}
+	return best, found, nil
 }
 
 func (s *Store) WaitMailboxSignal(ctx context.Context, email string, kind mailboxv1.EmailSignalKind, issuedAfterUnix int64, timeout time.Duration, interval time.Duration) (*mailboxv1.EmailInboxMessage, string, bool, error) {
@@ -215,6 +303,10 @@ func (s *Store) mailboxKey(email string, kind mailboxv1.EmailSignalKind) string 
 	return s.key("mailbox", emailx.Normalize(email), kind.String())
 }
 
+func (s *Store) waKey(e164Number string) string {
+	return s.key("wa", channelotpwait.NormalizeNumber(e164Number))
+}
+
 func (s *Store) key(parts ...string) string {
 	key, ok := s.keys.Key(strings.Join(parts, ":"))
 	if !ok {
@@ -270,6 +362,25 @@ func emailCandidates(values ...string) []string {
 		}
 	}
 	return out
+}
+
+func waReceivedAt(event *wav1.WaOtpReceivedEvent) int64 {
+	if event.GetReceivedAt() != nil {
+		return event.GetReceivedAt().AsTime().Unix()
+	}
+	if event.GetContext() != nil && event.GetContext().GetOccurredAt() != nil {
+		return event.GetContext().GetOccurredAt().AsTime().Unix()
+	}
+	return time.Now().Unix()
+}
+
+func normalizeWASource(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" || value == wav1.WaOtpSource_WA_OTP_SOURCE_UNSPECIFIED.String() {
+		return "wa"
+	}
+	value = strings.TrimPrefix(value, "WA_OTP_SOURCE_")
+	return strings.ToLower(value)
 }
 
 func waitInterval(interval time.Duration) time.Duration {

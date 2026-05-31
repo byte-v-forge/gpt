@@ -5,143 +5,229 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/uuid"
-
-	"orchestrator/internal/jobstatus"
+	"orchestrator/internal/contracts"
 	"orchestrator/pb"
 )
 
-type n8nCodexOAuthResult struct {
-	JobID          string         `json:"job_id"`
-	AccountID      string         `json:"account_id,omitempty"`
-	N8NExecutionID string         `json:"n8n_execution_id,omitempty"`
-	Action         string         `json:"action"`
-	Success        bool           `json:"success"`
-	ErrorMessage   string         `json:"error_message,omitempty"`
-	Result         map[string]any `json:"result,omitempty"`
+type n8nCodexOAuthStartConfig[Req any, Resp any] struct {
+	ActionID  string
+	Response  n8nStartResponseBuilder[Resp]
+	AccountID func(Req) (string, error)
+	Params    func(Req) (map[string]string, error)
 }
 
-func (s *Server) StartN8NCodexOAuth(ctx context.Context, req *pb.CodexOAuthRequest) (*pb.CodexOAuthResponse, string, error) {
-	accountID := strings.TrimSpace(req.GetAccountId())
-	if accountID == "" {
-		return &pb.CodexOAuthResponse{ErrorMessage: "account_id is required"}, "", fmt.Errorf("account_id is required")
-	}
-	jobID := uuid.NewString()
-	params := codexOAuthJobParams(accountID, req.GetLabel())
-	params["engine"] = "n8n"
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionCodexOAuth, params); err != nil {
-		return &pb.CodexOAuthResponse{JobId: jobID, ErrorMessage: err.Error()}, accountID, err
-	}
-	return &pb.CodexOAuthResponse{JobId: jobID, Started: true}, accountID, nil
+func (s *Server) StartN8NCodexOAuthAccount(ctx context.Context, actionID string, req *pb.CodexOAuthRequest) (*pb.CodexOAuthResponse, string, error) {
+	return startN8NCodexOAuthAction(ctx, s, n8nCodexOAuthStartConfig[*pb.CodexOAuthRequest, *pb.CodexOAuthResponse]{
+		ActionID:  actionID,
+		Response:  n8nCodexOAuthStartResponse,
+		AccountID: codexOAuthRequestAccountID[*pb.CodexOAuthRequest],
+		Params: func(req *pb.CodexOAuthRequest) (map[string]string, error) {
+			return codexOAuthJobParams(req.GetAccountId(), req.GetLabel()), nil
+		},
+	}, req)
 }
 
-func (s *Server) BindN8NCodexOAuthExecution(ctx context.Context, jobID string, n8nExecutionID string) (any, error) {
-	jobID = strings.TrimSpace(jobID)
-	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
-	if jobID == "" {
-		return nil, fmt.Errorf("job_id is required")
-	}
-	if err := s.bindN8NCodexOAuthExecution(ctx, jobID, n8nExecutionID); err != nil {
+func (s *Server) BindN8NCodexOAuthExecution(ctx context.Context, req *pb.N8NCodexOAuthBindRequest) (any, error) {
+	return s.bindN8NExecutionAction(ctx, req.GetJobId(), req.GetN8NExecutionId())
+}
+
+func (s *Server) CompleteN8NCodexOAuthAction(ctx context.Context, actionID string, req *pb.N8NCodexOAuthCompleteRequest) (any, error) {
+	profile, err := n8nCodexOAuthProfileForAction(actionID)
+	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"job_id": jobID, "n8n_execution_id": n8nExecutionID, "success": true}, nil
+	return s.completeN8NCodexOAuthAction(ctx, profile, req)
 }
 
-func (s *Server) CodexOAuthStartBrowser(ctx context.Context, req *pb.CodexOAuthStartBrowserInput) (*pb.CodexOAuthStartBrowserOutput, error) {
-	out, err := s.activities.CodexOAuthStartBrowserActivity(ctx, *req)
-	return &out, err
-}
-
-func (s *Server) CodexOAuthDetectBrowserStage(ctx context.Context, req *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error) {
-	out, err := s.activities.CodexOAuthDetectBrowserStageActivity(ctx, *req)
-	return &out, err
-}
-
-func (s *Server) CodexOAuthSubmitEmail(ctx context.Context, req *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error) {
-	out, err := s.activities.CodexOAuthSubmitEmailActivity(ctx, *req)
-	return &out, err
-}
-
-func (s *Server) CodexOAuthSubmitPassword(ctx context.Context, req *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error) {
-	out, err := s.activities.CodexOAuthSubmitPasswordActivity(ctx, *req)
-	return &out, err
-}
-
-func (s *Server) CodexOAuthSubmitEmailOTP(ctx context.Context, req *pb.CodexOAuthSubmitEmailOTPInput) (*pb.CodexOAuthBrowserStageOutput, error) {
-	out, err := s.activities.CodexOAuthSubmitEmailOTPActivity(ctx, *req)
-	return &out, err
-}
-
-func (s *Server) CodexOAuthAddPhoneBrowser(ctx context.Context, req *pb.CodexOAuthAddPhoneBrowserInput) (*pb.CodexOAuthAddPhoneBrowserOutput, error) {
-	out, err := s.activities.CodexOAuthAddPhoneBrowserActivity(ctx, *req)
-	return &out, err
-}
-
-func (s *Server) CodexOAuthCompleteBrowser(ctx context.Context, req *pb.CodexOAuthCompleteBrowserInput) (*pb.CodexOAuthCompleteBrowserOutput, error) {
-	out, err := s.activities.CodexOAuthCompleteBrowserActivity(ctx, *req)
-	return &out, err
-}
-
-func (s *Server) CodexOAuthStopBrowser(ctx context.Context, req *pb.CodexOAuthStopBrowserInput) (any, error) {
-	if err := s.activities.CodexOAuthStopBrowserActivity(ctx, *req); err != nil {
+func (s *Server) FailN8NCodexOAuthAction(ctx context.Context, actionID string, req *pb.N8NCodexOAuthFailRequest) (any, error) {
+	profile, err := n8nCodexOAuthProfileForAction(actionID)
+	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"job_id": strings.TrimSpace(req.GetJobId()), "success": true}, nil
+	scope := n8nActionScopeFrom(req.GetJobId(), req.GetAccountId(), req.GetN8NExecutionId())
+	return s.failBoundN8NActionMessage(ctx, profile.Fail, scope.JobID, scope.AccountID, scope.N8NExecutionID, req.GetStep(), req.GetErrorMessage(), n8nCodexOAuthFailureData(scope, profile, req))
 }
 
-func (s *Server) CompleteN8NCodexOAuth(ctx context.Context, jobID string, accountID string, n8nExecutionID string, result map[string]any) (any, error) {
-	jobID, accountID, n8nExecutionID = normalizeN8NRegisterProtocolIDs(jobID, accountID, n8nExecutionID)
-	if err := s.bindN8NCodexOAuthExecution(ctx, jobID, n8nExecutionID); err != nil {
+func (s *Server) CompleteN8NCodexOAuthBatchAction(ctx context.Context, actionID string, req *pb.N8NCodexOAuthBatchCompleteRequest) (any, error) {
+	profile, err := n8nCodexOAuthProfileForAction(actionID)
+	if err != nil {
 		return nil, err
 	}
-	if result == nil {
-		result = map[string]any{}
-	}
-	result["account_id"] = accountID
-	result["n8n_execution_id"] = n8nExecutionID
-	if err := s.activities.MarkJobSucceededActivity(ctx, pb.JobSuccessInput{JobId: jobID, Result: structData(result)}); err != nil {
+	scope := n8nActionScopeFrom(req.GetJobId(), "", req.GetN8NExecutionId())
+	if err := s.bindN8NExecution(ctx, scope.JobID, scope.N8NExecutionID); err != nil {
 		return nil, err
 	}
-	return &n8nCodexOAuthResult{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Action: actionCodexOAuth, Success: true, Result: result}, nil
+	data := &pb.N8NCodexOAuthBatchCompleteData{
+		N8NExecutionId: scope.N8NExecutionID,
+		TotalCount:     req.GetTotalCount(),
+		Mode:           strings.TrimSpace(req.GetMode()),
+	}
+	if err := s.storeN8NActionSuccessMessage(ctx, scope.JobID, data); err != nil {
+		return nil, err
+	}
+	return n8nActionCompleteOutcomeMessage(scope.JobID, scope.AccountID, scope.N8NExecutionID, profile.Complete.Action, profile.Complete.Started, true, "", data), nil
 }
 
-func (s *Server) FailN8NCodexOAuth(ctx context.Context, jobID string, accountID string, n8nExecutionID string, step string, errorMessage string, data map[string]any) (any, error) {
-	jobID, accountID, n8nExecutionID = normalizeN8NRegisterProtocolIDs(jobID, accountID, n8nExecutionID)
-	if err := s.bindN8NCodexOAuthExecution(ctx, jobID, n8nExecutionID); err != nil {
+func (s *Server) completeN8NCodexOAuthAction(ctx context.Context, profile n8nCodexOAuthProfile, req *pb.N8NCodexOAuthCompleteRequest) (any, error) {
+	scope := n8nActionScopeFrom(req.GetJobId(), req.GetAccountId(), req.GetN8NExecutionId())
+	if err := s.bindN8NExecution(ctx, scope.JobID, scope.N8NExecutionID); err != nil {
 		return nil, err
 	}
-	errorMessage = strings.TrimSpace(errorMessage)
-	if errorMessage == "" {
-		errorMessage = "codex oauth failed"
+	data := n8nCodexOAuthCompleteData(scope, profile, req)
+	if err := s.storeN8NActionSuccessMessage(ctx, scope.JobID, data); err != nil {
+		return nil, err
 	}
+	cfg := profile.Complete
+	return n8nActionCompleteOutcomeMessage(scope.JobID, scope.AccountID, scope.N8NExecutionID, cfg.Action, cfg.Started, true, "", data), nil
+}
+
+func n8nCodexOAuthCompleteData(scope n8nActionScope, profile n8nCodexOAuthProfile, req *pb.N8NCodexOAuthCompleteRequest) *pb.ActivityCodexOAuthStepData {
+	data := req.GetData()
 	if data == nil {
-		data = map[string]any{}
+		data = &pb.ActivityCodexOAuthStepData{}
 	}
-	data["account_id"] = accountID
-	data["n8n_execution_id"] = n8nExecutionID
-	step = strings.TrimSpace(step)
-	if step == "" {
-		step = s.codexOAuthFailureStep(ctx, jobID)
+	if profile.IncludeAccountID {
+		data.AccountId = strings.TrimSpace(scope.AccountID)
 	}
-	err := fmt.Errorf("%s", errorMessage)
-	if markErr := s.markActionFailed(ctx, jobID, step, jobstatus.FailedRecoverable, true, false, err, data); markErr != nil {
-		return nil, markErr
+	data.N8NExecutionId = strings.TrimSpace(scope.N8NExecutionID)
+	data.AuthSecretKey = firstNonEmpty(data.GetAuthSecretKey(), req.GetAuthSecretKey())
+	data.Driver = firstNonEmpty(data.GetDriver(), req.GetDriver())
+	if req.AddPhoneConfirmed != nil {
+		confirmed := req.GetAddPhoneConfirmed()
+		data.AddPhoneConfirmed = &confirmed
 	}
-	return &n8nCodexOAuthResult{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, Action: actionCodexOAuth, Success: false, ErrorMessage: errorMessage, Result: data}, nil
+	return data
 }
 
-func (s *Server) bindN8NCodexOAuthExecution(ctx context.Context, jobID string, executionID string) error {
-	executionID = strings.TrimSpace(executionID)
-	if executionID == "" {
-		return nil
+func n8nCodexOAuthFailureData(scope n8nActionScope, profile n8nCodexOAuthProfile, req *pb.N8NCodexOAuthFailRequest) *pb.ActivityCodexOAuthStepData {
+	data := req.GetData()
+	if data == nil {
+		data = &pb.ActivityCodexOAuthStepData{}
 	}
-	return s.jobStore.BindN8NExecution(ctx, jobID, executionID)
+	if profile.IncludeAccountID {
+		data.AccountId = strings.TrimSpace(scope.AccountID)
+	}
+	data.N8NExecutionId = strings.TrimSpace(scope.N8NExecutionID)
+	data.ErrorMessage = firstNonEmpty(data.GetErrorMessage(), req.GetErrorMessage())
+	if strings.TrimSpace(data.GetReason()) == "" {
+		data.Reason = strings.TrimSpace(req.GetStep())
+	}
+	return data
 }
 
-func (s *Server) codexOAuthFailureStep(ctx context.Context, jobID string) string {
-	job, err := s.getJob(ctx, jobID)
-	if err == nil && strings.TrimSpace(job.LastStep) != "" {
-		return strings.TrimSpace(job.LastStep)
+func (s *Server) StartN8NCodexOAuthAddPhoneAccount(ctx context.Context, actionID string, req *pb.CodexOAuthAddPhoneRequest) (*pb.CodexOAuthAddPhoneResponse, string, error) {
+	return startN8NCodexOAuthAction(ctx, s, n8nCodexOAuthStartConfig[*pb.CodexOAuthAddPhoneRequest, *pb.CodexOAuthAddPhoneResponse]{
+		ActionID:  actionID,
+		Response:  n8nCodexOAuthAddPhoneStartResponse,
+		AccountID: codexOAuthRequestAccountID[*pb.CodexOAuthAddPhoneRequest],
+		Params: func(req *pb.CodexOAuthAddPhoneRequest) (map[string]string, error) {
+			return codexOAuthAddPhoneJobParams(req.GetAccountId(), req.GetLabel(), req.GetMaxReuseCount()), nil
+		},
+	}, req)
+}
+
+func (s *Server) CodexOAuthAcquirePhone(ctx context.Context, req *pb.CodexOAuthAcquirePhoneInput) (*pb.CodexOAuthPhoneLease, error) {
+	return s.activities.CodexOAuthAcquirePhoneActivity(ctx, *req)
+}
+
+func (s *Server) CodexOAuthReleasePhone(ctx context.Context, req *pb.CodexOAuthReleasePhoneInput) (any, error) {
+	if err := s.activities.CodexOAuthReleasePhoneActivity(ctx, *req); err != nil {
+		return nil, err
 	}
-	return stepCodexOAuthBrowserStart
+	return n8nActionSuccess(&pb.N8NActionSuccessResult{JobId: req.GetJobId(), ActivationId: req.GetActivationId()}), nil
+}
+
+func (s *Server) StartN8NCodexOAuthBatch(ctx context.Context, actionID string, req *pb.CodexOAuthBatchAddPhoneRequest) (*pb.CodexOAuthBatchAddPhoneResponse, error) {
+	resp, _, err := startN8NCodexOAuthAction(ctx, s, n8nCodexOAuthStartConfig[*pb.CodexOAuthBatchAddPhoneRequest, *pb.CodexOAuthBatchAddPhoneResponse]{
+		ActionID: actionID,
+		Response: n8nCodexOAuthBatchAddPhoneStartResponse,
+		Params: func(req *pb.CodexOAuthBatchAddPhoneRequest) (map[string]string, error) {
+			accountIDs := compactAccountIDs(req.GetAccountIds())
+			if len(accountIDs) == 0 {
+				return nil, fmt.Errorf("account_ids is required")
+			}
+			return codexOAuthBatchAddPhoneJobParams(accountIDs, req.GetLabel(), req.GetMaxReuseCount()), nil
+		},
+	}, req)
+	return resp, err
+}
+
+func (s *Server) CreateN8NCodexOAuthBatchAddPhoneChild(ctx context.Context, req *pb.N8NCodexOAuthBatchChildRequest) (any, error) {
+	parentJobID := strings.TrimSpace(req.GetParentJobId())
+	accountID := strings.TrimSpace(req.GetAccountId())
+	if parentJobID == "" || accountID == "" {
+		return nil, fmt.Errorf("parent_job_id and account_id are required")
+	}
+	n8nExecutionID := req.GetN8NExecutionId()
+	if err := s.bindN8NExecution(ctx, parentJobID, n8nExecutionID); err != nil {
+		return nil, err
+	}
+	profile, err := n8nCodexOAuthProfileForAction(contracts.ActionCodexOAuthAddPhone)
+	if err != nil {
+		return nil, err
+	}
+	label := req.GetLabel()
+	maxReuseCount := req.GetMaxReuseCount()
+	params := codexOAuthAddPhoneJobParams(accountID, label, maxReuseCount)
+	params["parent_job_id"] = parentJobID
+	childJobID := newN8NActionJobID()
+	if err := s.createN8NActionJob(ctx, profile.Start, childJobID, accountID, "", params); err != nil {
+		return nil, err
+	}
+	return n8nActionSuccess(&pb.N8NActionSuccessResult{
+		ParentJobId:    parentJobID,
+		JobId:          childJobID,
+		AccountId:      accountID,
+		Label:          label,
+		MaxReuseCount:  maxReuseCount,
+		N8NExecutionId: n8nExecutionID,
+	}), nil
+}
+
+func startN8NCodexOAuthAction[Req any, Resp any](ctx context.Context, s *Server, cfg n8nCodexOAuthStartConfig[Req, Resp], req Req) (Resp, string, error) {
+	profile, err := n8nCodexOAuthProfileForAction(cfg.ActionID)
+	if err != nil {
+		return n8nAccountStartResponse("", "", err, cfg.Response)
+	}
+	accountID, err := codexOAuthStartAccountID(req, cfg.AccountID)
+	if err != nil {
+		return n8nAccountStartResponse("", accountID, err, cfg.Response)
+	}
+	params, err := codexOAuthStartParams(req, cfg.Params)
+	if err != nil {
+		return n8nAccountStartResponse("", accountID, err, cfg.Response)
+	}
+	jobID := newN8NActionJobID()
+	err = s.createN8NActionJob(ctx, profile.Start, jobID, accountID, "", params)
+	return n8nAccountStartResponse(jobID, accountID, err, cfg.Response)
+}
+
+type codexOAuthAccountRequest interface {
+	GetAccountId() string
+}
+
+func codexOAuthRequestAccountID[Req codexOAuthAccountRequest](req Req) (string, error) {
+	return req.GetAccountId(), nil
+}
+
+func codexOAuthStartAccountID[Req any](req Req, accountID func(Req) (string, error)) (string, error) {
+	if accountID == nil {
+		return "", nil
+	}
+	value, err := accountID(req)
+	if err != nil {
+		return "", err
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fmt.Errorf("account_id is required")
+	}
+	return value, nil
+}
+
+func codexOAuthStartParams[Req any](req Req, params func(Req) (map[string]string, error)) (map[string]string, error) {
+	if params == nil {
+		return nil, nil
+	}
+	return params(req)
 }

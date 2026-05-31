@@ -1,5 +1,6 @@
-import { api } from '@byte-v-forge/common-ui';
+import { accountCarrierID, api, fetchAccountList, forEachCursorPageItem } from '@byte-v-forge/common-ui';
 import { isInvalidGptAccount } from './account-utils';
+import type { ListAccountsResponse } from '../proto/gpt_account';
 import type { Account } from './types';
 
 const CLEANUP_BATCH_LIMIT = 500;
@@ -19,18 +20,18 @@ export async function deleteGptAccount(accountID: string) {
 
 export async function cleanInvalidGptAccounts() {
   const deleted: Account[] = [];
-  for (let batch = 0; batch < CLEANUP_MAX_BATCHES; batch += 1) {
-    const accounts = await loadInvalidAccountsBatch();
-    if (!accounts.length) break;
-    for (const account of accounts) {
-      await deleteGptAccount(account.account_id);
+  await forEachCursorPageItem<Account, ListAccountsResponse, 'accounts'>({
+    field: 'accounts',
+    maxPages: CLEANUP_MAX_BATCHES,
+    queryFn: loadInvalidAccountsBatch,
+    onItem: async (account) => {
+      await deleteGptAccount(accountCarrierID(account));
       deleted.push(account);
     }
-    if (accounts.length < CLEANUP_BATCH_LIMIT) break;
-  }
+  });
   return deleted;
 }
 
-function loadInvalidAccountsBatch() {
-  return api<Account[]>(`/api/gpt/accounts?status=DEACTIVATED&limit=${CLEANUP_BATCH_LIMIT}`);
+async function loadInvalidAccountsBatch(cursor: string) {
+  return fetchAccountList<Account, ListAccountsResponse>({ path: '/api/gpt/accounts', cursor, limit: CLEANUP_BATCH_LIMIT, params: { status: 'DEACTIVATED' } });
 }

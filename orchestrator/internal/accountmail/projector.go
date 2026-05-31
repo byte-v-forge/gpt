@@ -3,16 +3,19 @@ package accountmail
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 	"log"
 	"strings"
 	"time"
 
+	"github.com/byte-v-forge/common-lib/accountmodel"
 	"github.com/byte-v-forge/common-lib/emailx"
 	"github.com/byte-v-forge/common-lib/eventbus"
 	mailboxv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/mailbox/v1"
 	"github.com/byte-v-forge/common-lib/hotstream"
 	"google.golang.org/grpc"
 
+	"orchestrator/internal/gptaccount"
 	"orchestrator/pb"
 )
 
@@ -71,13 +74,14 @@ func (p *Projector) accountsForMessage(ctx context.Context, message *mailboxv1.E
 			return nil, err
 		}
 		for _, account := range resp.GetAccounts() {
-			if account == nil || strings.TrimSpace(account.GetAccountId()) == "" {
+			accountID := gptaccount.ID(account)
+			if account == nil || accountID == "" {
 				continue
 			}
-			if _, ok := seen[account.GetAccountId()]; ok {
+			if _, ok := seen[accountID]; ok {
 				continue
 			}
-			seen[account.GetAccountId()] = struct{}{}
+			seen[accountID] = struct{}{}
 			out = append(out, account)
 		}
 	}
@@ -86,21 +90,17 @@ func (p *Projector) accountsForMessage(ctx context.Context, message *mailboxv1.E
 
 func (p *Projector) projectAccount(ctx context.Context, account *pb.Account, message *mailboxv1.EmailInboxMessage) error {
 	state := DetectState(account, MessagesFromPublic([]*mailboxv1.EmailInboxMessage{message}))
-	update := &pb.Account{AccountId: account.GetAccountId()}
+	update := gptaccount.Patch(gptaccount.ID(account))
 	needsUpdate := false
-	if message.GetReceivedAtUnix() > 0 && message.GetReceivedAtUnix() >= account.GetMailboxLastMessageAtUnix() {
-		update.MailboxLastFetchedAtUnix = message.GetReceivedAtUnix()
-		update.MailboxLastMessageAtUnix = message.GetReceivedAtUnix()
+	if message.GetReceivedAtUnix() > 0 && message.GetReceivedAtUnix() >= gptaccount.CredentialUpdatedAtUnix(account, accountmodel.CredentialKindMailbox) {
+		gptaccount.SetCredential(update, accountmodel.CredentialKindMailbox, true, accountmodel.CredentialStatusMessageSeen, time.Unix(message.GetReceivedAtUnix(), 0).UTC())
 		needsUpdate = true
 	}
 	if state.Status != "" {
-		update.Status = state.Status
+		gptaccount.SetStatus(update, state.Status, state.ErrorMessage)
 		needsUpdate = true
 	}
-	if state.ErrorMessage != "" {
-		update.ErrorMessage = state.ErrorMessage
-	}
-	if state.Status == StatusDeactivated {
+	if state.Status == gptplugin.AccountStatusDeactivated {
 		active := false
 		update.PlusActive = &active
 	}
@@ -128,7 +128,7 @@ func (p *Projector) publishMailboxHotStream(ctx context.Context, account *pb.Acc
 	if p == nil || p.hot == nil || account == nil || message == nil {
 		return
 	}
-	accountID := strings.TrimSpace(account.GetAccountId())
+	accountID := gptaccount.ID(account)
 	if accountID == "" {
 		return
 	}
@@ -146,7 +146,7 @@ func (p *Projector) publishMailboxHotStream(ctx context.Context, account *pb.Acc
 		CorrelationID: accountID,
 		Attributes: map[string]string{
 			"account_id":                accountID,
-			"email":                     NormalizeEmail(account.GetEmail()),
+			"email":                     NormalizeEmail(gptaccount.Email(account)),
 			"mailbox_email":             NormalizeEmail(message.GetMailboxEmail()),
 			"received_at_unix":          fmt.Sprintf("%d", receivedAt),
 			"has_otp":                   fmt.Sprintf("%t", OTPCode(message) != ""),

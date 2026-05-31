@@ -3,16 +3,12 @@ import type { DashboardModuleRegistration } from '@byte-v-forge/common-ui';
 import { GptAccountsPage } from './accounts-page';
 import { OpenAIIcon } from './brand-icons';
 import { registerGptWorkflowActionRenderers } from './gpt-workflow-actions';
-import { registerGoPayWorkflowRenderers } from './gopay-workflow-renderers';
-import './gopay-actions.css';
-import './gopay-workflow.css';
 import './account-actions-layout.css';
 import './account-detail-actions.css';
 import './account-proxy-history.css';
 import './account-workflow-timeline.css';
 import './styles.css';
 
-registerGoPayWorkflowRenderers();
 registerGptWorkflowActionRenderers();
 
 const registration: DashboardModuleRegistration = {

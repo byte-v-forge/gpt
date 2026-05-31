@@ -48,26 +48,29 @@ func (c Credential) AuthConfig() map[string]string {
 }
 
 func (c Credential) ApplyChatGPTHeaders(headers http.Header, profile fingerprinthttp.Profile) {
-	profile = profile.WithDefaults(DefaultGptProfile())
-	profile.ApplyBrowserHeaders(headers)
+	profile = cleanGptProfile(profile)
+	if headers.Get("User-Agent") == "" {
+		headers.Set("User-Agent", profile.UserAgent)
+	}
 	headers.Set("Accept", "*/*")
 	headers.Set("Accept-Language", "en-US,en;q=0.9")
 	headers.Set("Origin", "https://chatgpt.com")
 	headers.Set("Referer", "https://chatgpt.com/")
 	headers.Set("Content-Type", "application/json")
-	headers.Set("oai-device-id", strings.TrimSpace(profile.DeviceID))
-	headers.Set("oai-language", "en-US")
+	headers.Del("sec-ch-ua")
+	headers.Del("sec-ch-ua-mobile")
+	headers.Del("sec-ch-ua-platform")
+	headers.Del("oai-device-id")
+	headers.Del("oai-language")
 	if c.Kind == CredentialAccessToken {
 		headers.Set("Authorization", "Bearer "+c.Token)
 		return
 	}
-	cookie := SessionCookieHeader(c.Token, profile.DeviceID)
+	cookie := SessionCookieHeader(c.Token, "")
 	if cookie != "" {
 		headers.Set("Cookie", cookie)
 	}
 }
-
-const DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36"
 
 const (
 	sessionCookieName         = "__Secure-next-auth.session-token"

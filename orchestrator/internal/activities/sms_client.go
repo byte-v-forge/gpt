@@ -23,10 +23,18 @@ type smsOfferQuery struct {
 	CountryISO2        string
 	CountryCallingCode string
 	ProviderKey        string
-}
+	ProviderKeys       []string
 
-func goPaySMSQuery() smsOfferQuery {
-	return smsOfferQuery{ApplicationKey: "gopay", CountryISO2: "ID", CountryCallingCode: "62"}
+	UseRouteRecommendation bool
+	RouteStrategy          string
+	RouteLimit             int32
+	MinAvailableCount      int32
+	MaxPriceAmount         string
+	MaxPriceCurrency       string
+	FailureScopeKey        string
+	FailureThreshold       int32
+	FailureWindowSeconds   int32
+	DisableTTLSeconds      int32
 }
 
 func (s *Server) acquireSMSNumber(ctx context.Context, query smsOfferQuery, requestID string, labels map[string]string) (activationID string, phone string, err error) {
@@ -68,6 +76,9 @@ func (s *Server) selectSMSOffer(ctx context.Context, query smsOfferQuery) (*smsv
 	if query.ApplicationKey == "" {
 		return nil, fmt.Errorf("sms application key is required")
 	}
+	if query.UseRouteRecommendation {
+		return s.recommendSMSOffer(ctx, query)
+	}
 	resp, err := s.smsCatalogClient.ListSmsPriceOffers(ctx, &smsv1.ListSmsPriceOffersRequest{
 		ApplicationKey:     query.ApplicationKey,
 		CountryIso2:        query.CountryISO2,
@@ -96,6 +107,34 @@ func (s *Server) selectSMSOffer(ctx context.Context, query smsOfferQuery) (*smsv
 		return left < right
 	})
 	return offers[0], nil
+}
+
+func (s *Server) recommendSMSOffer(ctx context.Context, query smsOfferQuery) (*smsv1.SmsPriceOffer, error) {
+	resp, err := s.smsCatalogClient.RecommendSmsRoutes(ctx, &smsv1.RecommendSmsRoutesRequest{
+		Target: &smsv1.SmsTarget{
+			ApplicationKey:     query.ApplicationKey,
+			CountryIso2:        query.CountryISO2,
+			CountryCallingCode: query.CountryCallingCode,
+		},
+		Policy:       smsRoutePolicy(query),
+		ProviderKeys: smsProviderKeys(query),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("RecommendSmsRoutes: %w", err)
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("RecommendSmsRoutes: empty response")
+	}
+	if resp.GetError() != nil {
+		return nil, fmt.Errorf("RecommendSmsRoutes: %s", smsErrorText(resp.GetError()))
+	}
+	for _, recommendation := range resp.GetRecommendations() {
+		offer := recommendation.GetOffer()
+		if smsAcquireParamsExact(offer.GetAcquireParams()) {
+			return offer, nil
+		}
+	}
+	return nil, fmt.Errorf("no recommended sms route for %s %s/%s", query.ApplicationKey, query.CountryISO2, query.CountryCallingCode)
 }
 
 func filterSMSOffers(offers []*smsv1.SmsPriceOffer, query smsOfferQuery) []*smsv1.SmsPriceOffer {
@@ -147,7 +186,96 @@ func normalizeSMSOfferQuery(query smsOfferQuery) smsOfferQuery {
 	query.CountryISO2 = strings.ToUpper(strings.TrimSpace(query.CountryISO2))
 	query.CountryCallingCode = strings.TrimPrefix(strings.TrimSpace(query.CountryCallingCode), "+")
 	query.ProviderKey = strings.TrimSpace(query.ProviderKey)
+	query.ProviderKeys = normalizeSMSProviderKeys(query.ProviderKeys)
+	query.RouteStrategy = strings.TrimSpace(query.RouteStrategy)
+	query.MaxPriceAmount = strings.TrimSpace(query.MaxPriceAmount)
+	query.MaxPriceCurrency = strings.ToUpper(strings.TrimSpace(query.MaxPriceCurrency))
+	query.FailureScopeKey = strings.TrimSpace(query.FailureScopeKey)
+	if query.RouteLimit < 0 {
+		query.RouteLimit = 0
+	}
+	if query.MinAvailableCount < 0 {
+		query.MinAvailableCount = 0
+	}
+	if query.FailureThreshold < 0 {
+		query.FailureThreshold = 0
+	}
+	if query.FailureWindowSeconds < 0 {
+		query.FailureWindowSeconds = 0
+	}
+	if query.DisableTTLSeconds < 0 {
+		query.DisableTTLSeconds = 0
+	}
 	return query
+}
+
+func smsRoutePolicy(query smsOfferQuery) *smsv1.SmsRoutePolicy {
+	policy := &smsv1.SmsRoutePolicy{
+		Strategy:          smsRouteStrategy(query.RouteStrategy),
+		Limit:             query.RouteLimit,
+		MinAvailableCount: query.MinAvailableCount,
+	}
+	if query.MaxPriceAmount != "" {
+		policy.MaxPrice = &smsv1.DecimalMoney{
+			AmountDecimal: query.MaxPriceAmount,
+			CurrencyCode:  query.MaxPriceCurrency,
+		}
+	}
+	if smsRouteFailurePolicyConfigured(query) {
+		policy.FailurePolicy = &smsv1.SmsRouteFailurePolicy{
+			ScopeKey:             query.FailureScopeKey,
+			FailureThreshold:     query.FailureThreshold,
+			FailureWindowSeconds: query.FailureWindowSeconds,
+			DisableTtlSeconds:    query.DisableTTLSeconds,
+		}
+	}
+	return policy
+}
+
+func smsRouteStrategy(value string) smsv1.SmsRouteStrategy {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "lowest_price", "lowest-price", "price", "cheap", "cheapest":
+		return smsv1.SmsRouteStrategy_SMS_ROUTE_STRATEGY_LOWEST_PRICE
+	case "most_available", "most-available", "available", "availability", "inventory", "stock":
+		return smsv1.SmsRouteStrategy_SMS_ROUTE_STRATEGY_MOST_AVAILABLE
+	case "balanced", "balance":
+		return smsv1.SmsRouteStrategy_SMS_ROUTE_STRATEGY_BALANCED
+	default:
+		return smsv1.SmsRouteStrategy_SMS_ROUTE_STRATEGY_LOWEST_PRICE
+	}
+}
+
+func smsRouteFailurePolicyConfigured(query smsOfferQuery) bool {
+	return query.FailureScopeKey != "" ||
+		query.FailureThreshold > 0 ||
+		query.FailureWindowSeconds > 0 ||
+		query.DisableTTLSeconds > 0
+}
+
+func smsProviderKeys(query smsOfferQuery) []string {
+	keys := make([]string, 0, len(query.ProviderKeys)+1)
+	if query.ProviderKey != "" {
+		keys = append(keys, query.ProviderKey)
+	}
+	keys = append(keys, query.ProviderKeys...)
+	return normalizeSMSProviderKeys(keys)
+}
+
+func normalizeSMSProviderKeys(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, value := range values {
+		key := strings.ToLower(strings.TrimSpace(value))
+		if key == "" || seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, key)
+	}
+	return out
 }
 
 func offerPriceUSD(offer *smsv1.SmsPriceOffer) float64 {
@@ -213,10 +341,6 @@ func smsActivationPhone(activation *smsv1.SmsOrder) string {
 		phone = activation.GetPhoneNumber().GetNationalNumber()
 	}
 	return strings.TrimSpace(phone)
-}
-
-func (s *Server) waitSMSCode(ctx context.Context, activationID string, timeoutSeconds int32) (string, error) {
-	return s.waitSMSCodeIssuedAfter(ctx, activationID, timeoutSeconds, 0)
 }
 
 func (s *Server) waitSMSCodeIssuedAfter(ctx context.Context, activationID string, timeoutSeconds int32, issuedAfterUnix int64) (string, error) {

@@ -3,9 +3,8 @@ package activities
 import (
 	"context"
 	"fmt"
+	"orchestrator/internal/gptaccount"
 	"strings"
-
-	"github.com/byte-v-forge/common-lib/fingerprinthttp"
 
 	"orchestrator/internal/accountfingerprint"
 	"orchestrator/pb"
@@ -35,7 +34,7 @@ func (s *Server) generateAccountFingerprint(ctx context.Context, accountID strin
 
 func (s *Server) browserAuthConfigForAccount(ctx context.Context, account *pb.Account) (BrowserAuthConfig, error) {
 	cfg := s.browserAuthSettings(ctx)
-	profile, err := s.accountFingerprint(ctx, account.GetAccountId())
+	profile, err := s.accountFingerprint(ctx, gptaccount.ID(account))
 	if err != nil {
 		return cfg, err
 	}
@@ -51,7 +50,7 @@ func (s *Server) browserAuthConfigForAccount(ctx context.Context, account *pb.Ac
 	return cfg, nil
 }
 
-func (s *Server) newAccountGptClient(ctx context.Context, accountID string, cfg CodexOAuthConfig, state *codexOAuthProtocolState) (*GptClient, error) {
+func (s *Server) newAccountGptClient(ctx context.Context, accountID string, cfg CodexOAuthConfig, state *pb.CodexOAuthProtocolState) (*GptClient, error) {
 	profile := codexOAuthProtocolDefaultProfile(cfg)
 	if strings.TrimSpace(accountID) != "" {
 		accountProfile, err := s.accountFingerprint(ctx, accountID)
@@ -63,19 +62,10 @@ func (s *Server) newAccountGptClient(ctx context.Context, accountID string, cfg 
 	return newGptClient(cfg, state, profile)
 }
 
-func codexOAuthProtocolProfileFromAccount(profile accountfingerprint.Profile, cfg CodexOAuthConfig) fingerprinthttp.Profile {
+func codexOAuthProtocolProfileFromAccount(profile accountfingerprint.Profile, cfg CodexOAuthConfig) gptProtocolHTTPProfile {
 	cfg = cfg.withDefaults()
 	fingerprint := profile.Fingerprint()
-	return fingerprinthttp.Profile{
-		ProxyURL:       cfg.ProtocolProxyURL,
-		TLSProfileName: fingerprint.TLSProfileName,
-		UserAgent:      fingerprint.UserAgent,
-		SecCHUA:        fingerprint.SecCHUA,
-		SecCHPlatform:  fingerprint.SecCHPlatform,
-		AcceptLanguage: codexOAuthProtocolAcceptLanguage,
-		Language:       codexOAuthProtocolLanguage,
-		DeviceID:       fingerprint.DeviceID,
-	}
+	return gptProtocolHTTPProfile{ProxyURL: cfg.ProtocolProxyURL, TLSProfileName: fingerprint.TLSProfileName}
 }
 
 func codexOAuthConfigWithInputProxy(cfg CodexOAuthConfig, input ProtocolAuthStartInput) CodexOAuthConfig {

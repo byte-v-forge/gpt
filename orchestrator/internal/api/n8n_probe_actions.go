@@ -3,342 +3,339 @@ package api
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
 	"orchestrator/internal/accountauth"
 	"orchestrator/internal/chatgptauth"
-	"orchestrator/internal/jobstatus"
+	"orchestrator/internal/contracts"
+	"orchestrator/internal/gptaccount"
 	"orchestrator/pb"
 )
 
-type N8NProbeTokenResult struct {
-	JobID             string         `json:"job_id"`
-	AccountID         string         `json:"account_id"`
-	N8NExecutionID    string         `json:"n8n_execution_id,omitempty"`
-	Step              string         `json:"step"`
-	TokenValid        bool           `json:"token_valid"`
-	RequiresLogin     bool           `json:"requires_login"`
-	AccessTokenCached bool           `json:"access_token_cached"`
-	ExpiresAtUnix     int64          `json:"expires_at_unix,omitempty"`
-	TTLSeconds        int64          `json:"ttl_seconds,omitempty"`
-	Reason            string         `json:"reason,omitempty"`
-	ProxyURL          string         `json:"proxy_url,omitempty"`
-	Account           map[string]any `json:"account"`
-}
-
-type N8NProbeStepResult struct {
-	JobID          string         `json:"job_id"`
-	AccountID      string         `json:"account_id"`
-	N8NExecutionID string         `json:"n8n_execution_id,omitempty"`
-	Step           string         `json:"step"`
-	Success        bool           `json:"success"`
-	Data           map[string]any `json:"data"`
-}
-
-type N8NProbeCompleteInput struct {
-	JobID          string         `json:"job_id"`
-	AccountID      string         `json:"account_id"`
-	N8NExecutionID string         `json:"n8n_execution_id"`
-	PlusTrial      map[string]any `json:"plus_trial"`
-	Tier           map[string]any `json:"tier"`
-}
-
-type N8NProbeCompleteResult struct {
-	JobID          string         `json:"job_id"`
-	AccountID      string         `json:"account_id"`
-	N8NExecutionID string         `json:"n8n_execution_id,omitempty"`
-	Action         string         `json:"action"`
-	Started        bool           `json:"started"`
-	Success        bool           `json:"success"`
-	ErrorMessage   string         `json:"error_message,omitempty"`
-	Result         map[string]any `json:"result"`
-}
-
-type N8NProbeFailureResult struct {
-	JobID          string         `json:"job_id"`
-	AccountID      string         `json:"account_id"`
-	N8NExecutionID string         `json:"n8n_execution_id,omitempty"`
-	Action         string         `json:"action"`
-	Started        bool           `json:"started"`
-	Success        bool           `json:"success"`
-	ErrorMessage   string         `json:"error_message"`
-	Result         map[string]any `json:"result"`
+type chatGPTAccessTokenFetchResult struct {
+	AccessToken     string
+	ErrorMessage    string
+	CredentialError bool
 }
 
 func (s *Server) StartN8NProbeAccount(ctx context.Context, accountID string) (*pb.ProbeAccountResponse, error) {
-	accountID = strings.TrimSpace(accountID)
-	if accountID == "" {
-		return nil, fmt.Errorf("account_id is required")
-	}
-	account, err := s.activities.ResolveAccountFromJobActivity(ctx, pb.ResolveAccountInput{AccountId: accountID})
+	return s.startN8NProbeJob(ctx, n8nProbeAccountProfile(), accountID)
+}
+
+func (s *Server) CheckN8NProbeAuthEdge(ctx context.Context, req *pb.N8NDynamicProxyCheckRequest) (any, error) {
+	scope, err := s.bindN8NProbeScope(ctx, req.GetJobId(), req.GetAccountId(), req.GetN8NExecutionId(), req.GetProxyUrl())
 	if err != nil {
 		return nil, err
 	}
-	accountID = strings.TrimSpace(account.GetAccountId())
-	if accountID == "" {
-		return nil, fmt.Errorf("account not found")
+	profile := n8nProbeAccountProfile()
+	target := profile.Proxy.normalized().AuthEdgeCheckTarget
+	data := n8nAuthEdgeBaseData(scope.n8nActionScope, target)
+	result := func(success bool) *pb.N8NDynamicProxyResult {
+		return n8nDynamicProxyAuthEdgeResult(scope.n8nActionScope, scope.ProxyURL, success, data)
 	}
-	jobID := uuid.NewString()
-	if _, err := s.jobStore.CreateWithID(ctx, jobID, accountID, actionProbeAccount, map[string]string{"account_id": accountID, "engine": "n8n"}); err != nil {
+	if scope.ProxyURL == "" {
+		n8nAuthEdgeOutcome(data, false, target, "proxy url is required")
+		return result(false), nil
+	}
+	if s == nil || s.runtimeSecrets == nil || s.paymentClient == nil {
+		n8nAuthEdgeOutcome(data, false, target, "probe auth edge check is not configured")
+		return result(false), nil
+	}
+	accessToken, _, err := accountauth.LoadChatGPTAccessToken(ctx, s.runtimeSecrets, scope.AccountID)
+	if err != nil {
 		return nil, err
 	}
-	return &pb.ProbeAccountResponse{JobId: jobID, Started: true}, nil
+	if ttl, expiresAt, ok := chatgptauth.AccessTokenTTL(accessToken, time.Now()); ok && ttl > 0 {
+		credential, err := s.paymentCredentialWithProxy(ctx, scope.AccountID, "", accessToken, scope.ProxyURL)
+		if err != nil {
+			return nil, err
+		}
+		probe, err := s.paymentClient.ProbeTier(ctx, &pb.ProbeTierPaymentRequest{Credential: credential})
+		if err == nil && probe != nil && probe.GetSuccess() {
+			n8nAuthEdgeOutcome(data, true, n8nAuthEdgeCheckTargetAccessToken, "")
+			data.AccessTokenCached = protoBool(true)
+			data.AccessTokenExpiresAtUnix = expiresAt
+			data.AccessTokenTtlSeconds = int64(ttl.Seconds())
+			return result(true), nil
+		}
+		message := "chatgpt access token edge check failed"
+		if err != nil {
+			message = err.Error()
+		} else if probe != nil && strings.TrimSpace(probe.GetErrorMessage()) != "" {
+			message = probe.GetErrorMessage()
+		}
+		n8nAuthEdgeOutcome(data, false, n8nAuthEdgeCheckTargetAccessToken, message)
+		return result(false), nil
+	}
+	sessionToken, _, err := accountauth.LoadChatGPTSessionToken(ctx, s.runtimeSecrets, scope.AccountID)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(sessionToken) == "" {
+		n8nAuthEdgeOutcome(data, false, target, "session_token is required for checkout preflight")
+		return result(false), nil
+	}
+	fetched, err := s.fetchAndCacheChatGPTAccessToken(ctx, scope.AccountID, sessionToken, scope.ProxyURL)
+	if err != nil {
+		return nil, err
+	}
+	if fetched.AccessToken == "" {
+		message := firstNonEmpty(fetched.ErrorMessage, "chatgpt auth session edge check failed")
+		n8nAuthEdgeOutcome(data, false, target, message)
+		return result(false), nil
+	}
+	n8nAuthEdgeOutcome(data, true, target, "")
+	data.AccessTokenCached = protoBool(true)
+	return result(true), nil
 }
 
-func (s *Server) CheckN8NProbeToken(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
-	jobID = strings.TrimSpace(jobID)
-	accountID = strings.TrimSpace(accountID)
-	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
-	proxyURL = strings.TrimSpace(proxyURL)
-	if jobID == "" || accountID == "" {
-		return nil, fmt.Errorf("job_id and account_id are required")
-	}
-	if err := s.bindN8NProbeExecution(ctx, jobID, n8nExecutionID); err != nil {
+func (s *Server) CheckN8NProbeToken(ctx context.Context, req *pb.N8NDynamicProxyCheckRequest) (any, error) {
+	scope, err := s.bindN8NProbeScope(ctx, req.GetJobId(), req.GetAccountId(), req.GetN8NExecutionId(), req.GetProxyUrl())
+	if err != nil {
 		return nil, err
 	}
-	accountResp, err := s.accountClient.GetAccount(ctx, &pb.GetAccountRequest{AccountId: accountID})
+	accountResp, err := s.accountClient.GetAccount(ctx, &pb.GetAccountRequest{AccountId: scope.AccountID})
 	if err != nil {
 		return nil, err
 	}
 	account := accountResp.GetAccount()
-	if account == nil || strings.TrimSpace(account.GetAccountId()) == "" {
+	if account == nil || gptaccount.ID(account) == "" {
 		return nil, fmt.Errorf("account not found")
 	}
-	result := &N8NProbeTokenResult{
-		JobID:          jobID,
-		AccountID:      account.GetAccountId(),
-		N8NExecutionID: n8nExecutionID,
-		Step:           "check_token",
-		ProxyURL:       proxyURL,
+	data := &pb.N8NProbeTokenData{
+		AccountId:      scope.AccountID,
+		N8NExecutionId: scope.N8NExecutionID,
+		ProxyUrl:       scope.ProxyURL,
 		Account: probeAccountFacts(pb.AccountRef{
-			AccountId:         account.GetAccountId(),
+			AccountId:         gptaccount.ID(account),
 			PlusTrialKnown:    account.PlusTrialEligible != nil,
 			PlusTrialEligible: account.GetPlusTrialEligible(),
 			PlusActive:        account.GetPlusActive(),
 			Tier:              account.GetTier(),
 		}),
 	}
+	result := func(tokenValid bool) *pb.N8NActionStepResult {
+		data.TokenValid = protoBool(tokenValid)
+		return scope.stepResultMessage(n8nProbeAccountProfile().TokenStep, tokenValid, data)
+	}
 	if s == nil || s.runtimeSecrets == nil {
 		return nil, fmt.Errorf("runtime secret store is not configured")
 	}
-	cached, found, err := accountauth.LoadChatGPTAccessToken(ctx, s.runtimeSecrets, accountID)
+	cached, err := accountauth.LoadChatGPTAccessTokenSnapshot(ctx, s.runtimeSecrets, scope.AccountID)
 	if err != nil {
 		return nil, err
 	}
-	if found && strings.TrimSpace(cached) != "" {
-		result.TokenValid = true
-		result.AccessTokenCached = true
-		return result, nil
+	if cached.Present && strings.TrimSpace(cached.Value) != "" {
+		data.AccessTokenCached = protoBool(true)
+		data.RequiresLogin = protoBool(false)
+		data.ExpiresAtUnix = cached.ExpiresAtUnix
+		if ttl := time.Until(time.Unix(cached.ExpiresAtUnix, 0)); ttl > 0 {
+			data.TtlSeconds = int64(ttl.Seconds())
+		}
+		return result(true), nil
 	}
-	sessionToken, _, err := accountauth.LoadChatGPTSessionToken(ctx, s.runtimeSecrets, accountID)
+	sessionToken, _, err := accountauth.LoadChatGPTSessionToken(ctx, s.runtimeSecrets, scope.AccountID)
 	if err != nil {
 		return nil, err
 	}
 	if sessionToken == "" {
-		result.RequiresLogin = true
-		result.Reason = "session_token_missing"
-		return result, nil
+		data.RequiresLogin = protoBool(true)
+		data.Reason = "session_token_missing"
+		return result(false), nil
 	}
 	if s.paymentClient == nil {
 		return nil, fmt.Errorf("payment service is not configured")
 	}
-	credential, err := s.paymentCredentialWithProxy(ctx, accountID, sessionToken, "", proxyURL)
+	fetched, err := s.fetchAndCacheChatGPTAccessToken(ctx, scope.AccountID, sessionToken, scope.ProxyURL)
 	if err != nil {
-		result.RequiresLogin = true
-		result.Reason = "account_fingerprint_missing"
-		return result, nil
+		if !fetched.CredentialError {
+			return nil, err
+		}
+		data.RequiresLogin = protoBool(true)
+		data.Reason = "account_fingerprint_missing"
+		return result(false), nil
 	}
-	fetched, err := s.paymentClient.FetchAccessToken(ctx, &pb.FetchAccessTokenPaymentRequest{Credential: credential})
-	if err != nil || fetched == nil || !fetched.GetSuccess() || strings.TrimSpace(fetched.GetAccessToken()) == "" {
-		result.RequiresLogin = true
-		result.Reason = "access_token_fetch_failed"
-		return result, nil
+	if fetched.AccessToken == "" {
+		data.RequiresLogin = protoBool(true)
+		data.Reason = "access_token_fetch_failed"
+		return result(false), nil
 	}
-	accessToken := fetched.GetAccessToken()
+	accessToken := fetched.AccessToken
 	ttl, expiresAt, ok := chatgptauth.AccessTokenTTL(accessToken, time.Now())
 	if !ok {
-		result.RequiresLogin = true
-		result.ExpiresAtUnix = expiresAt
-		result.Reason = "access_token_expired"
-		return result, nil
+		data.RequiresLogin = protoBool(true)
+		data.ExpiresAtUnix = expiresAt
+		data.Reason = "access_token_expired"
+		return result(false), nil
+	}
+	data.RequiresLogin = protoBool(false)
+	data.AccessTokenCached = protoBool(true)
+	data.ExpiresAtUnix = expiresAt
+	data.TtlSeconds = int64(ttl.Seconds())
+	return result(true), nil
+}
+
+func (s *Server) fetchAndCacheChatGPTAccessToken(ctx context.Context, accountID string, sessionToken string, proxyURL string) (chatGPTAccessTokenFetchResult, error) {
+	credential, err := s.paymentCredentialWithProxy(ctx, accountID, sessionToken, "", proxyURL)
+	if err != nil {
+		return chatGPTAccessTokenFetchResult{CredentialError: true}, err
+	}
+	fetched, err := s.paymentClient.FetchAccessToken(ctx, &pb.FetchAccessTokenPaymentRequest{Credential: credential})
+	if err != nil {
+		return chatGPTAccessTokenFetchResult{ErrorMessage: err.Error()}, nil
+	}
+	if fetched == nil {
+		return chatGPTAccessTokenFetchResult{ErrorMessage: "chatgpt auth session edge check failed"}, nil
+	}
+	accessToken := strings.TrimSpace(fetched.GetAccessToken())
+	if !fetched.GetSuccess() || accessToken == "" {
+		return chatGPTAccessTokenFetchResult{
+			ErrorMessage: firstNonEmpty(fetched.GetErrorMessage(), "chatgpt auth session edge check failed"),
+		}, nil
 	}
 	if err := accountauth.SaveChatGPTAccessToken(ctx, s.runtimeSecrets, accountID, accessToken); err != nil {
-		return nil, err
+		return chatGPTAccessTokenFetchResult{AccessToken: accessToken}, err
 	}
-	result.TokenValid = true
-	result.AccessTokenCached = true
-	result.ExpiresAtUnix = expiresAt
-	result.TTLSeconds = int64(ttl.Seconds())
-	return result, nil
+	return chatGPTAccessTokenFetchResult{AccessToken: accessToken}, nil
 }
 
-func (s *Server) ProbeN8NPlusTrial(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
-	jobID = strings.TrimSpace(jobID)
-	accountID = strings.TrimSpace(accountID)
-	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
-	proxyURL = strings.TrimSpace(proxyURL)
-	if jobID == "" || accountID == "" {
-		return nil, fmt.Errorf("job_id and account_id are required")
-	}
-	if err := s.bindN8NProbeExecution(ctx, jobID, n8nExecutionID); err != nil {
-		return nil, err
-	}
-	out, err := s.activities.ProbePlusTrialAtomicActivity(ctx, pb.ProbePlusTrialActivityInput{JobId: jobID, AccountId: accountID, ProxyUrl: proxyURL})
-	result := &N8NProbeStepResult{
-		JobID:          jobID,
-		AccountID:      accountID,
-		N8NExecutionID: n8nExecutionID,
-		Step:           stepProbePlusTrial,
-		Success:        out.GetSuccess(),
-		Data:           structMap(out.GetData()),
-	}
+func (s *Server) ProbeN8NPlusTrial(ctx context.Context, req *pb.N8NDynamicProxyCheckRequest) (any, error) {
+	return s.runN8NProbeAtomicStep(ctx, req.GetJobId(), req.GetAccountId(), req.GetN8NExecutionId(), req.GetProxyUrl(), contracts.StepProbePlusTrial, s.probePlusTrialAtomic)
+}
+
+func (s *Server) ProbeN8NTier(ctx context.Context, req *pb.N8NDynamicProxyCheckRequest) (any, error) {
+	return s.runN8NProbeAtomicStep(ctx, req.GetJobId(), req.GetAccountId(), req.GetN8NExecutionId(), req.GetProxyUrl(), contracts.StepProbeTier, s.probeTierAtomic)
+}
+
+func (s *Server) FailN8NProbeAccount(ctx context.Context, req *pb.N8NProbeFailRequest) (any, error) {
+	scope, err := s.bindN8NProbeScope(ctx, req.GetJobId(), req.GetAccountId(), req.GetN8NExecutionId(), "")
 	if err != nil {
-		return result, err
-	}
-	return result, nil
-}
-
-func (s *Server) ProbeN8NTier(ctx context.Context, jobID string, accountID string, n8nExecutionID string, proxyURL string) (any, error) {
-	jobID = strings.TrimSpace(jobID)
-	accountID = strings.TrimSpace(accountID)
-	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
-	proxyURL = strings.TrimSpace(proxyURL)
-	if jobID == "" || accountID == "" {
-		return nil, fmt.Errorf("job_id and account_id are required")
-	}
-	if err := s.bindN8NProbeExecution(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
-	out, err := s.activities.ProbeTierAtomicActivity(ctx, pb.ProbeTierActivityInput{JobId: jobID, AccountId: accountID, ProxyUrl: proxyURL})
-	result := &N8NProbeStepResult{
-		JobID:          jobID,
-		AccountID:      accountID,
-		N8NExecutionID: n8nExecutionID,
-		Step:           stepProbeTier,
-		Success:        out.GetSuccess(),
-		Data:           structMap(out.GetData()),
-	}
+	return s.failStoredN8NActionMessage(ctx, n8nProbeAccountProfile().Failure, scope.JobID, scope.AccountID, scope.N8NExecutionID, req.GetStep(), req.GetErrorMessage(), n8nProbeFailureData(scope, req))
+}
+
+func (s *Server) CompleteN8NProbeAccount(ctx context.Context, req *pb.N8NProbeCompleteRequest) (any, error) {
+	scope, err := s.bindN8NProbeScope(ctx, req.GetJobId(), req.GetAccountId(), req.GetN8NExecutionId(), "")
 	if err != nil {
-		return result, err
-	}
-	return result, nil
-}
-
-func (s *Server) FailN8NProbeAccount(ctx context.Context, jobID string, accountID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error) {
-	jobID = strings.TrimSpace(jobID)
-	accountID = strings.TrimSpace(accountID)
-	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
-	errorMessage = strings.TrimSpace(errorMessage)
-	if jobID == "" || accountID == "" {
-		return nil, fmt.Errorf("job_id and account_id are required")
-	}
-	if err := s.bindN8NProbeExecution(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
-	if errorMessage == "" {
-		errorMessage = "probe account failed"
+	plusTrial := nonNilProbePlusTrial(req.GetPlusTrial())
+	tier := nonNilProbeTier(req.GetTier())
+	resultData := &pb.N8NProbeCompleteData{
+		AccountId:      scope.AccountID,
+		N8NExecutionId: scope.N8NExecutionID,
+		ProbePlusTrial: plusTrial,
+		ProbeTier:      tier,
 	}
-	result := map[string]any{
-		"account_id":       accountID,
-		"n8n_execution_id": n8nExecutionID,
-		"failure":          data,
-	}
-	if err := s.activities.MarkJobFailedActivity(ctx, pb.JobFailureInput{
-		JobId:        jobID,
-		StepName:     "check_token",
-		Status:       jobstatus.FailedRecoverable,
-		Recoverable:  true,
-		Retryable:    false,
-		ErrorMessage: errorMessage,
-		Result:       structData(result),
-	}); err != nil {
+	accountUpdated, err := s.applyN8NProbeAccountState(ctx, scope.AccountID, plusTrial, tier)
+	if err != nil {
+		resultData.AccountUpdateError = err.Error()
 		return nil, err
 	}
-	return &N8NProbeFailureResult{
-		JobID:          jobID,
-		AccountID:      accountID,
-		N8NExecutionID: n8nExecutionID,
-		Action:         actionProbeAccount,
-		Started:        true,
-		Success:        false,
-		ErrorMessage:   errorMessage,
-		Result:         result,
-	}, nil
-}
-
-func (s *Server) CompleteN8NProbeAccount(ctx context.Context, jobID string, accountID string, n8nExecutionID string, plusTrial map[string]any, tier map[string]any) (any, error) {
-	input := N8NProbeCompleteInput{JobID: jobID, AccountID: accountID, N8NExecutionID: n8nExecutionID, PlusTrial: plusTrial, Tier: tier}
-	jobID = strings.TrimSpace(input.JobID)
-	accountID = strings.TrimSpace(input.AccountID)
-	n8nExecutionID = strings.TrimSpace(input.N8NExecutionID)
-	if jobID == "" || accountID == "" {
-		return nil, fmt.Errorf("job_id and account_id are required")
-	}
-	if err := s.bindN8NProbeExecution(ctx, jobID, n8nExecutionID); err != nil {
+	resultData.AccountUpdated = protoBool(accountUpdated)
+	if err := s.storeN8NActionSuccessMessage(ctx, scope.JobID, resultData); err != nil {
 		return nil, err
 	}
-	result := map[string]any{
-		"account_id":       accountID,
-		"n8n_execution_id": n8nExecutionID,
-		"probe_plus_trial": nestedData(input.PlusTrial),
-		"probe_tier":       nestedData(input.Tier),
-	}
-	if err := s.activities.MarkJobSucceededActivity(ctx, pb.JobSuccessInput{JobId: jobID, Result: structData(result)}); err != nil {
-		return nil, err
-	}
-	success := truthy(input.PlusTrial["success"]) && truthy(input.Tier["success"])
+	success := plusTrial.GetSuccess() && tier.GetSuccess()
 	message := ""
 	if !success {
 		message = "probe completed with unsuccessful result"
 	}
-	return &N8NProbeCompleteResult{
-		JobID:          jobID,
-		AccountID:      accountID,
-		N8NExecutionID: n8nExecutionID,
-		Action:         actionProbeAccount,
-		Started:        true,
-		Success:        success,
-		ErrorMessage:   message,
-		Result:         result,
-	}, nil
+	return n8nActionCompleteOutcomeMessage(scope.JobID, scope.AccountID, scope.N8NExecutionID, n8nProbeAccountProfile().Start.Action, true, success, message, resultData), nil
 }
 
-func probeAccountFacts(account pb.AccountRef) map[string]any {
-	return map[string]any{
-		"account_id":               account.GetAccountId(),
-		"plus_trial_known":         account.GetPlusTrialKnown(),
-		"plus_trial_already_known": account.GetPlusTrialKnown(),
-		"plus_trial_eligible":      account.GetPlusTrialEligible(),
-		"tier":                     account.GetTier(),
-		"plus_active":              account.GetPlusActive(),
+func nonNilProbePlusTrial(data *pb.ActivityProbePlusTrialStepData) *pb.ActivityProbePlusTrialStepData {
+	if data == nil {
+		return &pb.ActivityProbePlusTrialStepData{}
+	}
+	return data
+}
+
+func nonNilProbeTier(data *pb.ActivityProbeTierStepData) *pb.ActivityProbeTierStepData {
+	if data == nil {
+		return &pb.ActivityProbeTierStepData{}
+	}
+	return data
+}
+
+func n8nProbeFailureData(scope n8nProbeScope, req *pb.N8NProbeFailRequest) *pb.N8NProbeTokenData {
+	data := req.GetData()
+	if data == nil {
+		data = &pb.N8NProbeTokenData{}
+	}
+	data.AccountId = strings.TrimSpace(scope.AccountID)
+	data.N8NExecutionId = strings.TrimSpace(scope.N8NExecutionID)
+	if strings.TrimSpace(data.GetReason()) == "" {
+		data.Reason = firstNonEmpty(req.GetErrorMessage(), req.GetStep())
+	}
+	return data
+}
+
+func (s *Server) applyN8NProbeAccountState(ctx context.Context, accountID string, plusTrial *pb.ActivityProbePlusTrialStepData, tier *pb.ActivityProbeTierStepData) (bool, error) {
+	accountID = strings.TrimSpace(accountID)
+	if accountID == "" {
+		return false, fmt.Errorf("account_id is required")
+	}
+	update := gptaccount.Patch(accountID)
+	changed := false
+	if value, ok := probeBool(plusTrial.PlusTrialEligible); ok {
+		update.PlusTrialEligible = &value
+		changed = true
+	}
+	if value, ok := probeBool(tier.PlusActive); ok {
+		update.PlusActive = &value
+		changed = true
+	} else if value, ok := probeBool(plusTrial.PlusActive); ok {
+		update.PlusActive = &value
+		changed = true
+	}
+	if value := normalizeProbeTier(firstNonEmpty(
+		tier.GetTier(),
+		tier.GetTierProbe().GetTier(),
+		plusTrial.GetTier(),
+		plusTrial.GetPaymentProbe().GetTier(),
+		plusTrial.GetPlanType(),
+		plusTrial.GetPaymentProbe().GetPlanType(),
+	)); value != "" {
+		update.Tier = value
+		changed = true
+	}
+	if update.PlusActive != nil && update.GetPlusActive() {
+		gptaccount.SetStatus(update, gptplugin.AccountStatusActivated, "")
+		changed = true
+	}
+	if !changed {
+		return false, nil
+	}
+	if s.accountClient == nil {
+		return false, fmt.Errorf("account service is not configured")
+	}
+	if _, err := s.accountClient.UpdateAccount(ctx, &pb.UpdateAccountRequest{Account: update}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func probeBool(value *bool) (bool, bool) {
+	if value == nil {
+		return false, false
+	}
+	return *value, true
+}
+
+func probeAccountFacts(account pb.AccountRef) *pb.N8NProbeAccountFacts {
+	return &pb.N8NProbeAccountFacts{
+		AccountId:         account.GetAccountId(),
+		PlusTrialKnown:    account.GetPlusTrialKnown(),
+		PlusTrialEligible: account.GetPlusTrialEligible(),
+		Tier:              account.GetTier(),
+		PlusActive:        account.GetPlusActive(),
 	}
 }
 
-func (s *Server) bindN8NProbeExecution(ctx context.Context, jobID string, executionID string) error {
-	executionID = strings.TrimSpace(executionID)
-	if executionID == "" {
-		return nil
-	}
-	return s.jobStore.BindN8NExecution(ctx, jobID, executionID)
-}
-
-func nestedData(value map[string]any) map[string]any {
-	if data, ok := value["data"].(map[string]any); ok {
-		return data
-	}
-	return value
-}
-
-func truthy(value any) bool {
-	switch typed := value.(type) {
-	case bool:
-		return typed
-	case string:
-		return strings.EqualFold(strings.TrimSpace(typed), "true")
-	default:
-		return false
-	}
+func normalizeProbeTier(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }

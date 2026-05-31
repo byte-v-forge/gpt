@@ -3,7 +3,9 @@ package activities
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 	"orchestrator/internal/accountfingerprint"
+	"orchestrator/internal/gptaccount"
 	"orchestrator/pb"
 	"strings"
 )
@@ -13,7 +15,7 @@ func boolPtr(value bool) *bool {
 }
 
 func rejectUserAlreadyExistsAccount(account *pb.Account) error {
-	if account != nil && isUserAlreadyExistsStatus(account.GetStatus()) {
+	if account != nil && isUserAlreadyExistsStatus(gptaccount.Status(account)) {
 		return fmt.Errorf("account user already exists; delete only")
 	}
 	return nil
@@ -24,27 +26,12 @@ func accountRef(account *pb.Account) AccountRef {
 		return AccountRef{}
 	}
 	return AccountRef{
-		AccountId:         account.GetAccountId(),
+		AccountId:         gptaccount.ID(account),
 		PlusTrialKnown:    account.PlusTrialEligible != nil,
 		PlusTrialEligible: account.GetPlusTrialEligible(),
 		PlusActive:        account.GetPlusActive(),
 		Tier:              normalizeTier(account.GetTier()),
 	}
-}
-
-func isFreeTrialIneligibleError(err error) bool {
-	if err == nil {
-		return false
-	}
-	text := strings.ToLower(err.Error())
-	return strings.Contains(text, "checkout amount") && strings.Contains(text, "not free-trial 0")
-}
-
-func accountEligibleForActivation(account *pb.Account) error {
-	if account == nil {
-		return fmt.Errorf("account is required")
-	}
-	return rejectUserAlreadyExistsAccount(account)
 }
 
 func (s *Server) CreateJobActivity(ctx context.Context, input CreateJobInput) error {
@@ -62,10 +49,10 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 		if err := rejectUserAlreadyExistsAccount(account); err != nil {
 			return AccountRef{}, err
 		}
-		if strings.TrimSpace(account.GetEmail()) == "" {
+		if strings.TrimSpace(gptaccount.Email(account)) == "" {
 			return AccountRef{}, fmt.Errorf("account email is required")
 		}
-		if err := s.generateAccountFingerprint(ctx, account.GetAccountId(), accountfingerprint.GenerateParams{
+		if err := s.generateAccountFingerprint(ctx, gptaccount.ID(account), accountfingerprint.GenerateParams{
 			CountryCode: spec.GetCountryCode(),
 			Region:      spec.GetRegion(),
 		}); err != nil {
@@ -83,12 +70,10 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 		}
 	}
 
-	resp, err := s.accountClient.CreateAccount(ctx, &pb.CreateAccountRequest{Account: &pb.Account{
-		AccountId: spec.GetAccountId(),
-		Email:     email,
-		Password:  spec.GetPassword(),
-		Status:    accountStatusUnregistered,
-	}})
+	resp, err := s.accountClient.CreateAccount(ctx, &pb.CreateAccountRequest{
+		Account:    gptaccount.New(spec.GetAccountId(), email, gptplugin.AccountStatusUnregistered),
+		Credential: &pb.AccountCredential{Password: spec.GetPassword()},
+	})
 	if err != nil {
 		if account, getErr := s.getAccount(ctx, spec.GetAccountId()); getErr == nil {
 			if err := rejectUserAlreadyExistsAccount(account); err != nil {
@@ -98,10 +83,10 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 		}
 		return AccountRef{}, err
 	}
-	if resp.GetAccount() == nil || resp.GetAccount().GetAccountId() == "" {
+	if resp.GetAccount() == nil || gptaccount.ID(resp.GetAccount()) == "" {
 		return AccountRef{}, fmt.Errorf("gpt-account returned empty account")
 	}
-	if err := s.generateAccountFingerprint(ctx, resp.GetAccount().GetAccountId(), accountfingerprint.GenerateParams{
+	if err := s.generateAccountFingerprint(ctx, gptaccount.ID(resp.GetAccount()), accountfingerprint.GenerateParams{
 		CountryCode: spec.GetCountryCode(),
 		Region:      spec.GetRegion(),
 	}); err != nil {

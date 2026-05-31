@@ -3,10 +3,14 @@ package activities
 import (
 	"context"
 	"fmt"
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
+	"orchestrator/internal/gptaccount"
+	"strings"
+
 	"orchestrator/db"
 	"orchestrator/internal/jobprojection"
+	"orchestrator/internal/jobstatus"
 	"orchestrator/pb"
-	"strings"
 )
 
 func (s *Server) PersistRegisteredActivity(ctx context.Context, input PersistRegisteredInput) error {
@@ -16,10 +20,8 @@ func (s *Server) PersistRegisteredActivity(ctx context.Context, input PersistReg
 	if err := s.saveChatGPTAccessToken(ctx, input.GetAccountId(), input.GetAccessToken()); err != nil {
 		return err
 	}
-	account := &pb.Account{
-		AccountId: input.GetAccountId(),
-		Status:    "REGISTERED",
-	}
+	account := gptaccount.Patch(input.GetAccountId())
+	gptaccount.SetStatus(account, gptplugin.AccountStatusRegistered, "")
 	if input.GetPlusTrialChecked() {
 		account.PlusTrialEligible = boolPtr(input.GetPlusTrialEligible())
 	}
@@ -30,13 +32,13 @@ func (s *Server) PersistRegisteredActivity(ctx context.Context, input PersistReg
 	if err != nil {
 		return err
 	}
-	email := strings.TrimSpace(registeredAccount.GetEmail())
+	email := strings.TrimSpace(gptaccount.Email(registeredAccount))
 	if email == "" {
 		return nil
 	}
 	_, err = s.accountClient.MarkGPTEmailAllocationStatus(ctx, &pb.MarkGPTEmailAllocationStatusRequest{
 		Email:  email,
-		Status: emailStatusRegistered,
+		Status: gptplugin.EmailStatusRegistered,
 	})
 	return err
 }
@@ -45,7 +47,7 @@ func (s *Server) MarkJobFailedActivity(ctx context.Context, input JobFailureInpu
 	if input.Status == "" {
 		input.Status = failedStatus(input.Recoverable, input.Retryable)
 	}
-	s.updateJob(ctx, input.GetJobId(), input.GetStatus(), input.GetErrorMessage(), protoDataMap(input.GetResult()))
+	s.updateJob(ctx, input.GetJobId(), input.GetStatus(), input.GetErrorMessage(), input.GetResult())
 	if input.GetStepName() != "" {
 		return s.markStepFailed(ctx, input)
 	}
@@ -56,7 +58,7 @@ func (s *Server) MarkJobSucceededActivity(ctx context.Context, input JobSuccessI
 	if err := s.ensureJobCanSucceed(ctx, input.GetJobId()); err != nil {
 		return err
 	}
-	s.updateJob(ctx, input.GetJobId(), statusSucceeded, "", protoDataMap(input.GetResult()))
+	s.updateJob(ctx, input.GetJobId(), jobstatus.Succeeded, "", input.GetResult())
 	return nil
 }
 
@@ -72,7 +74,7 @@ func (s *Server) markStepFailed(ctx context.Context, input JobFailureInput) erro
 		Recoverable:  input.GetRecoverable(),
 		Retryable:    input.GetRetryable(),
 		ErrorMessage: input.GetErrorMessage(),
-		Result:       protoDataMap(input.GetResult()),
+		Result:       input.GetResult(),
 	})
 }
 
@@ -102,5 +104,5 @@ func (s *Server) ensureJobCanSucceed(ctx context.Context, jobID string) error {
 
 func terminalFailureStatus(status string) bool {
 	status = strings.ToUpper(strings.TrimSpace(status))
-	return status == statusCanceled || strings.HasPrefix(status, "FAILED_")
+	return status == jobstatus.Canceled || strings.HasPrefix(status, "FAILED_")
 }

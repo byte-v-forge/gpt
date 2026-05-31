@@ -1,29 +1,23 @@
-import { Trash2, Zap } from 'lucide-react';
 import {
+  AccountCarrierList,
   RecordActionButtons,
   RecordActions,
-  RecordCard,
-  RecordIdentity,
-  RecordList,
-  RecordMain,
-  RecordTop
+  accountCarrierID,
+  accountDeleteRowAction,
+  type AccountListPagination
 } from '@byte-v-forge/common-ui';
 import type { RowActionDescriptor } from '@byte-v-forge/common-ui';
-import { maskEmail } from '@byte-v-forge/common-ui';
-import {
-  canGoPayPayment,
-  isInvalidGptAccount,
-  isUserAlreadyExistsAccount
-} from './account-utils';
+import { isInvalidGptAccount, isUserAlreadyExistsAccount } from './account-utils';
 import { accountActivationChannel, accountCodexPhoneState } from './account-job-semantics';
-import { AccountChannelTag, AccountCodexPhoneTag, AccountSignalBadge, PaymentChannelIcon } from './account-badges';
-import { GPT_ACTIONS, gptActionAvailability, type GptActionCatalog } from './action-catalog';
+import { AccountChannelTag, AccountCodexPhoneTag, AccountSignalBadge } from './account-badges';
+import type { AccountWorkflowRunner } from './account-action-specs';
+import type { GptActionCatalog } from './action-catalog';
+import { gptAccountRecord } from './account-record';
 import { AccountRowAuthGroups } from './account-row-auth-groups';
 import { OpenAIIcon } from './brand-icons';
-import { GO_PAY_PAYMENT_CHANNELS, goPayPaymentActionLabel } from './gopay-utils';
-import type { Account, ConcreteGoPayPaymentChannel, Job } from './types';
+import type { Account, Job } from './types';
 
-export function AccountTable({ accounts, jobs, selected, actionCatalog, showSecrets, runningAccountIds, runningWorkflowByAccountID, busy, onSelect, onRegisterProtocol, onGoPayPayment, onDelete }: {
+export function AccountTable({ accounts, jobs, selected, actionCatalog, showSecrets, runningAccountIds, runningWorkflowByAccountID, pagination, busy, onSelect, runWorkflow, onDelete }: {
   accounts: Account[];
   jobs: Job[];
   selected?: string;
@@ -31,87 +25,66 @@ export function AccountTable({ accounts, jobs, selected, actionCatalog, showSecr
   showSecrets: boolean;
   runningAccountIds: Set<string>;
   runningWorkflowByAccountID: Map<string, Job>;
+  pagination?: AccountListPagination;
   busy: boolean;
   onSelect: (a: Account) => void;
-  onRegisterProtocol: (a: Account) => void;
-  onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
+  runWorkflow: AccountWorkflowRunner;
   onDelete: (a: Account) => void | Promise<void>;
 }) {
+  const byID = new Map(accounts.map((account) => [accountCarrierID(account), account] as const));
   return (
-    <RecordList className="accountsList" emptyText="暂无账号。可以先创建账号，或切换为全部状态查看。">
-      {accounts.map((account) => {
-        const accountBusy = runningAccountIds.has(account.account_id);
-        const currentWorkflow = runningWorkflowByAccountID.get(account.account_id);
-        const activationChannel = accountActivationChannel(account, jobs, actionCatalog);
-        const phoneState = accountCodexPhoneState(account, jobs, actionCatalog);
-        return (
-          <RecordCard key={account.account_id} selected={selected === account.account_id} onClick={() => onSelect(account)}>
-            <RecordMain>
-              <RecordTop>
-                <AccountCardIdentity account={account} showSecrets={showSecrets} />
-                <div className="accountCardTags">
-                  <AccountSignalBadge account={account} compact />
-                  <AccountCodexPhoneTag state={phoneState} />
-                  <AccountChannelTag channel={activationChannel} />
-                </div>
-              </RecordTop>
-            </RecordMain>
-            <AccountRowActions
-              account={account}
-              actionCatalog={actionCatalog}
-              accountBusy={accountBusy}
-              currentWorkflow={currentWorkflow}
-              busy={busy}
-              onRegisterProtocol={onRegisterProtocol}
-              onGoPayPayment={onGoPayPayment}
-              onDelete={onDelete}
-            />
-          </RecordCard>
-        );
-      })}
-    </RecordList>
-  );
-}
-
-function AccountCardIdentity({ account, showSecrets }: {
-  account: Account;
-  showSecrets: boolean;
-}) {
-  const email = account.email || '-';
-  const displayEmail = showSecrets ? email : maskEmail(email);
-  return (
-    <RecordIdentity
-      icon={<OpenAIIcon size={15} />}
-      title={<span className="accountCardEmail" title={displayEmail}>{displayEmail}</span>}
+    <AccountCarrierList
+      carriers={accounts}
+      selectedID={selected}
+      emptyText="暂无账号。可以先创建账号，或切换为全部状态查看。"
+      listClassName="accountsList"
+      pagination={pagination}
+      onSelectCarrier={onSelect}
+      recordOf={(account) => gptAccountRecord(account, showSecrets)}
+      config={{
+        icon: () => <OpenAIIcon size={15} />,
+        title: (record) => <span className="accountCardEmail" title={record.display_name}>{record.display_name}</span>,
+        subtitle: () => '',
+        meta: (record) => {
+          const account = byID.get(accountCarrierID(record));
+          if (!account) return null;
+          const activationChannel = accountActivationChannel(account, jobs, actionCatalog);
+          const phoneState = accountCodexPhoneState(account, jobs, actionCatalog);
+          return (
+            <div className="accountCardTags">
+              <AccountSignalBadge account={account} compact />
+              <AccountCodexPhoneTag state={phoneState} />
+              <AccountChannelTag channel={activationChannel} />
+            </div>
+          );
+        }
+      }}
+      renderChildren={(account) => {
+        const accountBusy = runningAccountIds.has(accountCarrierID(account));
+        const currentWorkflow = runningWorkflowByAccountID.get(accountCarrierID(account));
+        return <AccountRowActions account={account} actionCatalog={actionCatalog} accountBusy={accountBusy} currentWorkflow={currentWorkflow} busy={busy} runWorkflow={runWorkflow} onDelete={onDelete} />;
+      }}
     />
   );
 }
 
-function AccountRowActions({ account, actionCatalog, accountBusy, currentWorkflow, busy, onRegisterProtocol, onGoPayPayment, onDelete }: {
+function AccountRowActions({ account, actionCatalog, accountBusy, currentWorkflow, busy, runWorkflow, onDelete }: {
   account: Account;
   actionCatalog?: GptActionCatalog;
   accountBusy: boolean;
   currentWorkflow?: Job;
   busy: boolean;
-  onRegisterProtocol: (a: Account) => void;
-  onGoPayPayment: (a: Account, channel: ConcreteGoPayPaymentChannel) => void;
+  runWorkflow: AccountWorkflowRunner;
   onDelete: (a: Account) => void | Promise<void>;
 }) {
   if (isInvalidGptAccount(account)) {
-    const actions: RowActionDescriptor[] = [{
-      label: '删除账号',
-      icon: <Trash2 size={14} />,
-      onClick: () => void onDelete(account),
-      disabled: busy,
-      kind: 'danger'
-    }];
+    const actions: RowActionDescriptor[] = [accountDeleteRowAction(() => onDelete(account), busy)];
     return (
       <RecordActions className="rowActions">
         <div className="rowActionsMain"><RecordActionButtons actions={actions} /></div>
       </RecordActions>
     );
   }
-
   if (accountBusy && currentWorkflow && !isUserAlreadyExistsAccount(account)) {
     return (
       <RecordActions className="rowActions">
@@ -119,25 +92,9 @@ function AccountRowActions({ account, actionCatalog, accountBusy, currentWorkflo
       </RecordActions>
     );
   }
-
-  const payment = gptActionAvailability(actionCatalog, GPT_ACTIONS.goPayPayment, account, 'account_row');
-  const paymentActions: RowActionDescriptor[] = GO_PAY_PAYMENT_CHANNELS.filter((channel) => channel !== 'wa' && payment.visible).map((channel) => ({
-    label: goPayPaymentActionLabel(channel),
-    icon: <span className="activationPaymentIcon"><Zap size={13} /><PaymentChannelIcon channel={channel} /></span>,
-    onClick: () => onGoPayPayment(account, channel),
-    disabled: busy || !payment.enabled || !canGoPayPayment(account),
-    kind: 'secondary' as const,
-    className: 'paymentIconAction activationAction'
-  }));
-  const leftActions = paymentActions;
   return (
     <RecordActions className="rowActions">
-      <div className="rowActionsMain splitRowActions">
-        <div className="rowActionsLeft"><RecordActionButtons actions={leftActions} /></div>
-        <div className="rowActionsRight">
-          <AccountRowAuthGroups account={account} actionCatalog={actionCatalog} busy={busy} onRegisterProtocol={onRegisterProtocol} />
-        </div>
-      </div>
+      <div className="rowActionsMain"><AccountRowAuthGroups account={account} actionCatalog={actionCatalog} busy={busy} runWorkflow={runWorkflow} /></div>
     </RecordActions>
   );
 }

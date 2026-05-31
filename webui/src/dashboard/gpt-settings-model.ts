@@ -23,7 +23,7 @@ export function formFromGPTSettings(settings: GPTSettings | undefined, schemas: 
   return {
     enabled: preflight?.enabled ?? defaultGPTSettingsForm.enabled,
     requireResidential: preflight?.require_residential ?? defaultGPTSettingsForm.requireResidential,
-    minIPPurityScore: preflight?.min_ip_purity_score || defaultGPTSettingsForm.minIPPurityScore,
+    minIPPurityScore: preflight?.min_ip_purity_score ?? defaultGPTSettingsForm.minIPPurityScore,
     cfCanaryEnabled: preflight?.cf_canary_enabled ?? defaultGPTSettingsForm.cfCanaryEnabled,
     maxProxyAttempts: preflight?.max_proxy_attempts || defaultGPTSettingsForm.maxProxyAttempts,
     pluginConfigs: pluginConfigValues(settings, schemas)
@@ -35,7 +35,7 @@ export function settingsFromForm(values: GPTSettingsForm): GPTSettings {
     proxy_preflight: {
       enabled: values.enabled,
       require_residential: values.requireResidential,
-      min_ip_purity_score: Number(values.minIPPurityScore) || defaultGPTSettingsForm.minIPPurityScore,
+      min_ip_purity_score: Number.isFinite(Number(values.minIPPurityScore)) ? Number(values.minIPPurityScore) : defaultGPTSettingsForm.minIPPurityScore,
       cf_canary_enabled: values.cfCanaryEnabled,
       max_proxy_attempts: Number(values.maxProxyAttempts) || defaultGPTSettingsForm.maxProxyAttempts,
       target_connectivity_urls: ['https://api.openai.com/v1/models']

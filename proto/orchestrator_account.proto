@@ -2,22 +2,16 @@ syntax = "proto3";
 
 package orchestrator;
 
-import "google/protobuf/struct.proto";
 import "gpt_account.proto";
+import "byte/v/forge/contracts/account/v1/account.proto";
 import "byte/v/forge/contracts/mailbox/v1/mailbox.proto";
+import "byte/v/forge/contracts/proxyruntime/v1/proxy_runtime.proto";
+import "orchestrator_activity_data.proto";
 
 option go_package = "./;pb";
 
 service AccountWorkflowService {
   rpc CreateGPTAccount(CreateGPTAccountRequest) returns (CreateGPTAccountResponse);
-  rpc RegisterAccount(RegisterAccountRequest) returns (RegisterAccountResponse);
-  rpc RegisterAccountProtocol(RegisterAccountRequest) returns (RegisterAccountResponse);
-  rpc LoginAccount(LoginAccountRequest) returns (LoginAccountResponse);
-  rpc LoginAccountProtocol(LoginAccountRequest) returns (LoginAccountResponse);
-  rpc CodexOAuth(CodexOAuthRequest) returns (CodexOAuthResponse);
-  rpc CodexOAuthProtocol(CodexOAuthRequest) returns (CodexOAuthResponse);
-  rpc CodexOAuthAddPhone(CodexOAuthAddPhoneRequest) returns (CodexOAuthAddPhoneResponse);
-  rpc CodexOAuthBatchAddPhone(CodexOAuthBatchAddPhoneRequest) returns (CodexOAuthBatchAddPhoneResponse);
   rpc FetchAccountMailbox(FetchAccountMailboxRequest) returns (FetchAccountMailboxResponse);
 }
 
@@ -92,7 +86,74 @@ message FetchAccountMailboxResponse {
   string error_message = 3;
 }
 
+message AccountFingerprintRequest {
+  string account_id = 1;
+  string country_code = 2;
+  string region = 3;
+}
 
+message AccountFingerprintResponse {
+  string account_id = 1;
+  bool generated = 2;
+  string country_code = 3;
+  string region = 4;
+  string browser_profile_template = 5;
+  string browser_family = 6;
+  string browser_major_version = 7;
+  string os_family = 8;
+  string tls_profile_family = 9;
+  string tls_fingerprint_variant = 10;
+  string locale = 11;
+  string timezone = 12;
+  string user_agent = 13;
+  string accept_language = 14;
+  string language = 15;
+  string device_id = 16;
+  int64 created_at = 17;
+  int64 updated_at = 18;
+}
+
+message UpdateAccountAuthRequest {
+  string session_token = 1;
+  string access_token = 2;
+  optional string activation_channel = 3;
+}
+
+message AccountAuthResponse {
+  reserved 1, 6, 7;
+  reserved "account_id", "session_token_present", "access_token_present";
+  string session_token = 2;
+  int64 session_token_expires_at_unix = 3;
+  string access_token = 4;
+  int64 access_token_expires_at_unix = 5;
+  byte.v.forge.contracts.account.v1.Account account = 8;
+}
+
+message AccountProxyUsage {
+  string id = 1;
+  string account_id = 2;
+  string job_id = 3;
+  string n8n_execution_id = 4;
+  string purpose = 5;
+  string proxy_url_hash = 6;
+  string session_id_hash = 7;
+  string exit_ip = 8;
+  string country_code = 9;
+  string region = 10;
+  string city = 11;
+  byte.v.forge.contracts.proxyruntime.v1.ProxyIPFraudCheck ip_fraud_check = 12;
+  byte.v.forge.contracts.proxyruntime.v1.ProxyEdgeAccessCheck edge_access_check = 13;
+  bool target_reachable = 14;
+  uint32 attempt_index = 15;
+  bool accepted = 16;
+  string error_message = 17;
+  int64 created_at = 18;
+  byte.v.forge.contracts.proxyruntime.v1.ProxyChainPlan chain = 19;
+}
+
+message ListAccountProxyUsagesResponse {
+  repeated AccountProxyUsage usages = 1;
+}
 
 message PersistRegisteredInput {
   string account_id = 1;
@@ -109,7 +170,7 @@ message RegisterActivityOutput {
   bool plus_trial_eligible = 4;
   bool plus_trial_checked = 5;
   string checkout_url = 6;
-  google.protobuf.Struct data = 7;
+  ActivityRegisterOutputData data = 7;
 }
 
 message BrowserAuthStartInput {
@@ -126,7 +187,7 @@ message BrowserAuthStartOutput {
   int64 otp_issued_after_unix = 5;
   int32 otp_timeout_seconds = 6;
   RegisterActivityOutput result = 7;
-  google.protobuf.Struct data = 8;
+  ActivityBrowserAuthStartStepData data = 8;
   int64 otp_wait_started_at_unix = 9;
   int64 otp_request_action_started_at_unix = 10;
 }
@@ -148,7 +209,7 @@ message ProtocolAuthStartOutput {
   int64 otp_issued_after_unix = 5;
   int32 otp_timeout_seconds = 6;
   RegisterActivityOutput result = 7;
-  google.protobuf.Struct data = 8;
+  ActivityProtocolAuthOutputData data = 8;
   int64 otp_wait_started_at_unix = 9;
   int64 otp_request_action_started_at_unix = 10;
 }
@@ -179,7 +240,7 @@ message BrowserAuthResendOTPOutput {
   int64 otp_issued_after_unix = 5;
   int64 otp_request_started_at_unix_ms = 6;
   int32 otp_timeout_seconds = 7;
-  google.protobuf.Struct data = 8;
+  ActivityBrowserAuthOTPRequestStepData data = 8;
 }
 
 message ProtocolAuthWaitInput {
@@ -199,7 +260,7 @@ message ProtocolAuthWaitOutput {
   int64 otp_issued_after_unix = 5;
   int32 otp_timeout_seconds = 6;
   RegisterActivityOutput result = 7;
-  google.protobuf.Struct data = 8;
+  ActivityProtocolAuthStepData data = 8;
   int64 otp_wait_started_at_unix = 9;
   int64 otp_request_action_started_at_unix = 10;
 }
@@ -226,13 +287,6 @@ message BrowserAuthCancelInput {
   string browser_session_id = 1;
   string mode = 2;
   string job_id = 3;
-}
-
-message LoginSessionActivityOutput {
-  string session_token = 1;
-  string access_token = 2;
-  string device_id = 3;
-  google.protobuf.Struct data = 4;
 }
 
 message RegisterAccountRequest {
@@ -344,7 +398,7 @@ message CodexOAuthStartBrowserOutput {
   bool success = 1;
   string error_message = 2;
   CodexOAuthBrowserSession session = 3;
-  google.protobuf.Struct data = 4;
+  ActivityCodexOAuthStepData data = 4;
   string phone_label = 5;
 }
 
@@ -366,7 +420,7 @@ message CodexOAuthSubmitEmailOTPInput {
 message CodexOAuthBrowserStageOutput {
   bool success = 1;
   string error_message = 2;
-  google.protobuf.Struct data = 3;
+  ActivityCodexOAuthStepData data = 3;
   string stage = 4;
   int64 email_otp_issued_after_unix = 5;
 }
@@ -383,7 +437,7 @@ message CodexOAuthAddPhoneBrowserInput {
 message CodexOAuthAddPhoneBrowserOutput {
   bool success = 1;
   string error_message = 2;
-  google.protobuf.Struct data = 3;
+  ActivityCodexOAuthStepData data = 3;
   bool add_phone_confirmed = 4;
   bool add_phone_required = 5;
   int32 phone_reuse_count = 6;
@@ -402,7 +456,7 @@ message CodexOAuthCompleteBrowserOutput {
   bool success = 1;
   string error_message = 2;
   string auth_secret_key = 3;
-  google.protobuf.Struct data = 4;
+  ActivityCodexOAuthStepData data = 4;
 }
 
 message CodexOAuthStopBrowserInput {

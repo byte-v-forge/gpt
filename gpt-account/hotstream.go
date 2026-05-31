@@ -6,20 +6,21 @@ import (
 	"log"
 	"time"
 
+	"github.com/byte-v-forge/common-lib/accountmodel"
 	"github.com/byte-v-forge/common-lib/eventbus"
+	accountv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/account/v1"
 	"github.com/byte-v-forge/common-lib/hotstream"
 	"github.com/byte-v-forge/common-lib/hotstreamnats"
 
 	"gpt_account/pb"
 )
 
+var gptAccountDescriptor = accountmodel.Descriptor{SourceService: "gpt-account", AccountType: "gpt", ProviderKey: "openai"}
+
 const (
-	accountHotStreamSource             = "gpt-account"
-	accountResource                    = "gpt.account"
 	accountAllocationResource          = "gpt.email_allocation"
-	accountUpdatedEvent                = "gpt.account.updated"
-	accountDeletedEvent                = "gpt.account.deleted"
 	accountEmailAllocationUpdatedEvent = "gpt.email_allocation.updated"
+	credentialKindCodexPhone           = "codex_phone"
 )
 
 func newAccountHotStream(ctx context.Context, natsURL string) (hotstream.Bus, func(), error) {
@@ -34,32 +35,35 @@ func newAccountHotStream(ctx context.Context, natsURL string) (hotstream.Bus, fu
 	return bus, bus.Close, nil
 }
 
-func (s *gptAccountServer) publishAccountHotStream(ctx context.Context, eventType string, account *pb.Account) {
-	if s == nil || s.hot == nil || account == nil {
-		return
+func gptAccountProjection(account *pb.Account) *accountv1.Account {
+	if account == nil {
+		return nil
 	}
-	updatedAt := account.GetUpdatedAt()
-	if updatedAt <= 0 {
-		updatedAt = time.Now().Unix()
+	return gptAccountDescriptor.Account(
+		gptAccountID(account),
+		accountmodel.WithEmailIdentity(gptAccountEmail(account), gptAccountEmail(account)),
+		accountmodel.WithStatus(gptAccountStatus(account)),
+		accountmodel.WithCredentials(gptCredentialStates(account)...),
+		accountmodel.WithCreatedTimestamp(account.GetAccount().GetCreatedAt()),
+		accountmodel.WithUpdatedTimestamp(account.GetAccount().GetUpdatedAt()),
+	)
+}
+
+func gptAccountStatus(account *pb.Account) *accountv1.AccountStatus {
+	return accountmodel.StatusWithError(gptAccountStatusValue(account), "", gptAccountStateErrorCode, gptAccountErrorMessage(account), false)
+}
+
+func gptCredentialStates(account *pb.Account) []*accountv1.AccountCredentialState {
+	states := []*accountv1.AccountCredentialState{}
+	if credential := accountmodel.CredentialState(account.GetAccount(), accountmodel.CredentialKindMailbox); credential != nil {
+		states = append(states, credential)
+	} else {
+		states = append(states, accountmodel.Credential(accountmodel.CredentialKindMailbox, account.GetPrimaryMailboxEmail() != "", accountmodel.CredentialStatusConfigured, time.Time{}, time.Time{}))
 	}
-	event := hotstream.NewEvent(hotstream.EventConfig{
-		EventID:       eventbus.StableEventID("gpt-account-", eventType, account.GetAccountId(), fmt.Sprintf("%d", updatedAt)),
-		EventType:     eventType,
-		SourceService: accountHotStreamSource,
-		ResourceType:  accountResource,
-		ResourceID:    account.GetAccountId(),
-		Scope:         account.GetStatus(),
-		OccurredAt:    time.Unix(updatedAt, 0),
-		CorrelationID: account.GetAccountId(),
-		Attributes: map[string]string{
-			"account_id": account.GetAccountId(),
-			"status":     account.GetStatus(),
-			"email":      account.GetEmail(),
-		},
-	})
-	if err := s.hot.Publish(context.WithoutCancel(ctx), event); err != nil {
-		log.Printf("publish account hotstream failed account=%s: %v", account.GetAccountId(), err)
+	if credential := accountmodel.CredentialState(account.GetAccount(), credentialKindCodexPhone); credential != nil {
+		states = append(states, credential)
 	}
+	return states
 }
 
 func (s *gptAccountServer) publishAllocationHotStream(ctx context.Context, allocation *pb.GPTEmailAllocation) {
@@ -73,7 +77,7 @@ func (s *gptAccountServer) publishAllocationHotStream(ctx context.Context, alloc
 	event := hotstream.NewEvent(hotstream.EventConfig{
 		EventID:       eventbus.StableEventID("gpt-email-allocation-", allocation.GetEmail(), allocation.GetStatus(), fmt.Sprintf("%d", updatedAt)),
 		EventType:     accountEmailAllocationUpdatedEvent,
-		SourceService: accountHotStreamSource,
+		SourceService: gptAccountDescriptor.SourceService,
 		ResourceType:  accountAllocationResource,
 		ResourceID:    allocation.GetEmail(),
 		Scope:         allocation.GetStatus(),

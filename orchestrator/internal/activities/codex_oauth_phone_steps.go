@@ -7,9 +7,11 @@ import (
 	"time"
 
 	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
+
+	"orchestrator/internal/channelotpwait"
 )
 
-func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Server, jobID string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, data map[string]any) (bool, error) {
+func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Server, jobID string, phone *CodexOAuthPhoneLease, cfg CodexOAuthConfig, data *codexOAuthStepData) (bool, error) {
 	if err := validateCodexOAuthSMSCountry(phone.GetCountryIso2()); err != nil {
 		return false, err
 	}
@@ -38,52 +40,52 @@ func (f *browserAuthFlow) completeCodexOAuthAddPhone(ctx context.Context, s *Ser
 	}
 	submitState := browserAuthPageStateData(results, "phone-submit-state")
 	if failure := codexOAuthPhonePageFailureState(submitState); failure != "" {
-		data["phone_validity_confirmed"] = false
-		data["phone_validity_failure"] = failure
+		data.setPhoneValidityConfirmed(false)
+		data.setPhoneValidityFailure(failure)
 		return false, browserAuthStepError(f.mode, "add_phone", failure, submitState)
 	}
 	if !browserAuthCommandSucceeded(results, "wait-phone-validity") {
 		state := "phone_otp_input_missing"
-		data["phone_validity_confirmed"] = false
-		data["phone_validity_failure"] = state
+		data.setPhoneValidityConfirmed(false)
+		data.setPhoneValidityFailure(state)
 		return false, browserAuthStepError(f.mode, "add_phone", "phone_rejected: "+state, submitState)
 	}
-	data["phone_validity_confirmed"] = true
+	data.setPhoneValidityConfirmed(true)
 	startedAt := browserAuthNetworkRequestStartedAtUnixMs(results, "wait-codex-oauth-add-phone-request")
 	if startedAt <= 0 {
 		return false, browserAuthStepError(f.mode, "add_phone", "add_phone_request_started_at_missing", submitState)
 	}
 	smsIssuedAfter := unixSecondsFromMillis(startedAt)
 	if smsIssuedAfter > 0 {
-		data["phone_otp_issued_after_unix"] = smsIssuedAfter
+		data.setPhoneOTPIssuedAfter(smsIssuedAfter)
 	}
 	if phone.GetReused() {
 		if err := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-additional-"+jobID); err != nil {
-			data["sms_request_additional_error"] = err.Error()
+			data.setSMSRequestAdditionalError(err)
 			return false, fmt.Errorf("phone_expired: request additional sms code failed: %w", err)
 		}
 	} else if err := s.markSMSMessageSent(ctx, phone.GetActivationId(), "codex-oauth-sent-"+jobID); err != nil {
-		data["sms_mark_sent_error"] = err.Error()
+		data.setSMSMarkSentError(err)
 	}
 	code, err := s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneWaitSeconds, smsIssuedAfter)
 	if err != nil {
-		data["sms_first_wait_error"] = err.Error()
+		data.setSMSFirstWaitError(err)
 		resendIssuedAfter, resendErr := f.resendCodexOAuthPhoneCode(s.browserAutomationClient, s.browserAuthConfig)
 		if resendErr != nil {
-			data["phone_resend_click_error"] = resendErr.Error()
+			data.setPhoneResendClickError(resendErr)
 		} else if resendIssuedAfter > 0 {
 			smsIssuedAfter = resendIssuedAfter
-			data["phone_otp_resend_issued_after_unix"] = resendIssuedAfter
+			data.setPhoneOTPResendIssuedAfter(resendIssuedAfter)
 		}
 		if addErr := s.requestAdditionalSMSCode(ctx, phone.GetActivationId(), "codex-oauth-resend-"+jobID); addErr != nil {
-			data["sms_resend_request_error"] = addErr.Error()
+			data.setSMSResendRequestError(addErr)
 		}
 		code, err = s.waitSMSCodeIssuedAfter(ctx, phone.GetActivationId(), cfg.PhoneWaitSeconds, smsIssuedAfter)
 		if err != nil {
 			return false, fmt.Errorf("phone_sms_timeout: %w", err)
 		}
 	}
-	data["phone_otp_received"] = true
+	data.setPhoneOTPReceived(true)
 	return true, f.submitCodexOAuthPhoneOTP(s.browserAutomationClient, s.browserAuthConfig, code)
 }
 
@@ -107,7 +109,7 @@ func (f *browserAuthFlow) resendCodexOAuthPhoneCode(client browserautomationv1.B
 func (f *browserAuthFlow) submitCodexOAuthPhoneOTP(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, code string) error {
 	results, err := f.execute(client, cfg, "codex-oauth-phone-otp", []*browserautomationv1.BrowserCommand{
 		waitForSelectorCommand("wait-phone-code", codexOAuthPhoneOTPSelector(), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 20*time.Second, false),
-		fillCommand("fill-phone-code", codexOAuthPhoneOTPSelector(), normalizeOTP(code), 10*time.Second, false),
+		fillCommand("fill-phone-code", codexOAuthPhoneOTPSelector(), channelotpwait.NormalizeCode(code), 10*time.Second, false),
 		clickCommand("click-phone-code-continue", browserAuthEmailSubmitSelector(), 10*time.Second, false),
 		waitForSelectorGroupCommand("wait-post-phone", codexOAuthStageSelectorGroup(60*time.Second), browserautomationv1.BrowserSelectorState_BROWSER_SELECTOR_STATE_VISIBLE, 60*time.Second, true),
 		getPageStateCommand("phone-otp-state", true, true, false, 5*time.Second),

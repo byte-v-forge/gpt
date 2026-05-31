@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"orchestrator/internal/contracts"
 	"orchestrator/internal/gptsettings"
 )
 
@@ -13,7 +14,6 @@ const (
 	defaultCodexOAuthAuthURL                 = "https://auth.openai.com/oauth/authorize"
 	defaultCodexOAuthTokenURL                = "https://auth.openai.com/oauth/token"
 	defaultCodexOAuthScope                   = "openid profile email offline_access api.connectors.read api.connectors.invoke"
-	defaultCodexOAuthPhoneLabel              = "codex-oauth-add-phone"
 	defaultCodexOAuthPhoneProfileKey         = "openai-th"
 	defaultCodexOAuthPhoneCountryISO2        = "TH"
 	defaultCodexOAuthPhoneCountryCallingCode = "66"
@@ -70,7 +70,7 @@ func (c CodexOAuthConfig) withDefaults() CodexOAuthConfig {
 		c.Scope = defaultCodexOAuthScope
 	}
 	if strings.TrimSpace(c.PhoneLabel) == "" {
-		c.PhoneLabel = defaultCodexOAuthPhoneLabel
+		c.PhoneLabel = contracts.WorkflowLabelForAction(contracts.ActionCodexOAuthAddPhone)
 	}
 	if strings.TrimSpace(c.PhoneProfileKey) == "" {
 		c.PhoneProfileKey = defaultCodexOAuthPhoneProfileKey

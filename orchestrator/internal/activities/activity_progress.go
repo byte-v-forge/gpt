@@ -3,22 +3,19 @@ package activities
 import (
 	"context"
 	"time"
+
+	"google.golang.org/protobuf/proto"
+
+	"orchestrator/internal/protowrap"
+	"orchestrator/pb"
 )
 
 const activityHeartbeatInterval = 5 * time.Second
 
-type ActivityProgress struct {
-	JobID   string         `json:"job_id,omitempty"`
-	Step    string         `json:"step,omitempty"`
-	Message string         `json:"message,omitempty"`
-	Fields  map[string]any `json:"fields,omitempty"`
-	AtUnix  int64          `json:"at_unix,omitempty"`
+func recordActivityProgress(ctx context.Context, jobID, step, message string, fields proto.Message) {
 }
 
-func recordActivityProgress(ctx context.Context, jobID, step, message string, fields map[string]any) {
-}
-
-func recordActivityProgressEvery(ctx context.Context, last *time.Time, jobID, step, message string, fields map[string]any) {
+func recordActivityProgressEvery(ctx context.Context, last *time.Time, jobID, step, message string, fields proto.Message) {
 	if last != nil && !last.IsZero() && time.Since(*last) < activityHeartbeatInterval {
 		return
 	}
@@ -28,9 +25,9 @@ func recordActivityProgressEvery(ctx context.Context, last *time.Time, jobID, st
 	}
 }
 
-func startActivityHeartbeat(ctx context.Context, jobID, step, message string, fields map[string]any) func() {
+func startActivityHeartbeat(ctx context.Context, jobID, step, message string, fields proto.Message) func() {
 	done := make(chan struct{})
-	snapshot := copyActivityProgressFields(fields)
+	snapshot := cloneActivityProgressFields(fields)
 	go func() {
 		ticker := time.NewTicker(activityHeartbeatInterval)
 		defer ticker.Stop()
@@ -50,18 +47,14 @@ func startActivityHeartbeat(ctx context.Context, jobID, step, message string, fi
 	}
 }
 
-func copyActivityProgressFields(fields map[string]any) map[string]any {
-	if len(fields) == 0 {
+func cloneActivityProgressFields(fields proto.Message) proto.Message {
+	if fields == nil {
 		return nil
 	}
-	out := make(map[string]any, len(fields))
-	for key, value := range fields {
-		out[key] = value
-	}
-	return out
+	return proto.Clone(fields)
 }
 
-func (s *Server) recordActivityProgress(ctx context.Context, jobID, step, message string, fields map[string]any) {
+func (s *Server) recordActivityProgress(ctx context.Context, jobID, step, message string, fields proto.Message) {
 	recordActivityProgress(ctx, jobID, step, message, fields)
 	if s == nil || s.jobStore == nil || jobID == "" || step == "" {
 		return
@@ -69,7 +62,7 @@ func (s *Server) recordActivityProgress(ctx context.Context, jobID, step, messag
 	s.updateRunningStepData(ctx, jobID, step, activityProgressData(message, fields))
 }
 
-func (s *Server) recordActivityProgressEvery(ctx context.Context, last *time.Time, jobID, step, message string, fields map[string]any) {
+func (s *Server) recordActivityProgressEvery(ctx context.Context, last *time.Time, jobID, step, message string, fields proto.Message) {
 	if last != nil && !last.IsZero() && time.Since(*last) < activityHeartbeatInterval {
 		return
 	}
@@ -79,19 +72,23 @@ func (s *Server) recordActivityProgressEvery(ctx context.Context, last *time.Tim
 	}
 }
 
-func activityProgressData(message string, fields map[string]any) map[string]any {
+func activityProgressData(message string, fields proto.Message) *pb.ActivityProgressData {
 	at := time.Now().Unix()
-	out := map[string]any{
-		"progress_message": message,
-		"progress_at_unix": at,
-		"progress": map[string]any{
-			"message": message,
-			"at_unix": at,
-			"fields":  fields,
+	return &pb.ActivityProgressData{
+		ProgressMessage: message,
+		ProgressAtUnix:  at,
+		Progress: &pb.ActivityProgressSnapshotData{
+			Message: message,
+			AtUnix:  at,
+			Fields:  activityProgressFields(fields),
 		},
 	}
-	for key, value := range fields {
-		out[key] = value
+}
+
+func activityProgressFields(fields proto.Message) *pb.ActivityProgressFields {
+	out := &pb.ActivityProgressFields{}
+	if !protowrap.SetMessage(out, fields) {
+		return nil
 	}
 	return out
 }

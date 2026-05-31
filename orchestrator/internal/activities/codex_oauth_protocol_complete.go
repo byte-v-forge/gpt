@@ -3,7 +3,11 @@ package activities
 import (
 	"context"
 	"fmt"
+	"orchestrator/internal/contracts"
+	"orchestrator/internal/gptaccount"
 	"strings"
+
+	"orchestrator/pb"
 )
 
 func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input CodexOAuthCompleteBrowserInput) (CodexOAuthCompleteBrowserOutput, error) {
@@ -11,27 +15,27 @@ func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input C
 	label := cfg.label(input.GetLabel())
 	output := CodexOAuthCompleteBrowserOutput{}
 	data := codexOAuthProtocolData(label)
-	data["auth_secret_written"] = false
-	data["account_auth_written"] = false
-	data["callback_url_captured"] = false
-	step := s.activityStep(ctx, input.GetJobId(), stepCodexOAuthProtocolComplete, false, true)
-	_, err := step.run(func() (any, error) {
-		stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepCodexOAuthProtocolComplete, "completing codex oauth protocol", data)
+	data.setAuthSecretWritten(false)
+	data.setAccountAuthWritten(false)
+	data.setCallbackURLCaptured(false)
+	step := s.activityStep(ctx, input.GetJobId(), contracts.StepCodexOAuthProtocolComplete, false, true)
+	_, err := step.run(func() (activityStepResult, error) {
+		stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), contracts.StepCodexOAuthProtocolComplete, "completing codex oauth protocol", data.messageData())
 		defer stopHeartbeat()
 		account, err := s.codexOAuthBrowserAccount(ctx, input.GetAccountId())
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		state, err := s.loadCodexOAuthProtocolState(ctx, input.GetJobId(), input.GetSession())
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		client, err := s.newAccountGptClient(ctx, input.GetAccountId(), cfg, state)
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		_ = fetchCodexOAuthClientAuthSessionDump(ctx, client, state, data, state.Stage)
 		callbackURL, err := s.codexOAuthProtocolCallbackURL(ctx, client, state, data)
@@ -39,29 +43,29 @@ func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input C
 			err = saveErr
 		}
 		if state.Stage == "add_phone" && !state.PhonePresent {
-			if markErr := s.markCodexOAuthNeedPhone(ctx, account.GetAccountId(), label, data); markErr != nil {
-				data["account_phone_need_write_error"] = markErr.Error()
+			if markErr := s.markCodexOAuthNeedPhone(ctx, gptaccount.ID(account), label, data); markErr != nil {
+				data.setAccountPhoneNeedWriteError(markErr)
 			}
 		}
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
-		verifier := s.loadRuntimeSecret(ctx, state.PKCESecretKey)
+		verifier := s.loadRuntimeSecret(ctx, state.PkceSecretKey)
 		if strings.TrimSpace(verifier) == "" {
 			err := fmt.Errorf("codex oauth pkce verifier is missing")
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		code, returnedState, err := codexOAuthCodeFromCallback(callbackURL)
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
-		if returnedState != state.OAuthState {
+		if returnedState != state.OauthState {
 			err := fmt.Errorf("codex oauth state mismatch")
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		tokenCfg := cfg
 		if strings.TrimSpace(tokenCfg.ProtocolProxyURL) != "" {
@@ -69,44 +73,44 @@ func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input C
 		}
 		tokens, err := exchangeCodexOAuthTokenWithProfile(ctx, tokenCfg, code, verifier, client.profile)
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		authJSON, err := buildCodexAuthJSON(tokens)
 		if err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		flow := &codexOAuthBrowserFlow{server: s, ctx: ctx, account: account, jobID: input.GetJobId(), label: label, cfg: cfg, data: data, authJSON: authJSON, markPhoneConfirmed: input.GetMarkPhoneConfirmedOnSuccess() || state.PhonePresent}
 		if state.PhonePresent {
 			flow.phoneAdded = true
 		}
 		if err := flow.persistAuthorization(); err != nil {
-			data["error_message"] = err.Error()
-			return data, err
+			data.setError(err)
+			return data.messageData(), err
 		}
 		output.Success = true
 		output.AuthSecretKey = flow.secretKey
-		output.Data = protoData(data)
-		return data, nil
+		output.Data = data.messageData()
+		return data.messageData(), nil
 	})
 	if output.Data == nil {
-		output.Data = protoData(data)
+		output.Data = data.messageData()
 	}
 	return output, err
 }
 
-func (s *Server) codexOAuthProtocolCallbackURL(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any) (string, error) {
+func (s *Server) codexOAuthProtocolCallbackURL(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *codexOAuthStepData) (string, error) {
 	if state == nil {
 		return "", fmt.Errorf("codex oauth protocol state missing")
 	}
-	if codexOAuthProtocolIsCallbackURL(state.LastURL, state.RedirectURI) {
-		data["callback_url_captured"] = true
-		return state.LastURL, nil
+	if codexOAuthProtocolIsCallbackURL(state.LastUrl, state.RedirectUri) {
+		data.setCallbackURLCaptured(true)
+		return state.LastUrl, nil
 	}
-	candidates := []string{state.LastContinueURL, state.AuthorizeURL}
-	if codexOAuthProtocolCanCompleteStage(state.Stage) && strings.TrimSpace(state.LastContinueURL) != "" {
-		candidates = []string{state.LastContinueURL}
+	candidates := []string{state.LastContinueUrl, state.AuthorizeUrl}
+	if codexOAuthProtocolCanCompleteStage(state.Stage) && strings.TrimSpace(state.LastContinueUrl) != "" {
+		candidates = []string{state.LastContinueUrl}
 	}
 	for _, candidate := range candidates {
 		if strings.TrimSpace(candidate) == "" {
@@ -117,13 +121,13 @@ func (s *Server) codexOAuthProtocolCallbackURL(ctx context.Context, client *GptC
 			return "", err
 		}
 		state.Stage = stage
-		if codexOAuthProtocolIsCallbackURL(state.LastURL, state.RedirectURI) {
-			data["callback_url_captured"] = true
-			return state.LastURL, nil
+		if codexOAuthProtocolIsCallbackURL(state.LastUrl, state.RedirectUri) {
+			data.setCallbackURLCaptured(true)
+			return state.LastUrl, nil
 		}
 	}
 	if state.Stage == "add_phone" && !state.PhonePresent {
-		data["add_phone_required"] = true
+		data.setAddPhoneRequired(true)
 		return "", codexOAuthAddPhoneRequiredError()
 	}
 	return "", fmt.Errorf("codex oauth callback stage not ready: %s", state.Stage)

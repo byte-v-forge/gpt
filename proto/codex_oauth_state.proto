@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package orchestrator;
+
+option go_package = "./;pb";
+
+message CodexOAuthProtocolCookie {
+  string host_key = 1;
+  string name = 2;
+  string value = 3;
+  string path = 4;
+  string domain = 5;
+  int64 expires_unix = 6;
+  int32 max_age = 7;
+  bool secure = 8;
+  bool http_only = 9;
+  int32 same_site = 10;
+}
+
+message CodexOAuthProtocolState {
+  string flow_id = 1;
+  string oauth_state = 2;
+  string pkce_secret_key = 3;
+  string client_id = 4;
+  string redirect_uri = 5;
+  string authorize_url = 6;
+  string device_id = 7;
+  string last_url = 8;
+  string last_continue_url = 9;
+  string stage = 10;
+  string last_page_type = 11;
+  int64 email_otp_issued_after_unix = 12;
+  bool phone_state_known = 13;
+  bool phone_present = 14;
+  string phone_verification_channel = 15;
+  string phone_mask = 16;
+  repeated CodexOAuthProtocolCookie cookies = 17;
+}

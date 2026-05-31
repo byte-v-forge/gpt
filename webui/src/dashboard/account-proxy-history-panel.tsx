@@ -1,13 +1,13 @@
 import { Badge, EmptyBlock, api, formatUnix, useQuery } from '@byte-v-forge/common-ui';
 import type { ReactNode } from 'react';
-import type { AccountProxyChainHop, AccountProxyUsage } from './types';
-
-type AccountProxyUsagesResponse = { usages?: AccountProxyUsage[] };
+import { ProxyChainHops } from './account-proxy-chain';
+import type { AccountProxyUsage } from './types';
+import type { ListAccountProxyUsagesResponse } from '../proto/orchestrator_account';
 
 export function AccountProxyHistoryPanel({ accountID }: { accountID: string }) {
   const query = useQuery({
     queryKey: ['gpt', 'account-proxy-usages', accountID],
-    queryFn: () => api<AccountProxyUsagesResponse>(`/api/gpt/accounts/${encodeURIComponent(accountID)}/proxy-usages?limit=100`),
+    queryFn: () => api<ListAccountProxyUsagesResponse>(`/api/gpt/accounts/${encodeURIComponent(accountID)}/proxy-usages?limit=100`),
     enabled: !!accountID
   });
   const rows = query.data?.usages || [];
@@ -34,12 +34,12 @@ function ProxyUsageCard({ row }: { row: AccountProxyUsage }) {
           <InfoLine label="IP" value={row.exit_ip || '-'} mono />
           <InfoLine label="位置" value={locationText(row)} />
         </InfoGroup>
-        <InfoGroup title="链路">
-          {chainHops(row).map((hop) => <InfoLine key={hop.hop_id || `${hop.role}-${hop.order}`} label={hopLabel(hop)} value={hopValue(hop)} />)}
-          {!chainHops(row).length && <InfoLine label="链路" value="-" />}
+        <InfoGroup title="代理链路" className="proxyUsageGroupWide">
+          <ProxyChainHops hops={chainHops(row)} />
         </InfoGroup>
         <InfoGroup title="IP 风控">
           <RiskBadge value={row.ip_fraud_check?.risk_level} score={riskScore(row.ip_fraud_check)} />
+          <InfoLine label="评分源" value={fraudProviderText(row.ip_fraud_check) || '历史记录未记录'} />
           <InfoLine label="纯净度" value={scoreText(purityScore(row))} />
         </InfoGroup>
         <InfoGroup title="CF Canary">
@@ -54,8 +54,13 @@ function ProxyUsageCard({ row }: { row: AccountProxyUsage }) {
   );
 }
 
-function InfoGroup({ title, children }: { title: string; children: ReactNode }) {
-  return <section className="proxyUsageGroup"><h4>{title}</h4><div>{children}</div></section>;
+function InfoGroup({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
+  return (
+    <section className={['proxyUsageGroup', className].filter(Boolean).join(' ')}>
+      <h4>{title}</h4>
+      <div>{children}</div>
+    </section>
+  );
 }
 
 function InfoLine({ label, value, mono }: { label: string; value?: string; mono?: boolean }) {
@@ -68,9 +73,9 @@ function StatusBadge({ row }: { row: AccountProxyUsage }) {
   return <Badge className={`badge ${cls}`} variant="outline">{row.accepted ? '通过' : row.error_message ? '失败' : '记录'}</Badge>;
 }
 
-function RiskBadge({ value, score }: { value?: string; score?: number }) {
+function RiskBadge({ value, score }: { value?: unknown; score?: number }) {
   const label = riskLabel(value);
-  return <Badge className={`badge ${riskClass(value || label)}`} variant="outline">{label} · {scoreText(score)}</Badge>;
+  return <Badge className={`badge ${riskClass(compact(value) || label)}`} variant="outline">{label} · {scoreText(score)}</Badge>;
 }
 
 function ConnectivityBadge({ row }: { row: AccountProxyUsage }) {
@@ -85,31 +90,7 @@ function chainHops(row: AccountProxyUsage) {
   return [...(row.chain?.hops || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
-function hopLabel(hop: AccountProxyChainHop) {
-  const role = compact(hop.role).replace(/^CHAIN HOP ROLE /, '');
-  if (role === 'LINE PROXY') return `线路 ${hop.order || ''}`.trim();
-  if (role === 'DYNAMIC GATEWAY') return `网关 ${hop.order || ''}`.trim();
-  if (role === 'DYNAMIC EXIT') return `出口 ${hop.order || ''}`.trim();
-  return `Hop ${hop.order || ''}`.trim();
-}
-
-function hopValue(hop: AccountProxyChainHop) {
-  const name = hopName(hop);
-  const geo = [hop.country_code, hop.region, hop.city].filter(Boolean).join('/');
-  const ip = hop.observed_ip ? `IP ${hop.observed_ip}` : '';
-  const delay = hop.delay_ms ? `${hop.delay_ms}ms` : '';
-  return [name, ip, geo, delay].filter(Boolean).join(' · ') || '-';
-}
-
-function hopName(hop: AccountProxyChainHop) {
-  if (hop.role?.includes('DYNAMIC_GATEWAY') || hop.role?.includes('DYNAMIC_EXIT')) {
-    return [providerName(hop.provider_id), gatewayName(hop.gateway_display_name, hop.gateway_id)].filter(Boolean).join(' / ');
-  }
-  if (hop.source_kind?.includes('SUBSCRIPTION')) return [hop.source_display_name, hop.node_display_name || hop.node_id].filter(Boolean).join(' / ');
-  return hop.node_display_name || hop.source_display_name || hop.node_id || hop.source_id || '';
-}
-
-function riskLabel(value?: string) {
+function riskLabel(value?: unknown) {
   const label = compact(value).replace(/^IP FRAUD RISK LEVEL /, '').replace(/^EDGE ACCESS RISK LEVEL /, '');
   if (label === 'LOW') return '低风险';
   if (label === 'MEDIUM') return '中风险';
@@ -133,11 +114,11 @@ function scoreText(score?: number) {
 
 function purityScore(row: AccountProxyUsage) {
   const score = riskScore(row.ip_fraud_check);
-  if (!Number.isFinite(score)) return undefined;
+  if (typeof score !== 'number' || !Number.isFinite(score)) return undefined;
   return Math.max(0, Math.min(100, 100 - score));
 }
 
-function riskScore(check?: { risk_level?: string; risk_score?: number }) {
+function riskScore(check?: { risk_level?: unknown; risk_score?: number }) {
   const score = Number(check?.risk_score);
   if (Number.isFinite(score)) return score;
   const label = compact(check?.risk_level);
@@ -145,21 +126,20 @@ function riskScore(check?: { risk_level?: string; risk_score?: number }) {
   return undefined;
 }
 
-function providerName(value?: string) {
+function fraudProviderText(check?: { provider_display_name?: string; provider_id?: string }) {
+  return check?.provider_display_name || providerLabel(check?.provider_id) || '';
+}
+
+function providerLabel(value?: string) {
   const id = (value || '').toLowerCase();
-  if (id.includes('1024')) return '1024Proxy';
-  if (id.includes('b2')) return 'B2Proxy';
-  if (id.includes('cliproxy')) return 'CliProxy';
+  if (id === 'ipqualityscore') return 'IPQualityScore';
+  if (id === 'abuseipdb') return 'AbuseIPDB';
+  if (id === 'ipapi') return 'ipapi.is';
+  if (id === 'ip-api-com') return 'IP-API.com';
+  if (id === 'ip2location') return 'IP2Location.io';
   return value || '';
 }
 
-function gatewayName(name?: string, id?: string) {
-  if ((id || name || '').toLowerCase() === 'direct') return '';
-  if (!name && !id) return '';
-  if (!id || name === id) return name || id || '';
-  return `${name || id} (${id})`;
-}
-
-function compact(value?: string) {
-  return (value || '').replace(/^PROXY_/, '').replace(/^GPT_/, '').replaceAll('_', ' ').trim();
+function compact(value?: unknown) {
+  return String(value || '').replace(/^PROXY_/, '').replace(/^GPT_/, '').replaceAll('_', ' ').trim();
 }

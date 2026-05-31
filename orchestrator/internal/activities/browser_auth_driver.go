@@ -3,6 +3,7 @@ package activities
 import (
 	"context"
 	"fmt"
+	"orchestrator/internal/gptaccount"
 	"strings"
 	"sync"
 	"time"
@@ -46,11 +47,11 @@ type browserAuthSession struct {
 	accessToken  string
 }
 
-func newBrowserAuthFlow(mode, jobID string, account *pb.Account) *browserAuthFlow {
-	return newBrowserAuthFlowWithContext(context.Background(), mode, jobID, account)
+func newBrowserAuthFlow(mode, jobID string, account *pb.Account, password string) *browserAuthFlow {
+	return newBrowserAuthFlowWithContext(context.Background(), mode, jobID, account, password)
 }
 
-func newBrowserAuthFlowWithContext(ctx context.Context, mode, jobID string, account *pb.Account) *browserAuthFlow {
+func newBrowserAuthFlowWithContext(ctx context.Context, mode, jobID string, account *pb.Account, password string) *browserAuthFlow {
 	now := time.Now().Unix()
 	if ctx == nil {
 		ctx = context.Background()
@@ -60,8 +61,8 @@ func newBrowserAuthFlowWithContext(ctx context.Context, mode, jobID string, acco
 		flowID:    uuid.NewString(),
 		mode:      strings.TrimSpace(mode),
 		jobID:     strings.TrimSpace(jobID),
-		email:     strings.TrimSpace(account.GetEmail()),
-		password:  account.GetPassword(),
+		email:     strings.TrimSpace(gptaccount.Email(account)),
+		password:  strings.TrimSpace(password),
 		fullName:  browserAuthRandomDisplayName(),
 		age:       browserAuthRandomAge(),
 		stage:     browserAuthStageQueued,
@@ -73,8 +74,8 @@ func newBrowserAuthFlowWithContext(ctx context.Context, mode, jobID string, acco
 	}
 }
 
-func newBrowserAuthSessionFlow(ctx context.Context, mode, jobID string, account *pb.Account, sessionID string) *browserAuthFlow {
-	flow := newBrowserAuthFlowWithContext(ctx, mode, jobID, account)
+func newBrowserAuthSessionFlow(ctx context.Context, mode, jobID string, account *pb.Account, password string, sessionID string) *browserAuthFlow {
+	flow := newBrowserAuthFlowWithContext(ctx, mode, jobID, account, password)
 	flow.flowID = strings.TrimSpace(sessionID)
 	flow.sessionID = strings.TrimSpace(sessionID)
 	return flow
@@ -92,14 +93,14 @@ func (f *browserAuthFlow) getTaskScope() string {
 	return f.taskScope
 }
 
-func (s *Server) browserAuthStart(ctx context.Context, mode, jobID string, account *pb.Account) (*pb.StartRegisterResponse, string, error) {
+func (s *Server) browserAuthStart(ctx context.Context, mode, jobID string, account *pb.Account, password string) (*pb.StartRegisterResponse, string, error) {
 	if s.browserAutomationClient == nil {
 		return nil, "", fmt.Errorf("browser automation client is not configured")
 	}
 	if account == nil {
 		return nil, "", fmt.Errorf("account is required")
 	}
-	flow := newBrowserAuthFlowWithContext(ctx, mode, jobID, account)
+	flow := newBrowserAuthFlowWithContext(ctx, mode, jobID, account, password)
 	cfg, err := s.browserAuthConfigForAccount(ctx, account)
 	if err != nil {
 		return nil, "", err
@@ -121,7 +122,7 @@ func (s *Server) browserAuthComplete(ctx context.Context, mode, jobID string, ac
 	if account == nil {
 		return nil, fmt.Errorf("account is required")
 	}
-	flow := newBrowserAuthSessionFlow(ctx, mode, jobID, account, flowID)
+	flow := newBrowserAuthSessionFlow(ctx, mode, jobID, account, "", flowID)
 	flow.setTaskScope("complete")
 	defer flow.stopSession(s.browserAutomationClient)
 	if err := flow.completeFromCheckpoint(s.browserAutomationClient, s.browserAuthSettings(ctx), otp, otpKind); err != nil {
@@ -141,12 +142,12 @@ func (s *Server) browserAuthResendOTP(ctx context.Context, mode, jobID string, a
 	if otpKind == browserAuthOTPKindLoginEmail {
 		return &pb.BrowserAuthResendOTPOutput{
 			BrowserSessionId: flowID,
-			Email:            account.GetEmail(),
+			Email:            gptaccount.Email(account),
 			Success:          false,
 			ErrorMessage:     fmt.Sprintf("browser %s login email OTP resend is not supported", mode),
 		}, nil
 	}
-	flow := newBrowserAuthSessionFlow(ctx, mode, jobID, account, flowID)
+	flow := newBrowserAuthSessionFlow(ctx, mode, jobID, account, "", flowID)
 	flow.setTaskScope(fmt.Sprintf("resend-%d", time.Now().UnixMilli()))
 	return flow.resendEmailOTP(s.browserAutomationClient, s.browserAuthSettings(ctx))
 }

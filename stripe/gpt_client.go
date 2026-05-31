@@ -26,12 +26,9 @@ type GptClientConfig struct {
 }
 
 func NewGptClient(cfg GptClientConfig) (*GptClient, error) {
-	profile := cfg.Profile.WithDefaults(DefaultGptProfile())
+	profile := cleanGptProfile(cfg.Profile.WithDefaults(DefaultGptProfile()))
 	if cfg.ProxyURL != "" {
 		profile.ProxyURL = strings.TrimSpace(cfg.ProxyURL)
-	}
-	if strings.TrimSpace(profile.DeviceID) == "" {
-		return nil, fmt.Errorf("gpt client device_id is required")
 	}
 	client, err := fingerprinthttp.New(fingerprinthttp.Config{
 		Timeout:      cfg.Timeout,
@@ -47,16 +44,51 @@ func NewGptClient(cfg GptClientConfig) (*GptClient, error) {
 }
 
 func DefaultGptProfile() fingerprinthttp.Profile {
-	candidate := browserfingerprint.DefaultChromiumCandidates()[0]
+	candidate := defaultGptChromiumCandidate("")
 	fp := browserfingerprint.BuildChromium(candidate, "en-US", "")
 	return fingerprinthttp.Profile{
 		TLSProfileName: fp.TLSProfileName,
-		UserAgent:      fp.UserAgent,
-		SecCHUA:        fp.SecCHUA,
-		SecCHPlatform:  fp.SecCHPlatform,
+		UserAgent:      gptUserAgent(candidate),
 		AcceptLanguage: "en-US,en;q=0.9",
 		Language:       "en-US",
 	}
+}
+
+func cleanGptProfile(profile fingerprinthttp.Profile) fingerprinthttp.Profile {
+	fallback := DefaultGptProfile()
+	profile = profile.WithDefaults(fallback)
+	candidate := defaultGptChromiumCandidate(profile.TLSProfileName)
+	profile.TLSProfileName = candidate.ProfileName
+	profile.UserAgent = gptUserAgent(candidate)
+	profile.SecCHUA = ""
+	profile.SecCHPlatform = ""
+	profile.AcceptLanguage = "en-US,en;q=0.9"
+	profile.Language = "en-US"
+	profile.DeviceID = ""
+	return profile
+}
+
+func defaultGptChromiumCandidate(tlsProfile string) browserfingerprint.ChromiumCandidate {
+	profileName := browserfingerprint.ResolveTLSProfileName(tlsProfile, browserfingerprint.DefaultTLSProfileName)
+	for _, candidate := range browserfingerprint.DefaultChromiumCandidates() {
+		if strings.EqualFold(candidate.ProfileName, profileName) && browserfingerprint.OSAlias(candidate) == "mac" {
+			return candidate
+		}
+	}
+	for _, candidate := range browserfingerprint.DefaultChromiumCandidates() {
+		if strings.EqualFold(candidate.ProfileName, browserfingerprint.DefaultTLSProfileName) && browserfingerprint.OSAlias(candidate) == "mac" {
+			return candidate
+		}
+	}
+	return browserfingerprint.DefaultChromiumCandidates()[0]
+}
+
+func gptUserAgent(candidate browserfingerprint.ChromiumCandidate) string {
+	major := strings.TrimSpace(candidate.MajorVersion)
+	if major == "" {
+		major = "146"
+	}
+	return fmt.Sprintf("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s.0.0.0 Safari/537.36", major)
 }
 
 func (c *GptClient) Request(ctx context.Context, method, rawURL string, opts fingerprinthttp.RequestOptions) (*fingerprinthttp.Response, error) {
@@ -68,13 +100,18 @@ func (c *GptClient) Request(ctx context.Context, method, rawURL string, opts fin
 	}
 	headers := http.Header{}
 	mergeHeader(headers, opts.Headers)
-	c.profile.ApplyBrowserHeaders(headers)
+	if headers.Get("User-Agent") == "" {
+		headers.Set("User-Agent", c.profile.UserAgent)
+	}
 	if headers.Get("Accept") == "" {
 		headers.Set("Accept", "*/*")
 	}
 	headers.Set("Accept-Language", "en-US,en;q=0.9")
-	headers.Set("oai-language", "en-US")
-	headers.Set("oai-device-id", c.profile.DeviceID)
+	headers.Del("sec-ch-ua")
+	headers.Del("sec-ch-ua-mobile")
+	headers.Del("sec-ch-ua-platform")
+	headers.Del("oai-language")
+	headers.Del("oai-device-id")
 	opts.Headers = headers
 	return c.client.Request(ctx, method, rawURL, opts)
 }

@@ -123,7 +123,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, proxy_url: $json.proxy_url, data: $json.data || {} } }}",
         "options": {}
       },
       "id": "4760aa6e-4f8d-5d90-b326-966fdab811c9",
@@ -142,7 +142,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, error_message: $json.error_message || 'dynamic proxy preflight failed', data: $json.data || $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, error_message: $json.error_message || 'dynamic proxy preflight failed', data: $json.data || {} } }}",
         "options": {}
       },
       "id": "250ee550-df6f-5bf8-a036-80d9aea4c739",
@@ -411,7 +411,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_add_phone', error_message: 'codex oauth add phone required', data: $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_add_phone', error_message: 'codex oauth add phone required', data: Object.assign({}, $json.data || {}, { reason: 'add_phone_required', error_message: 'codex oauth add phone required', add_phone_required: true, add_phone_pending_stage: $json.stage || '' }) } }}",
         "options": {}
       },
       "id": "cd441603-3e82-5f28-a3f0-9593b63ba9d2",
@@ -483,7 +483,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, result: { auth_secret_key: $json.authSecretKey, data: $json.data, driver: 'protocol' } } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, auth_secret_key: $json.authSecretKey, driver: 'protocol', data: $json.data || {} } }}",
         "options": {}
       },
       "id": "f3de9b65-fd05-5e6d-98b0-2f6b9286921a",
@@ -502,7 +502,7 @@
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_detect', error_message: 'codex oauth protocol stage not ready: ' + ($json.stage || 'unknown'), data: $json } }}",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_detect', error_message: 'codex oauth protocol stage not ready: ' + ($json.stage || 'unknown'), data: Object.assign({}, $json.data || {}, { reason: 'unexpected_stage', error_message: 'codex oauth protocol stage not ready: ' + ($json.stage || 'unknown'), login_stage: $json.stage || 'unknown' }) } }}",
         "options": {}
       },
       "id": "a10d780e-3fa8-5b85-812e-4ad7444d5d36",

@@ -1,17 +1,15 @@
 package accountmail
 
 import (
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 	"regexp"
 	"strings"
 
 	mailboxv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/mailbox/v1"
 
+	"orchestrator/internal/channelotpwait"
+	"orchestrator/internal/gptaccount"
 	"orchestrator/pb"
-)
-
-const (
-	StatusActivated   = "ACTIVATED"
-	StatusDeactivated = "DEACTIVATED"
 )
 
 type State struct {
@@ -75,11 +73,11 @@ func DetectState(account *pb.Account, messages []Message) State {
 	for _, message := range MessagesForAccount(account, messages) {
 		switch {
 		case messageContainsPhrase(message, "Access Deactivated"):
-			return State{Status: StatusDeactivated, ErrorMessage: "mailbox event: account deactivated"}
+			return State{Status: gptplugin.AccountStatusDeactivated, ErrorMessage: "mailbox event: account deactivated"}
 		case messageContainsPhrase(message, "You've successfully subscribed to ChatGPT Plus"):
-			return State{Status: StatusActivated, PlusActive: true, Tier: "plus"}
+			return State{Status: gptplugin.AccountStatusActivated, PlusActive: true, Tier: "plus"}
 		case messageSubjectEquals(message, "New plan"):
-			return State{Status: StatusActivated, PlusActive: true, Tier: "plus"}
+			return State{Status: gptplugin.AccountStatusActivated, PlusActive: true, Tier: "plus"}
 		}
 	}
 	return State{}
@@ -154,7 +152,7 @@ func MessagesForAccount(account *pb.Account, messages []Message) []Message {
 }
 
 func MessageMatches(account *pb.Account, message Message) bool {
-	accountEmail := NormalizeEmail(account.GetEmail())
+	accountEmail := NormalizeEmail(gptaccount.Email(account))
 	if accountEmail == "" {
 		return false
 	}
@@ -173,7 +171,7 @@ func PrimaryMailbox(account *pb.Account) string {
 	if value := NormalizeEmail(account.GetPrimaryMailboxEmail()); value != "" {
 		return value
 	}
-	return CanonicalEmail(account.GetEmail())
+	return CanonicalEmail(gptaccount.Email(account))
 }
 
 func CanonicalEmail(email string) string {
@@ -219,11 +217,11 @@ func OTPCode(message *mailboxv1.EmailInboxMessage) string {
 		return ""
 	}
 	if signal := message.GetPrimarySignal(); signal.GetKind() == mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP && signal.GetCode() != "" {
-		return NormalizeOTP(signal.GetCode())
+		return channelotpwait.NormalizeCode(signal.GetCode())
 	}
 	for _, signal := range message.GetSignals() {
 		if signal.GetKind() == mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP && signal.GetCode() != "" {
-			return NormalizeOTP(signal.GetCode())
+			return channelotpwait.NormalizeCode(signal.GetCode())
 		}
 	}
 	code, _ := ExtractOTP(message)
@@ -242,17 +240,12 @@ func ExtractOTP(message *mailboxv1.EmailInboxMessage) (string, string) {
 		message.GetHtmlBody(),
 	}, "\n")
 	if match := verificationCodePattern.FindStringSubmatch(text); len(match) >= 2 {
-		return NormalizeOTP(match[1]), strings.TrimSpace(match[0])
+		return channelotpwait.NormalizeCode(match[1]), strings.TrimSpace(match[0])
 	}
 	if match := standaloneCodePattern.FindStringSubmatch(text); len(match) >= 3 {
-		return NormalizeOTP(match[2]), strings.TrimSpace(match[0])
+		return channelotpwait.NormalizeCode(match[2]), strings.TrimSpace(match[0])
 	}
 	return "", ""
-}
-
-func NormalizeOTP(value string) string {
-	replacer := strings.NewReplacer(" ", "", "\t", "", "\n", "", "\r", "", "-", "")
-	return strings.TrimSpace(replacer.Replace(value))
 }
 
 func messageContainsPhrase(message Message, phrase string) bool {

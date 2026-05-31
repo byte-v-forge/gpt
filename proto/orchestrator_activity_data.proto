@@ -1,0 +1,312 @@
+syntax = "proto3";
+
+package orchestrator;
+
+option go_package = "./;pb";
+
+message ActivityRegisterResultData {
+  optional bool response_present = 1;
+  optional bool success = 2;
+  string error_message = 3;
+  optional bool session_token_present = 4;
+  optional bool access_token_present = 5;
+  optional bool device_id_present = 6;
+  optional bool plus_trial_eligible = 7;
+  optional bool plus_trial_checked = 8;
+  optional bool checkout_url_present = 9;
+  optional bool sensitive_values_stored = 10;
+  optional bool credential_values_stored = 11;
+}
+
+message ActivityBrowserStartData {
+  optional bool response_present = 1;
+  optional bool success = 2;
+  string error_message = 3;
+  string browser_session_id = 4;
+  optional bool otp_required = 5;
+  int64 otp_issued_after = 6;
+  int64 otp_wait_started_at_unix = 7;
+  int64 otp_request_action_started_at_unix = 8;
+  string stage = 9;
+  string status_message = 10;
+  ActivityRegisterResultData result = 11;
+}
+
+message ActivityBrowserAuthStartStepData {
+  string account_id = 1;
+  string email = 2;
+  ActivityBrowserStartData browser_start = 3;
+  string otp_kind = 4;
+  ActivityRegisterResultData browser_complete = 5;
+  string terminal_reason = 6;
+  string mode = 7;
+}
+
+message ActivityBrowserAuthCompleteStepData {
+  string account_id = 1;
+  string browser_session_id = 2;
+  string mode = 3;
+  string otp_source = 4;
+  string otp_kind = 5;
+  ActivityRegisterResultData browser_complete = 6;
+  string terminal_reason = 7;
+}
+
+message ActivityRegisterOutputData {
+  ActivityBrowserAuthStartStepData browser_auth_start = 1;
+  ActivityBrowserAuthCompleteStepData browser_auth_complete = 2;
+  ActivityProtocolAuthStepData protocol_auth = 3;
+}
+
+message ActivityBrowserResendOTPData {
+  optional bool response_present = 1;
+  optional bool success = 2;
+  string error_message = 3;
+  string browser_session_id = 4;
+  string email = 5;
+  int64 otp_issued_after_unix = 6;
+  int64 otp_request_started_at_unix_ms = 7;
+  string mode = 8;
+}
+
+message ActivityBrowserAuthOTPRequestStepData {
+  string account_id = 1;
+  string browser_session_id = 2;
+  string mode = 3;
+  string otp_kind = 4;
+  ActivityBrowserResendOTPData browser_resend = 5;
+  int64 otp_issued_after_unix = 6;
+  int64 otp_request_started_at_unix_ms = 7;
+  string terminal_reason = 8;
+}
+
+message ActivityProtocolAuthStepData {
+  string driver = 1;
+  string mode = 2;
+  string account_id = 3;
+  string email = 4;
+  string flow_id = 5;
+  string login_stage = 6;
+  optional bool protocol_session_started = 7;
+  int64 email_otp_issued_after_unix = 8;
+  string otp_source = 9;
+  optional bool chatgpt_signin_login_hint = 10;
+  string chatgpt_signin_screen_hint = 11;
+  optional bool chatgpt_auth_url_ready = 12;
+  int32 chatgpt_csrf_status = 13;
+  int32 chatgpt_csrf_attempt = 14;
+  optional bool chatgpt_csrf_edge_challenge = 15;
+  optional bool chatgpt_csrf_ready = 16;
+  string email_otp_send_error = 17;
+  int32 email_otp_send_status = 18;
+  optional bool profile_name_present = 19;
+  optional bool profile_birthdate_present = 20;
+  optional bool callback_url_captured = 21;
+  optional bool session_token_present = 22;
+  optional bool access_token_present = 23;
+  string terminal_reason = 24;
+  string sentinel_error = 25;
+  string sentinel_flow = 26;
+  optional bool sentinel_token_present = 27;
+  optional bool sentinel_t_present = 28;
+  string workspace_select_error = 29;
+  int32 workspace_select_status = 30;
+  optional bool workspace_selected = 31;
+  string choose_account_error = 32;
+  int32 choose_account_status = 33;
+  optional bool choose_account_selected = 34;
+}
+
+message ActivityProtocolProxyUseData {
+  string driver = 1;
+  string account_id = 2;
+  string mode = 3;
+  optional bool use_proxy = 4;
+  string protocol_proxy_requested_country = 5;
+  string protocol_proxy_requested_region = 6;
+  string protocol_proxy_requested_state = 7;
+  string error_message = 8;
+  optional bool protocol_proxy_in_use = 9;
+  string protocol_proxy_url_source = 10;
+}
+
+message ActivityProtocolAuthEdgeData {
+  string driver = 1;
+  string mode = 2;
+  string account_id = 3;
+  string auth_edge_check_target = 4;
+  optional bool auth_edge_accepted = 5;
+  string error_message = 6;
+  int32 chatgpt_csrf_status = 7;
+  int32 chatgpt_csrf_attempt = 8;
+  optional bool chatgpt_csrf_edge_challenge = 9;
+  optional bool chatgpt_csrf_ready = 10;
+}
+
+message ActivityProtocolAuthOutputData {
+  ActivityProtocolAuthStepData protocol_auth = 1;
+  ActivityProtocolProxyUseData protocol_proxy_use = 2;
+  ActivityProtocolAuthEdgeData auth_edge = 3;
+}
+
+message ActivityCodexOAuthStepData {
+  string label = 1;
+  string driver = 2;
+  string profile_key = 3;
+  string country_iso2 = 4;
+  string country_calling_code = 5;
+  int32 max_reuse_count = 6;
+  string verification_channel = 7;
+  optional bool phone_reused = 8;
+  int32 phone_reuse_count = 9;
+  int32 phone_reuse_limit = 10;
+  int64 phone_expires_at_unix = 11;
+  string phone_activation_id = 12;
+  string phone_country_iso2 = 13;
+  string phone_country_code = 14;
+  string phone_mask = 15;
+  string activation_id = 16;
+  optional bool released = 17;
+  string reason = 18;
+  string error_message = 19;
+  string flow_id = 20;
+  string login_stage = 21;
+  optional bool protocol_session_started = 22;
+  optional bool device_id_present = 23;
+  string pkce_secret_key = 24;
+  optional bool pkce_secret_written = 25;
+  optional bool browser_session_started = 26;
+  string auth_secret_key = 27;
+  optional bool auth_secret_written = 28;
+  optional bool account_auth_written = 29;
+  optional bool callback_url_captured = 30;
+  string account_phone_status = 31;
+  optional bool account_phone_need_written = 32;
+  optional bool account_phone_confirmed_written = 33;
+  string account_phone_need_write_error = 34;
+  optional bool add_phone_required = 35;
+  optional bool add_phone_confirmed = 36;
+  string add_phone_pending_stage = 37;
+  string add_phone_required_source = 38;
+  int64 email_otp_issued_after_unix = 39;
+  int64 phone_otp_issued_after_unix = 40;
+  int64 phone_otp_resend_issued_after_unix = 41;
+  optional bool phone_otp_received = 42;
+  optional bool phone_validity_confirmed = 43;
+  string phone_validity_failure = 44;
+  string phone_resend_click_error = 45;
+  string sms_request_additional_error = 46;
+  string sms_mark_sent_error = 47;
+  string sms_first_wait_error = 48;
+  string sms_resend_request_error = 49;
+  string post_add_phone_stage = 50;
+  string client_auth_session_dump_error = 51;
+  int32 client_auth_session_dump_status = 52;
+  optional bool client_auth_session_dump_seen = 53;
+  repeated string client_auth_session_keys = 54;
+  optional bool client_auth_openai_client_id_present = 55;
+  optional bool client_auth_session_id_present = 56;
+  string client_auth_email_verification_mode = 57;
+  optional bool client_auth_email_verified = 58;
+  optional bool client_auth_phone_state_known = 59;
+  optional bool client_auth_phone_present = 60;
+  string client_auth_phone_status = 61;
+  string client_auth_phone_verification_channel = 62;
+  string client_auth_phone_mask = 63;
+  string sentinel_error = 64;
+  string sentinel_flow = 65;
+  optional bool sentinel_token_present = 66;
+  optional bool sentinel_t_present = 67;
+  string workspace_select_error = 68;
+  int32 workspace_select_status = 69;
+  optional bool workspace_selected = 70;
+  string choose_account_error = 71;
+  int32 choose_account_status = 72;
+  optional bool choose_account_selected = 73;
+  string account_id = 74;
+  string n8n_execution_id = 75;
+}
+
+message ActivityProgressSnapshotData {
+  string message = 1;
+  int64 at_unix = 2;
+  ActivityProgressFields fields = 3;
+}
+
+message ActivityProgressFields {
+  ActivityBrowserAuthStartStepData browser_auth_start = 1;
+  ActivityBrowserAuthCompleteStepData browser_auth_complete = 2;
+  ActivityBrowserAuthOTPRequestStepData browser_auth_otp_request = 3;
+  ActivityProtocolAuthStepData protocol_auth = 4;
+  ActivityProtocolProxyUseData protocol_proxy_use = 5;
+  ActivityProtocolAuthEdgeData protocol_auth_edge = 6;
+  ActivityCodexOAuthStepData codex_oauth = 7;
+  ActivityProbePlusTrialStepData probe_plus_trial = 8;
+  ActivityProbeTierStepData probe_tier = 9;
+}
+
+message ActivityProgressData {
+  string progress_message = 1;
+  int64 progress_at_unix = 2;
+  ActivityProgressSnapshotData progress = 3;
+}
+
+message ActivityProbePlusTrialData {
+  optional bool response_present = 1;
+  optional bool success = 2;
+  string error_message = 3;
+  optional bool checked = 4;
+  optional bool plus_trial_eligible = 5;
+  optional bool plus_active = 6;
+  string plan_type = 7;
+  string tier = 8;
+  int64 amount = 9;
+  string currency = 10;
+  string source = 11;
+  optional bool checkout_url_present = 12;
+  string checkout_session_id = 13;
+}
+
+message ActivityProbeTierData {
+  optional bool response_present = 1;
+  optional bool success = 2;
+  string error_message = 3;
+  optional bool checked = 4;
+  string tier = 5;
+  optional bool plus_active = 6;
+  string source = 7;
+}
+
+message ActivityProbePlusTrialStepData {
+  string account_id = 1;
+  optional bool session_token_present = 2;
+  optional bool access_token_present = 3;
+  string credential_kind = 4;
+  ActivityProbePlusTrialData payment_probe = 5;
+  optional bool success = 6;
+  optional bool checked = 7;
+  optional bool plus_trial_eligible = 8;
+  optional bool plus_active = 9;
+  string plan_type = 10;
+  string tier = 11;
+  int64 amount = 12;
+  string currency = 13;
+  string source = 14;
+  optional bool checkout_url_present = 15;
+  string checkout_session_id = 16;
+  string error_message = 17;
+}
+
+message ActivityProbeTierStepData {
+  string account_id = 1;
+  optional bool session_token_present = 2;
+  optional bool access_token_present = 3;
+  string credential_kind = 4;
+  ActivityProbeTierData tier_probe = 5;
+  optional bool success = 6;
+  optional bool checked = 7;
+  string tier = 8;
+  optional bool plus_active = 9;
+  string source = 10;
+  string error_message = 11;
+}

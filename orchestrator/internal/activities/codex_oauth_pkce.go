@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/byte-v-forge/common-lib/fingerprinthttp"
 	"github.com/byte-v-forge/common-lib/jwtx"
 	"golang.org/x/oauth2"
 )
@@ -56,9 +55,8 @@ func codexOAuthCodeFromCallback(rawURL string) (string, string, error) {
 	return code, state, nil
 }
 
-func exchangeCodexOAuthTokenWithProfile(ctx context.Context, cfg CodexOAuthConfig, code, verifier string, profile fingerprinthttp.Profile) (codexOAuthTokenResponse, error) {
+func exchangeCodexOAuthTokenWithProfile(ctx context.Context, cfg CodexOAuthConfig, code, verifier string, profile gptProtocolHTTPProfile) (codexOAuthTokenResponse, error) {
 	cfg = cfg.withDefaults()
-	profile = profile.WithDefaults(codexOAuthProtocolDefaultProfile(cfg))
 	profile.ProxyURL = cfg.TokenProxyURL
 	client, err := newGptClient(cfg, nil, profile)
 	if err != nil {

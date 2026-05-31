@@ -140,11 +140,17 @@ func (s *Store) Preview(accountID string, params GenerateParams) Profile {
 }
 
 func selectCandidate(accountID string) browserfingerprint.ChromiumCandidate {
-	candidates := browserfingerprint.DefaultChromiumCandidates()
+	candidates := gptChromiumCandidates()
 	if len(candidates) == 0 {
 		return browserfingerprint.ChromiumCandidate{}
 	}
 	return candidates[stableIndex(accountID, len(candidates))]
+}
+
+func gptChromiumCandidates() []browserfingerprint.ChromiumCandidate {
+	return []browserfingerprint.ChromiumCandidate{
+		{ProfileName: "chrome_146", MajorVersion: "146", OSToken: "Macintosh; Intel Mac OS X 14_6_1", Platform: "macOS"},
+	}
 }
 
 func stableIndex(seed string, size int) int {
@@ -271,7 +277,11 @@ func normalizeStableProfile(profile Profile) Profile {
 	profile.Language = stableLanguage
 	if strings.TrimSpace(profile.AccountID) != "" {
 		candidate := stableCandidateForProfile(profile)
-		fingerprint := browserfingerprint.BuildChromium(candidate, stableLocale, stableDeviceID(profile.AccountID, candidate))
+		deviceID := strings.TrimSpace(profile.DeviceID)
+		if deviceID == "" {
+			deviceID = stableDeviceID(profile.AccountID, candidate)
+		}
+		fingerprint := browserfingerprint.BuildChromium(candidate, stableLocale, deviceID)
 		profile.BrowserProfileTemplate = selectorLabel(candidate)
 		profile.BrowserFamily = "Chrome"
 		profile.BrowserMajorVersion = candidate.MajorVersion
@@ -306,7 +316,7 @@ func GeoFromTimezone(timezone string) (string, string, bool) {
 }
 
 func stableCandidateForProfile(profile Profile) browserfingerprint.ChromiumCandidate {
-	candidates := browserfingerprint.DefaultChromiumCandidates()
+	candidates := gptChromiumCandidates()
 	if selector := strings.TrimSpace(profile.BrowserProfileTemplate); selector != "" {
 		if candidate, ok := browserfingerprint.SelectChromiumCandidate(candidates, selector); ok && candidate.ProfileName != "" {
 			return candidate

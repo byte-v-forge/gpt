@@ -1,168 +1,110 @@
-import { useEffect, useMemo, useState } from 'react';
-import { api, formatUnix, mask, useQuery, useQueryClient, useToastMessage } from '@byte-v-forge/common-ui';
+import { useEffect, useMemo } from 'react';
+import { ACCOUNT_CREDENTIAL_KIND_MAILBOX, accountCarrierCredentialUpdatedAtUnix, accountMailboxContextForEmail, api, formatUnix, mask, mutateAccount, submitAccountWorkflowAction, useAsyncActionRunner, useQuery, useQueryClient, useToastMessage } from '@byte-v-forge/common-ui';
 import { latestOtpForEmail, maskEmail, normalizeUiEmail } from '@byte-v-forge/common-ui';
-import { GPT_ACTIONS, gptActionLabel, type GptActionCatalog, type GptActionID, useGptActionCatalog, workflowStartPath } from './action-catalog';
-import { goPayPaymentActionLabel, goPayPaymentRequestChannel, isPureGoPayWAPaymentChannel } from './gopay-utils';
-import { mailboxContextForEmail } from './account-mail-utils';
+import { type GptActionCatalog, type GptActionID, useGptActionCatalog } from './action-catalog';
 import { isInvalidGptAccount } from './account-utils';
 import { useGptAccountCleanupActions } from './account-cleanup-hook';
 import { accountAuthQueryPrefix } from './account-auth-query';
 import { accountInboxQueryKey, loadAccountMailboxProjection } from './account-inbox-query';
 import type { GptAccountData } from './account-data';
-import type { GoPayUserWAPhoneResponse } from '../proto/orchestrator_gopay_app';
-import type { Account, ConcreteGoPayPaymentChannel, FetchAccountMailboxResponse, InboxResponse } from './types';
-
-const GO_PAY_USER_ID = 'local';
+import type { Account, FetchAccountMailboxResponse, InboxResponse } from './types';
+import type { GetAccountResponse, UpdateAccountResponse } from '../proto/gpt_account';
+import type { UpdateAccountAuthRequest } from '../proto/orchestrator_account';
+import { accountCarrierID, accountCarrierEmail } from '@byte-v-forge/common-ui';
 
 export function useGptAccountActions(data: GptAccountData, showSecrets: boolean, setSelectedAccountID: (value: string | ((prev: string) => string)) => void, providedActionCatalog?: GptActionCatalog) {
   const toast = useToastMessage();
   const queryClient = useQueryClient();
-  const mailboxContext = data.selected ? mailboxContextForEmail(data.mailboxes, data.allocations, data.selected) : null;
+  const selectedAccountID = accountCarrierID(data.selected);
+  const mailboxContext = data.selected ? accountMailboxContextForEmail(data.mailboxes, data.allocations, data.selected) : null;
   const primaryMailboxEmail = normalizeUiEmail(mailboxContext?.primary_email || '');
-  const selectedInboxVersion = data.selected?.mailbox_last_message_at_unix || 0;
-  const selectedInboxKey = useMemo(() => accountInboxQueryKey(data.selected?.account_id || '', primaryMailboxEmail, selectedInboxVersion), [data.selected?.account_id, primaryMailboxEmail, selectedInboxVersion]);
+  const selectedInboxVersion = accountCarrierCredentialUpdatedAtUnix(data.selected, ACCOUNT_CREDENTIAL_KIND_MAILBOX);
+  const selectedInboxKey = useMemo(() => accountInboxQueryKey(selectedAccountID, primaryMailboxEmail, selectedInboxVersion), [selectedAccountID, primaryMailboxEmail, selectedInboxVersion]);
   const inboxQuery = useQuery<InboxResponse | null>({
     queryKey: selectedInboxKey,
-    queryFn: () => loadAccountMailboxProjection(data.selected?.account_id || ''),
+    queryFn: () => loadAccountMailboxProjection(selectedAccountID),
     enabled: !!data.selected && !!primaryMailboxEmail,
     refetchOnMount: 'always',
     initialData: null
   });
   const actionCatalogQuery = useGptActionCatalog();
   const actionCatalog = providedActionCatalog ?? actionCatalogQuery.data;
-  const [working, setWorking] = useState(false);
-  const [inboxLoading, setInboxLoading] = useState(false);
-  const [updatingWebAccessTokens, setUpdatingWebAccessTokens] = useState<Set<string>>(new Set());
-  const cleanup = useGptAccountCleanupActions(data, setSelectedAccountID, toast);
+  const actionsRunner = useAsyncActionRunner();
+  const inboxRunner = useAsyncActionRunner();
+  const cleanup = useGptAccountCleanupActions(data, toast);
 
   useEffect(() => {
     if (data.loadError) toast.showError(data.loadError);
   }, [data.loadError, toast.showError]);
 
-  async function runWorkflow(actionID: GptActionID, account: Account, payload: Record<string, any> = {}) {
+  async function runWorkflow(actionID: GptActionID, account: Account, payload: Record<string, unknown> = {}) {
     if (!canMutateAccount(account)) return;
-    const path = workflowStartPath(actionCatalog, actionID);
-    if (!path) {
-      toast.showError(`动作未注册: ${actionID}`);
-      return;
-    }
-    setWorking(true);
-    try {
-      const resp = await api<{ job_id?: string; error_message?: string }>(path, {
-        method: 'POST',
-        body: JSON.stringify({ account_id: account.account_id, ...payload })
-      });
-      const label = gptActionLabel(actionCatalog, actionID, actionID);
-      toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || `${label} 已提交: ${resp.job_id || 'ok'}`);
-      if (!resp.error_message) await data.invalidate();
-    } catch (err) {
-      toast.showError(err);
-    } finally {
-      setWorking(false);
-    }
+    await actionsRunner.run(`workflow:${actionID}:${accountCarrierID(account)}`, () => submitAccountWorkflowAction({ catalog: actionCatalog, actionID, pathPrefix: '/api/gpt', payload: { account_id: accountCarrierID(account), ...payload }, toast, onSuccess: () => data.invalidate() }));
   }
 
-  async function runGoPayPayment(account: Account, otpChannel: ConcreteGoPayPaymentChannel) {
-    if (!canMutateAccount(account)) return;
-    setWorking(true);
-    try {
-      const input = await goPayAppInput();
-      const waOnly = isPureGoPayWAPaymentChannel(otpChannel);
-      const apiChannel = goPayPaymentRequestChannel(otpChannel);
-      const appInput = { user_id: GO_PAY_USER_ID, wa_phone: input.phone, country_code: input.country_code, pin: input.pin };
-      const body = waOnly ? { account_id: account.account_id, ...appInput } : { account_id: account.account_id, otp_channel: apiChannel, ...appInput };
-      const actionID = waOnly ? GPT_ACTIONS.goPayWAPayment : GPT_ACTIONS.goPayPayment;
-      const path = workflowStartPath(actionCatalog, actionID);
-      if (!path) { toast.showError(`动作未注册: ${actionID}`); return; }
-      const resp = await api<{ job_id?: string; error_message?: string }>(path, { method: 'POST', body: JSON.stringify(body) });
-      toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || `${goPayPaymentActionLabel(otpChannel)} 已提交: ${resp.job_id || 'ok'}`);
-      if (!resp.error_message) await data.invalidate();
-    } catch (err) {
-      toast.showError(err);
-    } finally {
-      setWorking(false);
-    }
-  }
-
-  async function runCodexOAuthBatchAddPhone(accounts: Account[]) {
+  async function runBulkWorkflow(actionID: GptActionID, accounts: Account[], fallbackLabel = actionID) {
     if (!accounts.length) {
-      toast.showError('没有未加手机账号');
+      toast.showError('没有可操作账号');
       return;
     }
-    setWorking(true);
-    try {
-      const accountIds = accounts.map((account) => account.account_id).filter(Boolean);
-      const path = workflowStartPath(actionCatalog, GPT_ACTIONS.codexOAuthBatchAddPhone);
-      if (!path) { toast.showError(`动作未注册: ${GPT_ACTIONS.codexOAuthBatchAddPhone}`); return; }
-      const resp = await api<{ job_id?: string; error_message?: string }>(path, {
-        method: 'POST',
-        body: JSON.stringify({ account_ids: accountIds })
+    await actionsRunner.run(`bulk-workflow:${actionID}`, async () => {
+      const accountIds = accounts.map((account) => accountCarrierID(account)).filter(Boolean);
+      if (!accountIds.length) {
+        toast.showError('没有可操作账号');
+        return;
+      }
+      await submitAccountWorkflowAction({
+        catalog: actionCatalog,
+        actionID,
+        fallbackLabel,
+        pathPrefix: '/api/gpt',
+        payload: { account_ids: accountIds },
+        toast,
+        onSuccess: () => data.invalidate(),
       });
-      const label = gptActionLabel(actionCatalog, GPT_ACTIONS.codexOAuthBatchAddPhone, '批量 Add Phone');
-      toast.showToast(resp.error_message ? 'error' : 'ok', resp.error_message || `${label} 已提交: ${resp.job_id || 'ok'}`);
-      if (!resp.error_message) await data.invalidate();
-    } catch (err) {
-      toast.showError(err);
-    } finally {
-      setWorking(false);
-    }
+    });
   }
-  async function updateAccount(account: Account, payload: Record<string, string>, successText: string) {
+
+  async function updateAccount(account: Account, payload: Partial<UpdateAccountAuthRequest>, successText: string) {
     if (!canMutateAccount(account)) return;
-    setWorking(true);
-    try {
-      const updated = await api<Account>(`/api/gpt/accounts/${account.account_id}`, { method: 'PATCH', body: JSON.stringify(payload) });
-      data.cacheAccount(updated);
-      setSelectedAccountID(updated.account_id);
-      toast.showOK(successText);
-      if (payload.session_token || payload.access_token) await queryClient.invalidateQueries({ queryKey: accountAuthQueryPrefix });
-      await data.invalidate();
-    } catch (err) {
-      toast.showError(err);
-      throw err;
-    } finally {
-      setWorking(false);
-    }
+    await data.runAccountMutation('update-account', account, () => (
+      mutateAccount<Account, UpdateAccountResponse>(`/api/gpt/accounts/${accountCarrierID(account)}`, { method: 'PATCH', body: JSON.stringify(payload) })
+    ), {
+      onSuccess: async (updated) => {
+        if (!updated) return;
+        setSelectedAccountID(accountCarrierID(updated));
+        toast.showOK(successText);
+        if (payload.session_token || payload.access_token) await queryClient.invalidateQueries({ queryKey: accountAuthQueryPrefix });
+      },
+      onError: toast.showError,
+    });
   }
 
   async function updateWebAccessToken(account: Account) {
     if (!canMutateAccount(account)) return;
-    setUpdatingWebAccessTokens((prev) => new Set(prev).add(account.account_id));
-    try {
-      const updated = await api<Account>(`/api/gpt/accounts/${account.account_id}/access-token`, { method: 'POST', body: '{}' });
-      data.cacheAccount(updated);
-      toast.showOK('Web AT 已更新');
-      await data.invalidate();
-    } finally {
-      setUpdatingWebAccessTokens((prev) => { const next = new Set(prev); next.delete(account.account_id); return next; });
-    }
+    await data.runAccountMutation('refresh-access-token', account, () => (
+      mutateAccount<Account, GetAccountResponse>(`/api/gpt/accounts/${accountCarrierID(account)}/access-token`, { method: 'POST', body: '{}' })
+    ), {
+      onSuccess: () => toast.showOK('Web AT 已更新'),
+      onError: toast.showError,
+    });
   }
 
   async function fetchInbox(account: Account) {
     if (!canMutateAccount(account)) return;
-    setInboxLoading(true);
-    try {
-      const resp = await api<FetchAccountMailboxResponse>(`/api/gpt/accounts/${account.account_id}/mailbox/inbox`, { method: 'POST', body: JSON.stringify({ limit_per_mailbox: 10 }) });
+    await inboxRunner.tryRun(`fetch-inbox:${accountCarrierID(account)}`, async () => {
+      const resp = await api<FetchAccountMailboxResponse>(`/api/gpt/accounts/${accountCarrierID(account)}/mailbox/inbox`, { method: 'POST', body: JSON.stringify({ limit_per_mailbox: 10 }) });
       if (resp.account) {
         data.cacheAccount(resp.account);
-        setSelectedAccountID(resp.account.account_id);
+        setSelectedAccountID(accountCarrierID(resp.account));
       }
       if (resp.inbox) queryClient.setQueryData(selectedInboxKey, resp.inbox);
       await queryClient.invalidateQueries({ queryKey: selectedInboxKey });
-      const latest = resp.inbox ? latestOtpForEmail(resp.inbox, data.mailboxes, account.email) : null;
-      const mailbox = account.primary_mailbox_email || account.email;
+      const latest = resp.inbox ? latestOtpForEmail(resp.inbox, data.mailboxes, accountCarrierEmail(account)) : null;
+      const mailbox = account.primary_mailbox_email || accountCarrierEmail(account);
       toast.showToast(resp.error_message ? 'error' : 'ok', `${showSecrets ? mailbox : maskEmail(mailbox)} 重新读取 OTP 缓存${latest ? `，OTP ${showSecrets ? latest.otp : mask(latest.otp)}，${formatUnix(latest.received_at_unix)}` : ''}${resp.error_message ? `，${resp.error_message}` : ''}`);
       if (resp.account) await data.invalidate();
-    } catch (err) {
-      toast.showError(err);
-    } finally {
-      setInboxLoading(false);
-    }
-  }
-
-  async function goPayAppInput() {
-    const profile = await queryClient.fetchQuery({ queryKey: ['gpt', 'gopay', 'profile', GO_PAY_USER_ID], queryFn: loadGoPayProfile });
-    return { phone: profile?.wa_phone || '', country_code: '+62', pin: profile?.pin || '' };
+    }, { onError: toast.showError });
   }
 
   function canMutateAccount(account: Account) {
@@ -171,9 +113,11 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
     return false;
   }
 
-  return { toast, actionCatalog, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working, inboxLoading, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, updatingWebAccessTokens, runWorkflow, runCodexOAuthBatchAddPhone, runGoPayPayment, updateAccount, updateWebAccessToken, fetchInbox, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
-}
+  const updatingWebAccessTokens = new Set(
+    data.accounts
+      .filter((account) => data.isAccountActionActive('refresh-access-token', account))
+      .map((account) => accountCarrierID(account))
+  );
 
-function loadGoPayProfile() {
-  return api<GoPayUserWAPhoneResponse>(`/api/gpt/gopay/profile?user_id=${GO_PAY_USER_ID}`);
+  return { toast, actionCatalog, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working: actionsRunner.busy, inboxLoading: inboxRunner.busy, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, updatingWebAccessTokens, runWorkflow, runBulkWorkflow, updateAccount, updateWebAccessToken, fetchInbox, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
 }

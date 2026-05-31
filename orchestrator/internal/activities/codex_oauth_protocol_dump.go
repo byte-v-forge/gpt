@@ -6,51 +6,53 @@ import (
 	"github.com/byte-v-forge/common-lib/stringx"
 	"sort"
 	"strings"
+
+	"orchestrator/pb"
 )
 
-func fetchCodexOAuthClientAuthSessionDump(ctx context.Context, client *GptClient, state *codexOAuthProtocolState, data map[string]any, stage string) error {
+func fetchCodexOAuthClientAuthSessionDump(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *codexOAuthStepData, stage string) error {
 	if client == nil || state == nil || data == nil || !client.cfg.ProtocolSessionDumpEnabled {
 		return nil
 	}
 	resp, err := client.get(ctx, "https://auth.openai.com/api/accounts/client_auth_session_dump", "https://auth.openai.com/email-verification", false)
 	if err != nil {
-		data["client_auth_session_dump_error"] = codexOAuthProtocolSafeText(err.Error(), 220)
+		data.setClientAuthSessionDumpError(codexOAuthProtocolSafeText(err.Error(), 220))
 		return nil
 	}
-	data["client_auth_session_dump_status"] = resp.StatusCode
+	data.setClientAuthSessionDumpStatus(resp.StatusCode)
 	if resp.StatusCode != 200 {
 		return nil
 	}
 	payload := codexOAuthProtocolResponseJSON(resp)
 	if payload == nil {
-		data["client_auth_session_dump_error"] = "json_missing"
+		data.setClientAuthSessionDumpError("json_missing")
 		return nil
 	}
 	applyCodexOAuthClientAuthSessionDump(payload, state, data, stage)
 	return nil
 }
 
-func applyCodexOAuthClientAuthSessionDump(payload map[string]any, state *codexOAuthProtocolState, data map[string]any, stage string) {
+func applyCodexOAuthClientAuthSessionDump(payload map[string]any, state *pb.CodexOAuthProtocolState, data *codexOAuthStepData, stage string) {
 	cas, _ := payload["client_auth_session"].(map[string]any)
-	data["client_auth_session_dump_seen"] = true
-	data["client_auth_session_keys"] = codexOAuthProtocolMapKeys(cas, 24)
+	data.setClientAuthSessionDumpSeen(true)
+	data.setClientAuthSessionKeys(codexOAuthProtocolMapKeys(cas, 24))
 	if clientID := strings.TrimSpace(stringAny(cas["openai_client_id"])); clientID != "" {
-		state.ClientID = clientID
-		data["client_auth_openai_client_id_present"] = true
+		state.ClientId = clientID
+		data.setClientAuthOpenAIClientIDPresent(true)
 	}
 	if sessionID := strings.TrimSpace(stringx.FirstNonEmptyAny(payload["session_id"], cas["session_id"])); sessionID != "" {
-		data["client_auth_session_id_present"] = true
+		data.setClientAuthSessionIDPresent(true)
 	}
 	if mode := strings.TrimSpace(stringAny(cas["email_verification_mode"])); mode != "" {
-		data["client_auth_email_verification_mode"] = mode
+		data.setClientAuthEmailVerificationMode(mode)
 	}
 	if value, ok := boolAny(cas["email_verified"]); ok {
-		data["client_auth_email_verified"] = value
+		data.setClientAuthEmailVerified(value)
 	}
 	applyCodexOAuthDumpPhoneState(cas, state, data, stage)
 }
 
-func applyCodexOAuthDumpPhoneState(cas map[string]any, state *codexOAuthProtocolState, data map[string]any, stage string) {
+func applyCodexOAuthDumpPhoneState(cas map[string]any, state *pb.CodexOAuthProtocolState, data *codexOAuthStepData, stage string) {
 	phone := strings.TrimSpace(stringAny(cas["phone_number"]))
 	channel := strings.TrimSpace(stringAny(cas["phone_verification_channel"]))
 	state.PhoneStateKnown = true
@@ -61,18 +63,18 @@ func applyCodexOAuthDumpPhoneState(cas map[string]any, state *codexOAuthProtocol
 	} else {
 		state.PhoneMask = ""
 	}
-	data["client_auth_phone_state_known"] = true
-	data["client_auth_phone_present"] = state.PhonePresent
-	data["client_auth_phone_status"] = codexOAuthProtocolPhoneStatus(state.PhonePresent, channel)
+	data.setClientAuthPhoneStateKnown(true)
+	data.setClientAuthPhonePresent(state.PhonePresent)
+	data.setClientAuthPhoneStatus(codexOAuthProtocolPhoneStatus(state.PhonePresent, channel))
 	if channel != "" {
-		data["client_auth_phone_verification_channel"] = channel
+		data.setClientAuthPhoneVerificationChannel(channel)
 	}
 	if state.PhoneMask != "" {
-		data["client_auth_phone_mask"] = state.PhoneMask
+		data.setClientAuthPhoneMask(state.PhoneMask)
 	}
 	if strings.TrimSpace(stage) == "add_phone" && !state.PhonePresent {
-		data["add_phone_required"] = true
-		data["add_phone_required_source"] = "client_auth_session_dump"
+		data.setAddPhoneRequired(true)
+		data.setAddPhoneRequiredSource("client_auth_session_dump")
 	}
 }
 
@@ -104,7 +106,7 @@ func codexOAuthProtocolMapKeys(data map[string]any, limit int) []string {
 	return keys
 }
 
-func codexOAuthProtocolStageFromDump(state *codexOAuthProtocolState, fallback string) string {
+func codexOAuthProtocolStageFromDump(state *pb.CodexOAuthProtocolState, fallback string) string {
 	if state != nil && state.PhoneStateKnown && state.PhonePresent && fallback == "add_phone" {
 		return "consent"
 	}

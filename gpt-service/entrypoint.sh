@@ -21,9 +21,7 @@ fi
 
 account_addr=${GPT_ACCOUNT_INTERNAL_ADDR:-127.0.0.1:50052}
 account_listen_addr=${GPT_ACCOUNT_LISTEN_ADDR:-:50052}
-payment_addr=${GPT_GOPAY_PAYMENT_INTERNAL_ADDR:-127.0.0.1:50054}
-gopay_app_port=${GPT_GOPAY_APP_INTERNAL_PORT:-50060}
-gopay_app_addr=${GPT_GOPAY_APP_INTERNAL_ADDR:-127.0.0.1:${gopay_app_port}}
+payment_addr=${GPT_PAYMENT_INTERNAL_ADDR:-127.0.0.1:50054}
 
 (
   export LISTEN_ADDR="$account_listen_addr"
@@ -35,6 +33,5 @@ pids+=("$!")
 export LISTEN_ADDR=${GPT_SERVICE_LISTEN_ADDR:-:50051}
 export GPT_SERVICE_PG_DSN="$service_pg_dsn"
 export GPT_ACCOUNT_ADDR="$account_addr"
-export GPT_GOPAY_APP_ADDR="$gopay_app_addr"
-export GPT_GOPAY_PAYMENT_ADDR="$payment_addr"
+export GPT_PAYMENT_ADDR="$payment_addr"
 exec /app/bin/gpt-orchestrator

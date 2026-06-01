@@ -1,4 +1,4 @@
-import { AccountTokenEditor, ContentTabs, KVList, canFetchAccountMailboxInbox, useQuery } from '@byte-v-forge/common-ui';
+import { AccountDangerZone, AccountDetailTabs, AccountTokenEditor, KVList, canFetchAccountMailboxInbox, useQuery } from '@byte-v-forge/common-ui';
 import type { AccountMailboxContext, KVDescriptor } from '@byte-v-forge/common-ui';
 import { maskEmail } from '@byte-v-forge/common-ui';
 import { formatUnix } from '@byte-v-forge/common-ui';
@@ -8,7 +8,7 @@ import type { GptActionCatalog } from './action-catalog';
 import { AccountFingerprintPanel } from './account-fingerprint-panel';
 import { AccountPrimaryActions } from './account-auth-action-groups';
 import { accountAuthQueryKey, loadAccountAuthTokens } from './account-auth-query';
-import { AccountDangerActions, AccountDetailActions } from './account-detail-actions';
+import { AccountDetailActions } from './account-detail-actions';
 import { AccountProxyHistoryPanel } from './account-proxy-history-panel';
 import { AccountWorkflowTimelinePanel } from './account-workflow-timeline-panel';
 import { isInvalidGptAccount } from './account-utils';
@@ -122,21 +122,18 @@ export function AccountDetails({
       {!invalid && <AccountTokenEditor label="Session Token" field="session_token" account={account} token={auth?.session_token || ''} expiresAtUnix={auth?.session_token_expires_at_unix || 0} loading={authQuery.isLoading} showSecrets={showSecrets} onCopy={onCopy} onSave={onSessionSave} />}
       {!invalid && <AccountTokenEditor label="Web AT" field="access_token" account={account} token={auth?.access_token || ''} expiresAtUnix={auth?.access_token_expires_at_unix || 0} loading={authQuery.isLoading} showSecrets={showSecrets} onCopy={onCopy} onSave={onAccessSave} />}
       <KVList items={timeFields} onCopy={onCopy} />
-      <AccountDangerActions account={account} busy={busy} onDelete={onDelete} />
+      <AccountDangerZone account={account} busy={busy} onDelete={onDelete} />
     </section>
   );
 
   return (
     <div className="details accountDetails">
-      <ContentTabs
-        tabsListVariant="line"
-        tabsClassName="accountDetailsTabs"
+      <AccountDetailTabs
         tabs={[
           {
             value: 'overview',
             label: '基础信息',
-            content: overview,
-            contentClassName: 'accountDetailTabContent'
+            content: overview
           },
           {
             value: 'workflows',
@@ -150,20 +147,17 @@ export function AccountDetails({
                 onMessage={onWorkflowMessage}
                 onError={onWorkflowError}
               />
-            ),
-            contentClassName: 'accountDetailTabContent'
+            )
           },
           {
             value: 'fingerprint',
             label: '指纹',
-            content: <AccountFingerprintPanel accountID={accountCarrierID(account)} onCopy={onCopy} />,
-            contentClassName: 'accountDetailTabContent'
+            content: <AccountFingerprintPanel accountID={accountCarrierID(account)} onCopy={onCopy} />
           },
           {
             value: 'ip-history',
             label: 'IP 历史',
-            content: <AccountProxyHistoryPanel accountID={accountCarrierID(account)} />,
-            contentClassName: 'accountDetailTabContent'
+            content: <AccountProxyHistoryPanel accountID={accountCarrierID(account)} />
           }
         ]}
       />

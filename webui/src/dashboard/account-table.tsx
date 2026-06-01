@@ -37,7 +37,7 @@ export function AccountTable({ accounts, jobs, selected, actionCatalog, showSecr
       carriers={accounts}
       selectedID={selected}
       emptyText="暂无账号。可以先创建账号，或切换为全部状态查看。"
-      listClassName="accountsList"
+      listClassName="accountManagementList"
       pagination={pagination}
       onSelectCarrier={onSelect}
       recordOf={(account) => gptAccountRecord(account, showSecrets)}

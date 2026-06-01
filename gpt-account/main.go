@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
+	"github.com/byte-v-forge/common-lib/accountmodel"
 	"github.com/byte-v-forge/common-lib/accountstream"
 	"github.com/byte-v-forge/common-lib/emailx"
 	"github.com/byte-v-forge/common-lib/envx"
@@ -627,6 +628,7 @@ func (s *gptAccountServer) accountToProto(ctx context.Context, account *db.Accou
 	if err := s.state.apply(ctx, out); err != nil {
 		return nil, err
 	}
+	accountmodel.SetCredentialState(ensureGptAccountRecord(out), accountmodel.CredentialKindPassword, strings.TrimSpace(account.Password) != "", accountmodel.CredentialStatusConfigured, time.Time{}, time.Time{})
 	out.Account = gptAccountProjection(out)
 	return out, nil
 }

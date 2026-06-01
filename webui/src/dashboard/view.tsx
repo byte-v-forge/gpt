@@ -1,5 +1,5 @@
 import { Eye, EyeOff, Trash2 } from 'lucide-react';
-import { PanelHeader, ToolbarIconButton, type AccountListPagination } from '@byte-v-forge/common-ui';
+import { AccountManagementFrame, ToolbarIconButton, type AccountListPagination } from '@byte-v-forge/common-ui';
 import type { Account, Job } from './types';
 import { AccountTable, CreateAccountForm } from './accounts';
 import type { AccountWorkflowRunner } from './account-action-specs';
@@ -33,9 +33,11 @@ export function GptAccountsView(props: GptAccountsViewProps) {
   const bulkActions = ACCOUNT_BULK_WORKFLOW_ACTIONS.map((spec) => accountBulkToolbarAction(spec, props.accounts, props.jobs, props.actionCatalog, props.busy, props.runBulkWorkflow));
   const invalidAccounts = invalidAccountsForCleanup(props.accounts);
   return (
-    <>
-      <PanelHeader title="GPT账号" icon={<OpenAIIcon size={16} />}>
-        <div className="headerControls accountHeaderControls">
+    <AccountManagementFrame
+      title="GPT账号"
+      icon={<OpenAIIcon size={16} />}
+      actions={
+        <>
           <CreateAccountForm compact onDone={props.onCreateDone} onError={props.onError} />
           {bulkActions.filter((action) => action.visible).map((action) => (
             <ToolbarIconButton
@@ -50,8 +52,9 @@ export function GptAccountsView(props: GptAccountsViewProps) {
             <ToolbarIconButton label={props.cleaningInvalidAccounts ? '清理中' : `清理失效账号 · ${invalidAccounts.length}`} icon={<Trash2 size={15} />} disabled={props.busy || props.cleaningInvalidAccounts} onClick={() => void props.onCleanInvalidAccounts()} />
           )}
           <ToolbarIconButton label={props.showSecrets ? '隐藏敏感信息' : '显示敏感信息'} icon={props.showSecrets ? <EyeOff size={15} /> : <Eye size={15} />} onClick={props.onToggleSecrets} />
-        </div>
-      </PanelHeader>
+        </>
+      }
+    >
       <AccountTable
         accounts={props.accounts}
         jobs={props.jobs}
@@ -66,6 +69,6 @@ export function GptAccountsView(props: GptAccountsViewProps) {
         runWorkflow={props.runWorkflow}
         onDelete={props.onDeleteAccount}
       />
-    </>
+    </AccountManagementFrame>
   );
 }

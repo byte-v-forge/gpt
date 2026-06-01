@@ -3,14 +3,14 @@
   min-width: 74px;
 }
 
-.accountsList .recordActions.rowActions {
+.accountManagementList .recordActions.rowActions {
   width: 100%;
   grid-template-columns: minmax(0, 1fr);
   justify-content: flex-start;
   justify-items: stretch;
 }
 
-.accountsList .recordActions.rowActions > .rowActionsMain {
+.accountManagementList .recordActions.rowActions > .rowActionsMain {
   justify-self: stretch;
 }
 

@@ -88,13 +88,13 @@ export function CreateAccountForm({ compact, onDone, onError }: { compact?: bool
   return (
     <>
       {compact ? (
-        <ToolbarIconButton label="创建 GPT 账号" tone="primary" icon={<Plus className="size-4" />} onClick={() => setOpen(true)} />
+        <ToolbarIconButton label="添加 GPT 账号" tone="primary" icon={<Plus className="size-4" />} onClick={() => setOpen(true)} />
       ) : (
         <Button size="sm" onClick={() => setOpen(true)}>
           <Plus className="size-4" /> 添加账号
         </Button>
       )}
-      <DashboardDialog open={open} title="创建 GPT 账号" description="选择 Mailbox Provider、邮箱类型和地区。" size="sm" footer={<ActionButtonGroup actions={dialogActions(runner.activeKey, requiresDomain && !activeDomain)} />} onOpenChange={setOpen}>
+      <DashboardDialog open={open} title="添加 GPT 账号" description="选择 Mailbox Provider、邮箱类型和地区。" size="sm" footer={<ActionButtonGroup actions={dialogActions(runner.activeKey, requiresDomain && !activeDomain)} />} onOpenChange={setOpen}>
         <form id="create-account-form" className="grid gap-3" onSubmit={handleSubmit(createAccount)}>
           <CreateAccountMailboxFields control={control} providerOptions={providerOptions} providerKey={providerKey} choiceOptions={choiceOptions} mailboxChoice={mailboxChoice} domains={activeDomains} activeDomain={activeDomain} showDomain={requiresDomain} showEmail={isManual} />
           <div className="grid gap-2 sm:grid-cols-2">
@@ -129,7 +129,7 @@ function dialogActions(working: string, disabled: boolean): ActionButtonDescript
   return [
     {
       id: 'create-account',
-      label: working ? '提交中' : '创建',
+      label: working ? '提交中' : '添加',
       icon: <Plus className="size-4" />,
       type: 'submit',
       form: 'create-account-form',

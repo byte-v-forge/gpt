@@ -60,6 +60,9 @@ func gptCredentialStates(account *pb.Account) []*accountv1.AccountCredentialStat
 	} else {
 		states = append(states, accountmodel.Credential(accountmodel.CredentialKindMailbox, account.GetPrimaryMailboxEmail() != "", accountmodel.CredentialStatusConfigured, time.Time{}, time.Time{}))
 	}
+	if credential := accountmodel.CredentialState(account.GetAccount(), accountmodel.CredentialKindPassword); credential != nil {
+		states = append(states, credential)
+	}
 	if credential := accountmodel.CredentialState(account.GetAccount(), credentialKindCodexPhone); credential != nil {
 		states = append(states, credential)
 	}

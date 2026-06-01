@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { ACCOUNT_CREDENTIAL_KIND_MAILBOX, accountCarrierCredentialUpdatedAtUnix, accountMailboxContextForEmail, api, formatUnix, mask, mutateAccount, submitAccountWorkflowAction, useAsyncActionRunner, useQuery, useQueryClient, useToastMessage } from '@byte-v-forge/common-ui';
+import { ACCOUNT_CREDENTIAL_KIND_MAILBOX, accountCarrierCredentialUpdatedAtUnix, accountMailboxContextForEmail, api, formatUnix, mask, mutateAccount, submitAccountWorkflowAction, useAccountWorkflowActionRunner, useAsyncActionRunner, useQuery, useQueryClient, useToastMessage } from '@byte-v-forge/common-ui';
 import { latestOtpForEmail, maskEmail, normalizeUiEmail } from '@byte-v-forge/common-ui';
 import { type GptActionCatalog, type GptActionID, useGptActionCatalog } from './action-catalog';
 import { isInvalidGptAccount } from './account-utils';
@@ -30,6 +30,13 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
   const actionCatalogQuery = useGptActionCatalog();
   const actionCatalog = providedActionCatalog ?? actionCatalogQuery.data;
   const actionsRunner = useAsyncActionRunner();
+  const workflowRunner = useAccountWorkflowActionRunner<Account, GptActionCatalog>({
+    catalog: actionCatalog,
+    pathPrefix: '/api/gpt',
+    toast,
+    onSuccess: () => data.invalidate(),
+    onError: toast.showError,
+  });
   const inboxRunner = useAsyncActionRunner();
   const cleanup = useGptAccountCleanupActions(data, toast);
   const showError = toast.showError;
@@ -40,7 +47,7 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
 
   async function runWorkflow(actionID: GptActionID, account: Account, payload: Record<string, unknown> = {}, placement?: string, fallbackLabel?: string) {
     if (!canMutateAccount(account)) return;
-    await actionsRunner.run(`workflow:${actionID}:${accountCarrierID(account)}`, () => submitAccountWorkflowAction({ catalog: actionCatalog, actionID, fallbackLabel, placement, pathPrefix: '/api/gpt', payload: { account_id: accountCarrierID(account), ...payload }, toast, onSuccess: () => data.invalidate() }));
+    await workflowRunner.runWorkflowAction({ actionID, account, fallbackLabel, placement, payload: { account_id: accountCarrierID(account), ...payload } });
   }
 
   async function runBulkWorkflow(actionID: GptActionID, accounts: Account[], fallbackLabel = actionID) {
@@ -120,5 +127,5 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
       .map((account) => accountCarrierID(account))
   );
 
-  return { toast, actionCatalog, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working: actionsRunner.busy, inboxLoading: inboxRunner.busy, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, updatingWebAccessTokens, runWorkflow, runBulkWorkflow, updateAccount, updateWebAccessToken, fetchInbox, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
+  return { toast, actionCatalog, inbox: inboxQuery.data ?? null, inboxQueryKey: selectedInboxKey, working: actionsRunner.busy || workflowRunner.busy, inboxLoading: inboxRunner.busy, cleaningInvalidAccounts: cleanup.cleaningInvalidAccounts, updatingWebAccessTokens, runWorkflow, runBulkWorkflow, updateAccount, updateWebAccessToken, fetchInbox, cleanInvalidAccounts: cleanup.cleanInvalidAccounts, deleteAccount: cleanup.deleteAccount };
 }

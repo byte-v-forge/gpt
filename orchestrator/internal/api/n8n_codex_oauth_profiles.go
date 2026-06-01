@@ -8,6 +8,7 @@ import (
 type n8nCodexOAuthProfile struct {
 	Start            n8nActionJobConfig
 	Proxy            n8nDynamicProxyProfile
+	OTP              n8nChannelOTPWaitConfig
 	Complete         n8nActionSuccessConfig
 	Fail             n8nActionFailureStoreConfig
 	IncludeAccountID bool
@@ -93,6 +94,7 @@ func (definition n8nCodexOAuthProfileDefinition) profile() n8nCodexOAuthProfile 
 		}).withAction(action),
 		IncludeAccountID: definition.IncludeAccountID,
 	}
+	profile.OTP = definition.emailOTPWaitConfig()
 	if definition.ProxyMode != "" || definition.AuthEdgeCheckTarget != "" {
 		profile.Proxy = (n8nDynamicProxyProfile{
 			ProtocolMode:        definition.ProxyMode,
@@ -112,4 +114,31 @@ func (definition n8nCodexOAuthProfileDefinition) runtimeProfile() n8nActionRunti
 		runtime.DynamicProxy = n8nRuntimeProfilePtr(profile.Proxy)
 	}
 	return runtime
+}
+
+func (definition n8nCodexOAuthProfileDefinition) emailOTPWaitConfig() n8nChannelOTPWaitConfig {
+	switch definition.Flow {
+	case n8nCodexOAuthBrowserFlow:
+		return n8nAuthOTPDefinition{
+			StepName:             contracts.StepCodexOAuthBrowserEmailOTPWait,
+			ResumeSecretPrefix:   "n8n-codex-oauth-browser-email-otp-resume-url:",
+			FlowIDParam:          "codex_oauth_browser_flow_id",
+			IssuedAfterParam:     "codex_oauth_email_otp_issued_after_unix",
+			TimeoutParam:         "codex_oauth_email_otp_timeout_seconds",
+			ResumeSecretKeyParam: "codex_oauth_email_otp_resume_url_secret_key",
+			PollReason:           "codex_oauth_browser_email_otp_wait",
+		}.waitConfig()
+	case n8nCodexOAuthProtocolFlow:
+		return n8nAuthOTPDefinition{
+			StepName:             contracts.StepCodexOAuthProtocolEmailOTPWait,
+			ResumeSecretPrefix:   "n8n-codex-oauth-protocol-email-otp-resume-url:",
+			FlowIDParam:          "codex_oauth_protocol_flow_id",
+			IssuedAfterParam:     "codex_oauth_email_otp_issued_after_unix",
+			TimeoutParam:         "codex_oauth_email_otp_timeout_seconds",
+			ResumeSecretKeyParam: "codex_oauth_email_otp_resume_url_secret_key",
+			PollReason:           "codex_oauth_protocol_email_otp_wait",
+		}.waitConfig()
+	default:
+		return n8nChannelOTPWaitConfig{}
+	}
 }

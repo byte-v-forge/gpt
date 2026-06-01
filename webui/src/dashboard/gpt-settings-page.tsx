@@ -31,6 +31,7 @@ export function GPTSettingsPage() {
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: gptSettingsQueryKey, queryFn: getGPTSettings });
   const form = useForm<GPTSettingsForm>({ defaultValues: defaultGPTSettingsForm });
+  const showError = toast.showError;
   const mutation = useMutation({
     mutationFn: (values: GPTSettingsForm) => updateGPTSettings(settingsFromForm(values)),
     onSuccess: async () => {
@@ -44,8 +45,8 @@ export function GPTSettingsPage() {
     if (query.data?.settings) form.reset(formFromGPTSettings(query.data.settings, query.data.plugin_schemas));
   }, [form, query.data?.plugin_schemas, query.data?.settings]);
   useEffect(() => {
-    if (query.error) toast.showError(query.error);
-  }, [query.error, toast.showError]);
+    if (query.error) showError(query.error);
+  }, [query.error, showError]);
   const preflightEnabled = form.watch('enabled');
   const pluginCount = query.data?.plugin_schemas?.length || 0;
 

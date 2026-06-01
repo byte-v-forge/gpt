@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"strings"
 
+	"orchestrator/internal/channelotpwait"
 	"orchestrator/internal/contracts"
 	"orchestrator/pb"
 )
@@ -78,6 +80,36 @@ func (s *Server) CodexOAuthSubmitFlowPassword(ctx context.Context, actionID stri
 	}
 	out, err := steps.SubmitPassword(ctx, *req)
 	return &out, err
+}
+
+func (s *Server) CodexOAuthAwaitFlowEmailOTP(ctx context.Context, actionID string, req *pb.N8NAuthOTPWaitRequest) (*pb.N8NChannelOTPWaitResult, error) {
+	profile, err := n8nCodexOAuthProfileForAction(actionID)
+	if err != nil {
+		return nil, err
+	}
+	cfg := s.channelOTPWaitConfig(channelotpwait.ChannelEmail, profile.OTP)
+	target := strings.TrimSpace(req.GetTarget())
+	if target == "" {
+		target, err = s.n8nAuthAccountEmail(ctx, req.GetAccountId())
+		if err != nil {
+			return nil, err
+		}
+	}
+	return s.awaitN8NChannelOTP(ctx, n8nChannelOTPWaitRequest{
+		Action:           actionID,
+		JobID:            req.GetJobId(),
+		AccountID:        req.GetAccountId(),
+		N8NExecutionID:   req.GetN8NExecutionId(),
+		FlowID:           req.GetFlowId(),
+		Channel:          channelotpwait.ChannelEmail,
+		Target:           target,
+		StepName:         cfg.StepName,
+		TimeoutSeconds:   req.GetTimeoutSeconds(),
+		OTPIssuedAfter:   req.GetOtpIssuedAfterUnix(),
+		ResumeURL:        req.GetResumeUrl(),
+		OTPParam:         contracts.JobParamRegistrationOTP,
+		SubmittedAtParam: contracts.JobParamRegistrationOTPSubmittedAtUnix,
+	}, cfg)
 }
 
 func (s *Server) CodexOAuthSubmitFlowEmailOTP(ctx context.Context, actionID string, req *pb.CodexOAuthSubmitEmailOTPInput) (*pb.CodexOAuthBrowserStageOutput, error) {

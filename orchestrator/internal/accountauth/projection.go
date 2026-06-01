@@ -8,8 +8,9 @@ import (
 	"orchestrator/pb"
 )
 
-func Response(accountID string, sessionToken TokenSnapshot, accessToken TokenSnapshot) *pb.AccountAuthResponse {
+func Response(accountID string, password string, sessionToken TokenSnapshot, accessToken TokenSnapshot) *pb.AccountAuthResponse {
 	return &pb.AccountAuthResponse{
+		Password:                  password,
 		SessionToken:              sessionToken.Value,
 		SessionTokenExpiresAtUnix: sessionToken.ExpiresAtUnix,
 		AccessToken:               accessToken.Value,

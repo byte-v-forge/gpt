@@ -68,7 +68,7 @@ export function AccountTable({ accounts, jobs, selected, actionCatalog, showSecr
   );
 }
 
-function AccountRowActions({ account, actionCatalog, accountBusy, currentWorkflow, busy, runWorkflow, onDelete }: {
+export function AccountRowActions({ account, actionCatalog, accountBusy, currentWorkflow, busy, runWorkflow, onDelete }: {
   account: Account;
   actionCatalog?: GptActionCatalog;
   accountBusy: boolean;

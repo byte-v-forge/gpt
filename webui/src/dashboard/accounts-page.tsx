@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { accountMailboxContextForEmail, DetailDrawer, latestOtpForEmail, ToastMessage, WorkspaceTabbedPanel } from '@byte-v-forge/common-ui';
+import { accountMailboxContextForEmail, latestOtpForEmail, ToastMessage, WorkspaceTabbedPanel } from '@byte-v-forge/common-ui';
 import { AccountDetails } from './account-details';
 import { useGptActionCatalog, type GptActionCatalog } from './action-catalog';
 import { useGptAccountActions } from './account-actions';
@@ -47,6 +47,31 @@ function GptAccountsTab({ actionCatalog }: { actionCatalog?: GptActionCatalog })
   const busy = actions.working || data.busy;
   const selectedPhoneState = data.selected ? accountCodexPhoneState(data.selected, data.jobs, actions.actionCatalog) : null;
   useGptAccountEventCache();
+  const selectedDetails = data.selected && selectedPhoneState ? (
+    <AccountDetails
+      account={data.selected}
+      jobs={data.jobs}
+      actionCatalog={actions.actionCatalog}
+      showSecrets={showSecrets}
+      busy={busy}
+      inboxLoading={actions.inboxLoading}
+      mailboxContext={accountMailboxContextForEmail(data.mailboxes, data.allocations, { email: accountCarrierEmail(data.selected), primary_mailbox_email: data.selected.primary_mailbox_email })}
+      latestOtp={latestOtpForEmail(actions.inbox, data.mailboxes, accountCarrierEmail(data.selected))}
+      activationChannel={accountActivationChannel(data.selected, data.jobs, actions.actionCatalog)}
+      codexPhoneState={selectedPhoneState}
+      updatingWebAccessToken={actions.updatingWebAccessTokens.has(accountCarrierID(data.selected))}
+      onCopy={actions.toast.copyValue}
+      onFetchInbox={actions.fetchInbox}
+      onSessionSave={(account, sessionToken) => actions.updateAccount(account, { session_token: sessionToken }, '认证信息已更新')}
+      onAccessSave={(account, accessToken) => actions.updateAccount(account, { access_token: accessToken }, '认证信息已更新')}
+      runWorkflow={actions.runWorkflow}
+      onWorkflowChanged={data.invalidate}
+      onWorkflowMessage={actions.toast.showToast}
+      onWorkflowError={actions.toast.showError}
+      onUpdateWebAccessToken={actions.updateWebAccessToken}
+      onDelete={actions.deleteAccount}
+    />
+  ) : null;
 
   return (
     <>
@@ -62,6 +87,8 @@ function GptAccountsTab({ actionCatalog }: { actionCatalog?: GptActionCatalog })
         runningAccountIds={data.runningIds}
         runningWorkflowByAccountID={data.runningByAccount}
         accountsPagination={data.accountsPagination}
+        selectedAccount={data.selected}
+        detail={selectedDetails}
         onCreateDone={async (message) => {
           actions.toast.showOK(message);
           await data.invalidate();
@@ -70,37 +97,11 @@ function GptAccountsTab({ actionCatalog }: { actionCatalog?: GptActionCatalog })
         onToggleSecrets={() => setShowSecrets((value) => !value)}
         onCleanInvalidAccounts={actions.cleanInvalidAccounts}
         onSelectAccount={(account) => setSelectedAccountID(accountCarrierID(account))}
+        onCloseDetails={() => setSelectedAccountID('')}
         runWorkflow={actions.runWorkflow}
         runBulkWorkflow={actions.runBulkWorkflow}
         onDeleteAccount={actions.deleteAccount}
       />
-      <DetailDrawer open={!!data.selected} title="GPT账号详情" size="wide" onClose={() => setSelectedAccountID('')}>
-        {data.selected && (
-          <AccountDetails
-            account={data.selected}
-            jobs={data.jobs}
-            actionCatalog={actions.actionCatalog}
-            showSecrets={showSecrets}
-            busy={busy}
-            inboxLoading={actions.inboxLoading}
-            mailboxContext={accountMailboxContextForEmail(data.mailboxes, data.allocations, { email: accountCarrierEmail(data.selected), primary_mailbox_email: data.selected.primary_mailbox_email })}
-            latestOtp={latestOtpForEmail(actions.inbox, data.mailboxes, accountCarrierEmail(data.selected))}
-            activationChannel={accountActivationChannel(data.selected, data.jobs, actions.actionCatalog)}
-            codexPhoneState={selectedPhoneState!}
-            updatingWebAccessToken={actions.updatingWebAccessTokens.has(accountCarrierID(data.selected))}
-            onCopy={actions.toast.copyValue}
-            onFetchInbox={actions.fetchInbox}
-            onSessionSave={(account, sessionToken) => actions.updateAccount(account, { session_token: sessionToken }, '认证信息已更新')}
-            onAccessSave={(account, accessToken) => actions.updateAccount(account, { access_token: accessToken }, '认证信息已更新')}
-            runWorkflow={actions.runWorkflow}
-            onWorkflowChanged={data.invalidate}
-            onWorkflowMessage={actions.toast.showToast}
-            onWorkflowError={actions.toast.showError}
-            onUpdateWebAccessToken={actions.updateWebAccessToken}
-            onDelete={actions.deleteAccount}
-          />
-        )}
-      </DetailDrawer>
     </>
   );
 }

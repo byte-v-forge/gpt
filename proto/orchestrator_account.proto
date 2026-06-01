@@ -127,6 +127,7 @@ message AccountAuthResponse {
   string access_token = 4;
   int64 access_token_expires_at_unix = 5;
   byte.v.forge.contracts.account.v1.Account account = 8;
+  string password = 9;
 }
 
 message AccountProxyUsage {

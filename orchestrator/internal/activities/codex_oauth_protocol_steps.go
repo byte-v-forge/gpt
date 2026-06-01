@@ -137,8 +137,8 @@ func codexOAuthProtocolResponseSentAtUnix(client *GptClient, resp *codexOAuthPro
 
 func (s *Server) CodexOAuthSubmitProtocolEmailOTPActivity(ctx context.Context, input CodexOAuthSubmitEmailOTPInput) (CodexOAuthBrowserStageOutput, error) {
 	stepInput := CodexOAuthBrowserStepInput{JobId: input.GetJobId(), AccountId: input.GetAccountId(), Label: input.GetLabel(), Session: input.GetSession()}
-	return s.codexOAuthProtocolStageStep(ctx, stepInput, contracts.StepCodexOAuthProtocolEmailOTP, "submitting codex oauth protocol email otp", func(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, account *pb.Account, data *codexOAuthStepData) (string, int64, error) {
-		otp, err := s.waitCodexOAuthEmailOTP(ctx, input.GetJobId(), gptaccount.Email(account), input.GetIssuedAfterUnix())
+	return s.codexOAuthProtocolStageStep(ctx, stepInput, contracts.StepCodexOAuthProtocolEmailOTP, "submitting codex oauth protocol email otp", func(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, _ *pb.Account, data *codexOAuthStepData) (string, int64, error) {
+		otp, err := s.consumeStoredOTP(ctx, input.GetJobId(), contracts.JobParamRegistrationOTP, contracts.JobParamRegistrationOTPSubmittedAtUnix, input.GetIssuedAfterUnix())
 		if err != nil {
 			return "", input.GetIssuedAfterUnix(), err
 		}

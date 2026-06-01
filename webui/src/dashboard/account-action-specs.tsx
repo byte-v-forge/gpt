@@ -1,11 +1,11 @@
 import { KeyRound, Play, Search } from 'lucide-react';
 import type { AccountCatalogActionBase, RowActionDescriptor } from '@byte-v-forge/common-ui';
-import { GPT_ACTIONS, type GptActionID } from './action-catalog';
+import { GPT_ACTIONS, type GptActionID, type GptActionPlacement } from './action-catalog';
 import { CodexIcon } from './brand-icons';
 import { canLoginSession, canProbeAccount, canRegister, loginActionHint, probeAccountHint } from './account-utils';
 import type { Account } from './types';
 
-export type AccountWorkflowRunner = (actionID: GptActionID, account: Account) => void | Promise<void>;
+export type AccountWorkflowRunner = (actionID: GptActionID, account: Account, payload?: Record<string, unknown>, placement?: GptActionPlacement, fallbackLabel?: string) => void | Promise<void>;
 
 export type AccountWorkflowActionSpec = AccountCatalogActionBase<Account, GptActionID> & {
   id: string;

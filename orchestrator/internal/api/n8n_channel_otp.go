@@ -156,11 +156,7 @@ func (s *Server) awaitN8NChannelOTP(ctx context.Context, req n8nChannelOTPWaitRe
 
 func (s *Server) awaitN8NAuthChannelOTP(ctx context.Context, cfg n8nChannelOTPWaitConfig, jobID string, accountID string, n8nExecutionID string, flowID string, channel string, target string, timeoutSeconds int32, otpIssuedAfterUnix int64, resumeURL string) (any, error) {
 	jobID, accountID, n8nExecutionID = normalizeN8NAuthIDs(jobID, accountID, n8nExecutionID)
-	cfg.Channel = firstNonEmpty(cfg.Channel, channelotpwait.ChannelEmail)
-	if cfg.Channel == channelotpwait.ChannelEmail {
-		cfg.Latest = s.latestMailboxEmailChannelOTP
-		cfg.Poll = s.requestMailboxEmailChannelOTPPoll
-	}
+	cfg = s.channelOTPWaitConfig(firstNonEmpty(cfg.Channel, channelotpwait.ChannelEmail), cfg)
 	out, err := s.awaitN8NChannelOTP(ctx, n8nChannelOTPWaitRequest{
 		JobID:            jobID,
 		AccountID:        accountID,
@@ -179,6 +175,15 @@ func (s *Server) awaitN8NAuthChannelOTP(ctx context.Context, cfg n8nChannelOTPWa
 		return nil, err
 	}
 	return n8nAuthStepResultFromChannelOTP(out), nil
+}
+
+func (s *Server) channelOTPWaitConfig(channel string, cfg n8nChannelOTPWaitConfig) n8nChannelOTPWaitConfig {
+	cfg.Channel = firstNonEmpty(cfg.Channel, channel)
+	if cfg.Channel == channelotpwait.ChannelEmail {
+		cfg.Latest = s.latestMailboxEmailChannelOTP
+		cfg.Poll = s.requestMailboxEmailChannelOTPPoll
+	}
+	return cfg
 }
 
 func normalizeN8NChannelOTPWaitRequest(req n8nChannelOTPWaitRequest, channel string) n8nChannelOTPWaitRequest {

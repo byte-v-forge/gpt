@@ -11,6 +11,7 @@ type N8NCodexOAuthFlowActions interface {
 	CodexOAuthDetectFlowStage(context.Context, string, *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error)
 	CodexOAuthSubmitFlowEmail(context.Context, string, *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error)
 	CodexOAuthSubmitFlowPassword(context.Context, string, *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error)
+	CodexOAuthAwaitFlowEmailOTP(context.Context, string, *pb.N8NAuthOTPWaitRequest) (*pb.N8NChannelOTPWaitResult, error)
 	CodexOAuthSubmitFlowEmailOTP(context.Context, string, *pb.CodexOAuthSubmitEmailOTPInput) (*pb.CodexOAuthBrowserStageOutput, error)
 	CodexOAuthAddPhoneFlow(context.Context, string, *pb.CodexOAuthAddPhoneBrowserInput) (*pb.CodexOAuthAddPhoneBrowserOutput, error)
 	CodexOAuthCompleteFlow(context.Context, string, *pb.CodexOAuthCompleteBrowserInput) (*pb.CodexOAuthCompleteBrowserOutput, error)
@@ -22,6 +23,7 @@ type n8nCodexOAuthFlowRouteNames struct {
 	Detect         string
 	SubmitEmail    string
 	SubmitPassword string
+	AwaitEmailOTP  string
 	SubmitEmailOTP string
 	AddPhone       string
 	Complete       string
@@ -54,6 +56,9 @@ func n8nCodexOAuthFlowActionRoutes[T N8NCodexOAuthFlowActions](actionID string, 
 				return actions.CodexOAuthSubmitFlowPassword(ctx, actionID, req)
 			},
 		),
+		firstNonEmptyString(names.AwaitEmailOTP, "await-email-otp"): n8nAuthOTPWaitActionRoute(func(ctx context.Context, req *pb.N8NAuthOTPWaitRequest) (any, error) {
+			return actions.CodexOAuthAwaitFlowEmailOTP(ctx, actionID, req)
+		}),
 		firstNonEmptyString(names.SubmitEmailOTP, "submit-email-otp"): n8nProtoJSONActionRoute(
 			newCodexOAuthSubmitEmailOTPInput,
 			func(ctx context.Context, req *pb.CodexOAuthSubmitEmailOTPInput) (*pb.CodexOAuthBrowserStageOutput, error) {

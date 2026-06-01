@@ -125,7 +125,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/record-proxy' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/record-proxy' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -144,7 +144,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/fail-proxy' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/fail-proxy' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -163,7 +163,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/use-proxy' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/use-proxy' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -182,7 +182,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/start-protocol' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/start-protocol' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -201,7 +201,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/detect' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/detect' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -254,7 +254,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/submit-email' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/submit-email' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -307,7 +307,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/submit-password' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/submit-password' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -360,11 +360,11 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/submit-email-otp' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/submit-email-otp' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
-        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, session: $('Start Protocol').first().json.session, issuedAfterUnix: $json.emailOtpIssuedAfterUnix || 0 } }}",
+        "jsonBody": "={{ { jobId: $('Normalize Input').first().json.job_id, accountId: $('Normalize Input').first().json.account_id, label: $('Normalize Input').first().json.label, session: $('Start Protocol').first().json.session, issuedAfterUnix: $json.body?.otp_issued_after_unix || $json.otp_issued_after_unix || $('Await Email OTP').first().json.otp_issued_after_unix || $('Submit Password').first().json.email_otp_issued_after_unix || $('Submit Password').first().json.emailOtpIssuedAfterUnix || $('Submit Email').first().json.email_otp_issued_after_unix || $('Submit Email').first().json.emailOtpIssuedAfterUnix || 0 } }}",
         "options": {}
       },
       "id": "419b5b94-9319-5de8-ae50-83664c2cd74c",
@@ -372,7 +372,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4160,
+        5440,
         0
       ]
     },
@@ -406,14 +406,14 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        4480,
+        5760,
         0
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/acquire-phone' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/acquire-phone' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -425,14 +425,14 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        4800,
+        6080,
         0
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/add-phone-protocol' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/add-phone-protocol' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -444,7 +444,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5120,
+        6400,
         0
       ]
     },
@@ -478,14 +478,14 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        5440,
+        6720,
         0
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/fail' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/fail' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -497,7 +497,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5760,
+        7040,
         -180
       ]
     },
@@ -531,14 +531,14 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        4800,
+        6080,
         180
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/complete-protocol' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/complete-protocol' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -550,14 +550,14 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5760,
+        7040,
         0
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/complete' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/complete' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -569,14 +569,14 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6080,
+        7360,
         0
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/fail' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/fail' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -588,14 +588,14 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        5120,
+        6400,
         180
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/release-phone' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/release-phone' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -613,14 +613,14 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6080,
+        7360,
         -180
       ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/stop-protocol' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/stop-protocol' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -638,7 +638,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6400,
+        7680,
         0
       ]
     },
@@ -663,7 +663,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        6720,
+        8000,
         0
       ]
     },
@@ -678,6 +678,131 @@
       "position": [
         0,
         0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/await-email-otp' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, flow_id: $('Start Protocol').first().json.session?.flow_id || $('Start Protocol').first().json.session?.flowId || '', channel: 'email', target: '', timeout_seconds: 180, otp_issued_after_unix: $json.email_otp_issued_after_unix || $json.emailOtpIssuedAfterUnix || $('Submit Password').first().json.email_otp_issued_after_unix || $('Submit Password').first().json.emailOtpIssuedAfterUnix || $('Submit Email').first().json.email_otp_issued_after_unix || $('Submit Email').first().json.emailOtpIssuedAfterUnix || 0, resume_url: $execution.resumeUrl } }}",
+        "options": {}
+      },
+      "id": "6d4754f8-8b5d-402c-83ad-5e9304352cd1",
+      "name": "Await Email OTP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4160,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "email-otp-already-available",
+              "leftValue": "={{ Boolean($json.otp_found || $json.otp_source || $json.data?.complete?.source) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5184ea06-aa55-402d-839c-a96826d08371",
+      "name": "Email OTP Already Available?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        4480,
+        -180
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "limitWaitTime": true,
+        "limitType": "afterTimeInterval",
+        "resumeAmount": 5,
+        "resumeUnit": "minutes",
+        "options": {}
+      },
+      "id": "435ac709-9ecc-4d4f-93a6-2380eaf51a8f",
+      "name": "Wait For Email OTP Event",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        4800,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "email-otp-event-received",
+              "leftValue": "={{ Boolean($json.body?.otp_source || $json.otp_source) }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2bcd8a2a-19f9-476c-ad28-7797f9cee3dc",
+      "name": "Email OTP Event Received?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        5120,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-add-phone/fail' }}",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { job_id: $('Normalize Input').first().json.job_id, account_id: $('Normalize Input').first().json.account_id, n8n_execution_id: $('Normalize Input').first().json.n8n_execution_id, step: 'codex_oauth_protocol_email_otp_wait', error_message: 'codex oauth add-phone email OTP wait timed out', data: Object.assign({}, $json.data || {}, { reason: 'email_otp_wait_timeout', error_message: 'codex oauth add-phone email OTP wait timed out', otp_wait_timeout: true }) } }}",
+        "options": {}
+      },
+      "id": "6a75648c-6755-4af0-b3a5-3b17d006d91c",
+      "name": "Fail Email OTP Timeout",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5440,
+        220
       ]
     }
   ],
@@ -850,7 +975,7 @@
       "main": [
         [
           {
-            "node": "Submit Email OTP",
+            "node": "Await Email OTP",
             "type": "main",
             "index": 0
           }
@@ -1022,6 +1147,75 @@
         [
           {
             "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Await Email OTP": {
+      "main": [
+        [
+          {
+            "node": "Email OTP Already Available?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email OTP Already Available?": {
+      "main": [
+        [
+          {
+            "node": "Submit Email OTP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait For Email OTP Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait For Email OTP Event": {
+      "main": [
+        [
+          {
+            "node": "Email OTP Event Received?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email OTP Event Received?": {
+      "main": [
+        [
+          {
+            "node": "Submit Email OTP",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Email OTP Timeout",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fail Email OTP Timeout": {
+      "main": [
+        [
+          {
+            "node": "Stop Protocol",
             "type": "main",
             "index": 0
           }

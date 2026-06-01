@@ -79,6 +79,15 @@ export function AccountDetails({
       copyValue: accountCarrierEmail(account),
       copyDisabled: !accountCarrierEmail(account),
       masked: !showSecrets
+    },
+    {
+      id: 'password',
+      label: '密码',
+      value: showSecrets ? auth?.password || '-' : '••••••••',
+      copyValue: auth?.password || '',
+      copyDisabled: !auth?.password,
+      masked: !showSecrets,
+      visible: !invalid
     }
   ];
   const timeFields: KVDescriptor[] = [
@@ -106,7 +115,7 @@ export function AccountDetails({
       {!invalid && (
         <div className="accountDetailActionStack">
           <AccountPrimaryActions account={account} actionCatalog={actionCatalog} busy={busy} updatingWebAccessToken={updatingWebAccessToken} runWorkflow={runWorkflow} onUpdateWebAccessToken={onUpdateWebAccessToken} />
-          <AccountDetailActions account={account} showSecrets={showSecrets} busy={busy} inboxLoading={inboxLoading} mailboxContext={mailboxContext} latestOtp={latestOtp} canFetchOTP={canFetchOTP} onCopy={onCopy} onFetchInbox={onFetchInbox} />
+          <AccountDetailActions account={account} actionCatalog={actionCatalog} showSecrets={showSecrets} busy={busy} inboxLoading={inboxLoading} mailboxContext={mailboxContext} latestOtp={latestOtp} canFetchOTP={canFetchOTP} runWorkflow={runWorkflow} onCopy={onCopy} onFetchInbox={onFetchInbox} />
         </div>
       )}
       <KVList items={credentialFields} onCopy={onCopy} />

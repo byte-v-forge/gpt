@@ -36,6 +36,7 @@ const (
 	StepCodexOAuthProtocolDetect        = gptplugin.StepCodexOAuthProtocolDetect
 	StepCodexOAuthProtocolEmail         = gptplugin.StepCodexOAuthProtocolEmail
 	StepCodexOAuthProtocolPassword      = gptplugin.StepCodexOAuthProtocolPassword
+	StepCodexOAuthProtocolEmailOTPWait  = "codex_oauth_protocol_email_otp_wait"
 	StepCodexOAuthProtocolEmailOTP      = gptplugin.StepCodexOAuthProtocolEmailOTP
 	StepCodexOAuthProtocolAddPhone      = gptplugin.StepCodexOAuthProtocolAddPhone
 	StepCodexOAuthProtocolComplete      = gptplugin.StepCodexOAuthProtocolComplete
@@ -43,6 +44,7 @@ const (
 	StepCodexOAuthBrowserDetect         = gptplugin.StepCodexOAuthBrowserDetect
 	StepCodexOAuthBrowserEmail          = gptplugin.StepCodexOAuthBrowserEmail
 	StepCodexOAuthBrowserPassword       = gptplugin.StepCodexOAuthBrowserPassword
+	StepCodexOAuthBrowserEmailOTPWait   = "codex_oauth_browser_email_otp_wait"
 	StepCodexOAuthBrowserEmailOTP       = gptplugin.StepCodexOAuthBrowserEmailOTP
 	StepCodexOAuthBrowserAddPhone       = gptplugin.StepCodexOAuthBrowserAddPhone
 	StepCodexOAuthBrowserComplete       = gptplugin.StepCodexOAuthBrowserComplete

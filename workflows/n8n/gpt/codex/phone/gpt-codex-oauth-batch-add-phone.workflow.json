@@ -53,7 +53,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-batch-add-phone/create-child' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-batch-add-phone/create-child' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
@@ -85,7 +85,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-batch-add-phone/complete' }",
+        "url": "={{ $env.GPT_ACTION_API_BASE_URL + '/codex-oauth-batch-add-phone/complete' }}",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",

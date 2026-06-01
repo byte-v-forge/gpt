@@ -32,14 +32,15 @@ export function useGptAccountActions(data: GptAccountData, showSecrets: boolean,
   const actionsRunner = useAsyncActionRunner();
   const inboxRunner = useAsyncActionRunner();
   const cleanup = useGptAccountCleanupActions(data, toast);
+  const showError = toast.showError;
 
   useEffect(() => {
-    if (data.loadError) toast.showError(data.loadError);
-  }, [data.loadError, toast.showError]);
+    if (data.loadError) showError(data.loadError);
+  }, [data.loadError, showError]);
 
-  async function runWorkflow(actionID: GptActionID, account: Account, payload: Record<string, unknown> = {}) {
+  async function runWorkflow(actionID: GptActionID, account: Account, payload: Record<string, unknown> = {}, placement?: string, fallbackLabel?: string) {
     if (!canMutateAccount(account)) return;
-    await actionsRunner.run(`workflow:${actionID}:${accountCarrierID(account)}`, () => submitAccountWorkflowAction({ catalog: actionCatalog, actionID, pathPrefix: '/api/gpt', payload: { account_id: accountCarrierID(account), ...payload }, toast, onSuccess: () => data.invalidate() }));
+    await actionsRunner.run(`workflow:${actionID}:${accountCarrierID(account)}`, () => submitAccountWorkflowAction({ catalog: actionCatalog, actionID, fallbackLabel, placement, pathPrefix: '/api/gpt', payload: { account_id: accountCarrierID(account), ...payload }, toast, onSuccess: () => data.invalidate() }));
   }
 
   async function runBulkWorkflow(actionID: GptActionID, accounts: Account[], fallbackLabel = actionID) {

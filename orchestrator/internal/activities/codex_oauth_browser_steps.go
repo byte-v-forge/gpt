@@ -37,8 +37,8 @@ func (s *Server) CodexOAuthSubmitPasswordActivity(ctx context.Context, input Cod
 
 func (s *Server) CodexOAuthSubmitEmailOTPActivity(ctx context.Context, input CodexOAuthSubmitEmailOTPInput) (CodexOAuthBrowserStageOutput, error) {
 	stepInput := CodexOAuthBrowserStepInput{JobId: input.GetJobId(), AccountId: input.GetAccountId(), Label: input.GetLabel(), Session: input.GetSession()}
-	return s.codexOAuthBrowserStageStep(ctx, stepInput, contracts.StepCodexOAuthBrowserEmailOTP, "submitting codex oauth email otp", func(flow *codexOAuthBrowserFlow, accountEmail string) (string, int64, error) {
-		otp, err := s.waitCodexOAuthEmailOTP(ctx, input.GetJobId(), accountEmail, input.GetIssuedAfterUnix())
+	return s.codexOAuthBrowserStageStep(ctx, stepInput, contracts.StepCodexOAuthBrowserEmailOTP, "submitting codex oauth email otp", func(flow *codexOAuthBrowserFlow, _ string) (string, int64, error) {
+		otp, err := s.consumeStoredOTP(ctx, input.GetJobId(), contracts.JobParamRegistrationOTP, contracts.JobParamRegistrationOTPSubmittedAtUnix, input.GetIssuedAfterUnix())
 		if err != nil {
 			return "", input.GetIssuedAfterUnix(), err
 		}

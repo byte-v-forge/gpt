@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"orchestrator/internal/accountauth"
+	"orchestrator/pb"
 )
 
 func (s *server) handleAccountAuth(w http.ResponseWriter, r *http.Request, accountID string) {
@@ -21,5 +22,10 @@ func (s *server) handleAccountAuth(w http.ResponseWriter, r *http.Request, accou
 		writeError(w, http.StatusBadGateway, err)
 		return
 	}
-	writeProtoJSON(w, http.StatusOK, accountauth.Response(accountID, sessionToken, accessToken))
+	credential, err := s.accountClient.GetAccountCredential(r.Context(), &pb.GetAccountCredentialRequest{AccountId: accountID})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err)
+		return
+	}
+	writeProtoJSON(w, http.StatusOK, accountauth.Response(accountID, credential.GetCredential().GetPassword(), sessionToken, accessToken))
 }

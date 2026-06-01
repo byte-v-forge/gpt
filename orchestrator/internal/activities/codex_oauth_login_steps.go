@@ -3,12 +3,10 @@ package activities
 import (
 	"context"
 	"fmt"
-	"orchestrator/internal/accountmail"
 	"orchestrator/internal/gptaccount"
 	"time"
 
 	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
-	mailboxv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/mailbox/v1"
 	"orchestrator/pb"
 )
 
@@ -42,8 +40,7 @@ func (f *browserAuthFlow) ensureCodexOAuthLoggedIn(ctx context.Context, s *Serve
 	if _, err := f.submitCodexOAuthEmail(s.browserAutomationClient, cfg, gptaccount.Email(account)); err != nil {
 		return err
 	}
-	issuedAfter, err := f.submitCodexOAuthPassword(s.browserAutomationClient, cfg, f.password)
-	if err != nil {
+	if _, err := f.submitCodexOAuthPassword(s.browserAutomationClient, cfg, f.password); err != nil {
 		return err
 	}
 	stage, err = f.detectCodexOAuthStage(s.browserAutomationClient, cfg)
@@ -51,17 +48,7 @@ func (f *browserAuthFlow) ensureCodexOAuthLoggedIn(ctx context.Context, s *Serve
 		return err
 	}
 	if stage == "email_otp" {
-		otp, err := s.waitCodexOAuthEmailOTP(ctx, jobID, gptaccount.Email(account), issuedAfter)
-		if err != nil {
-			return err
-		}
-		if err := f.submitCodexOAuthOTP(s.browserAutomationClient, cfg, otp); err != nil {
-			return err
-		}
-		stage, err = f.detectCodexOAuthStage(s.browserAutomationClient, cfg)
-		if err != nil {
-			return err
-		}
+		return fmt.Errorf("codex oauth email otp requires channel otp wait step")
 	}
 	data.setStage(stage)
 	return nil
@@ -116,35 +103,6 @@ func (f *browserAuthFlow) submitCodexOAuthPassword(client browserautomationv1.Br
 	}
 	issuedAfter := unixSecondsFromMillis(startedAt)
 	return issuedAfter, f.waitCodexOAuthPostLoginTransition(client, cfg, "codex-oauth-password", "password", "wait-post-password", codexOAuthPostPasswordSelectorGroup(60*time.Second))
-}
-
-func (s *Server) waitCodexOAuthEmailOTP(ctx context.Context, _ string, email string, issuedAfter int64) (string, error) {
-	wait := s.registrationOtpTimeout(ctx)
-	if wait <= 0 {
-		wait = defaultCodexOAuthPhoneWaitSeconds
-	}
-	if s.otpProjection == nil {
-		return "", fmt.Errorf("otp projection is not configured")
-	}
-	timeout := time.Duration(wait) * time.Second
-	if s.mailboxPollRequester != nil {
-		if err := s.mailboxPollRequester.RequestMailboxEmailPoll(ctx, email, mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_UNSPECIFIED, issuedAfter, timeout, "codex_oauth_email_otp_wait"); err != nil {
-			return "", err
-		}
-	}
-	reqCtx, cancel := context.WithTimeout(ctx, timeout+5*time.Second)
-	defer cancel()
-	message, code, found, err := s.otpProjection.WaitMailboxSignal(reqCtx, email, mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP, issuedAfter, timeout, defaultSMSPollInterval)
-	if err != nil {
-		return "", err
-	}
-	if code == "" {
-		code = accountmail.OTPCode(message)
-	}
-	if !found || code == "" {
-		return "", fmt.Errorf("codex oauth email otp not found")
-	}
-	return code, nil
 }
 
 func (f *browserAuthFlow) submitCodexOAuthOTP(client browserautomationv1.BrowserAutomationServiceClient, cfg BrowserAuthConfig, otp string) error {

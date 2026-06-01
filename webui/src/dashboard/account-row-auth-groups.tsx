@@ -1,4 +1,4 @@
-import { AccountRowActionGroups, accountRowAction } from '@byte-v-forge/common-ui';
+import { AccountRowActionGroups, accountRowActions } from '@byte-v-forge/common-ui';
 import type { RowActionDescriptor } from '@byte-v-forge/common-ui';
 import type { GptActionCatalog } from './action-catalog';
 import { AccountRowExtensionGroups } from './account-extension-registry';
@@ -20,7 +20,8 @@ export function AccountRowAuthGroups({ account, actionCatalog, busy, runWorkflow
 }
 
 function rowWorkflowActions(account: Account, catalog: GptActionCatalog | undefined, busy: boolean, run: AccountWorkflowRunner): RowActionDescriptor[] {
-  return ACCOUNT_ROW_ACTIONS
-    .map((spec) => accountRowAction({ catalog, account, busy, placement: 'account_row' }, accountWorkflowActionProps(spec, run)))
-    .filter((action): action is RowActionDescriptor => !!action);
+  return accountRowActions(
+    { catalog, account, busy, placement: 'account_row' },
+    ACCOUNT_ROW_ACTIONS.map((spec) => accountWorkflowActionProps(spec, run)),
+  );
 }

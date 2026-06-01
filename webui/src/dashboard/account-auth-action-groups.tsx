@@ -1,5 +1,5 @@
 import { RefreshCw } from 'lucide-react';
-import { AccountActionRow, AccountActionRows, accountActionButton } from '@byte-v-forge/common-ui';
+import { AccountActionRow, AccountActionRows, accountActionButtons } from '@byte-v-forge/common-ui';
 import type { ActionButtonDescriptor } from '@byte-v-forge/common-ui';
 import type { GptActionCatalog } from './action-catalog';
 import { ACCOUNT_HEADER_BROWSER_ACTIONS, ACCOUNT_HEADER_PROTOCOL_ACTIONS, ACCOUNT_TOOL_WORKFLOW_ACTIONS, accountWorkflowActionProps, type AccountWorkflowActionSpec, type AccountWorkflowRunner } from './account-action-specs';
@@ -25,7 +25,7 @@ export function AccountPrimaryActions({ account, actionCatalog, busy, updatingWe
 
 function workflowActionButtons(specs: AccountWorkflowActionSpec[], catalog: GptActionCatalog | undefined, account: Account, busy: boolean, placement: 'account_header_browser' | 'account_header_protocol' | 'account_header_tools', run: AccountWorkflowRunner): ActionButtonDescriptor[] {
   const ctx = { catalog, account, busy, placement };
-  return specs.map((spec) => accountActionButton(ctx, accountWorkflowActionProps(spec, run)));
+  return accountActionButtons(ctx, specs.map((spec) => accountWorkflowActionProps(spec, run)));
 }
 
 function utilityActions(catalog: GptActionCatalog | undefined, account: Account, busy: boolean, refreshing: boolean, onRefresh: (account: Account) => Promise<void>, run: AccountWorkflowRunner): ActionButtonDescriptor[] {

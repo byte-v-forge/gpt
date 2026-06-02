@@ -48,21 +48,26 @@ func (r *Requester) RequestMailboxEmailPoll(ctx context.Context, email string, k
 		Reason:          strings.TrimSpace(reason),
 	}
 	eventID := eventbus.StableEventID("gpt-mailbox-email-poll-", email, kind.String(), fmt.Sprintf("%d", issuedAfterUnix), fmt.Sprintf("%d", deadlineUnix), request.GetReason())
-	record, err := eventoutbox.NewRecord(eventbus.Message{
-		Subject: eventcatalog.MailboxEmailPollRequested.Subject,
-		Event:   request,
-		Context: eventbus.NewEventContext(eventbus.EventContextConfig{
-			EventID:       eventID,
-			EventName:     eventcatalog.MailboxEmailPollRequested.EventName,
-			SourceService: sourceService,
-			CorrelationID: email,
-		}),
-		Attributes: eventbus.Attributes(
+	eventCtx := eventbus.NewEventContext(eventbus.EventContextConfig{
+		EventID:       eventID,
+		EventName:     eventcatalog.MailboxEmailPollRequested.EventName,
+		EventVersion:  eventcatalog.MailboxEmailPollRequested.EventVersion,
+		SourceService: sourceService,
+		CorrelationID: email,
+	})
+	message, err := eventcatalog.MailboxEmailPollRequested.NewMessage(
+		request,
+		eventCtx,
+		eventbus.Attributes(
 			"email_address", email,
 			"signal_kind", kind.String(),
 			"reason", request.GetReason(),
 		),
-	})
+	)
+	if err != nil {
+		return err
+	}
+	record, err := eventoutbox.NewRecord(message)
 	if err != nil {
 		return err
 	}

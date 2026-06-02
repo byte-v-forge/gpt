@@ -109,7 +109,7 @@ func (r *Registry) Action(actionID string) (ActionDefinition, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	def, ok := r.actions[actionID]
-	return cloneDefinition(def), ok
+	return gptplugin.CloneActionDefinition(def), ok
 }
 
 func (r *Registry) Actions() []ActionDefinition {
@@ -120,7 +120,7 @@ func (r *Registry) Actions() []ActionDefinition {
 	defer r.mu.RUnlock()
 	out := make([]ActionDefinition, 0, len(r.order))
 	for _, actionID := range r.order {
-		out = append(out, cloneDefinition(r.actions[actionID]))
+		out = append(out, gptplugin.CloneActionDefinition(r.actions[actionID]))
 	}
 	return out
 }
@@ -133,7 +133,7 @@ func (r *Registry) PluginConfigs() []ConfigSchema {
 	defer r.mu.RUnlock()
 	out := make([]ConfigSchema, 0, len(r.configOrder))
 	for _, key := range r.configOrder {
-		out = append(out, cloneConfigSchema(r.configSchemas[key]))
+		out = append(out, gptplugin.CloneConfigSchema(r.configSchemas[key]))
 	}
 	return out
 }
@@ -152,7 +152,7 @@ func (r *Registry) PluginConfig(pluginKey string) (ConfigSchema, bool) {
 	if !ok {
 		return ConfigSchema{}, false
 	}
-	return cloneConfigSchema(schema), true
+	return gptplugin.CloneConfigSchema(schema), true
 }
 
 func (r *Registry) PluginDefaults(pluginKey string) map[string]string {
@@ -427,21 +427,6 @@ func compactStrings(values []string) []string {
 	return out
 }
 
-func cloneDefinition(def ActionDefinition) ActionDefinition {
-	def.RequiredAccountStatuses = append([]string(nil), def.RequiredAccountStatuses...)
-	def.BlockedAccountStatuses = append([]string(nil), def.BlockedAccountStatuses...)
-	def.RequiredFields = append([]string(nil), def.RequiredFields...)
-	def.Capabilities = append([]string(nil), def.Capabilities...)
-	def.UIButtons = append([]UIButton(nil), def.UIButtons...)
-	def.StaleSteps = append([]string(nil), def.StaleSteps...)
-	return def
-}
-
-func cloneConfigSchema(schema ConfigSchema) ConfigSchema {
-	schema.Fields = append([]ConfigField(nil), schema.Fields...)
-	return schema
-}
-
 type builtinN8NActionSpec struct {
 	ActionID         string
 	DisplayName      string
@@ -545,27 +530,24 @@ func builtinN8NAction(spec builtinN8NActionSpec) ActionDefinition {
 	if startPath == "" {
 		startPath = "/workflows/" + apiLabel
 	}
-	def := n8nAction(
-		profile.ActionID,
-		spec.DisplayName,
-		workflowLabel,
-		workflowIDPrefix,
-		startPath,
-		workflowLabel,
-		"gpt/"+workflowLabel,
-		"/actions/"+workflowLabel,
-		spec.RequestProto,
-		spec.ResponseProto,
-		spec.ButtonLabel,
-		spec.Placement,
-	)
-	if len(spec.RequiredStatuses) > 0 {
-		def = withRequiredStatuses(def, spec.RequiredStatuses...)
-	}
-	if len(spec.RequiredFields) > 0 {
-		def = withRequiredFields(def, spec.RequiredFields...)
-	}
-	return withCapabilities(def, spec.Capabilities...)
+	return gptplugin.BuildN8NAction(gptplugin.N8NActionSpec{
+		Owner:                   "gpt",
+		ActionID:                profile.ActionID,
+		DisplayName:             spec.DisplayName,
+		WorkflowKey:             workflowLabel,
+		WorkflowIDPrefix:        workflowIDPrefix,
+		StartPath:               startPath,
+		ActionScope:             workflowLabel,
+		WebhookPath:             "gpt/" + workflowLabel,
+		ActionPathPrefix:        "/actions/" + workflowLabel,
+		RequestProto:            spec.RequestProto,
+		ResponseProto:           spec.ResponseProto,
+		Button:                  gptplugin.ActionButtonSpec{Label: spec.ButtonLabel, Placement: spec.Placement},
+		RequiredAccountStatuses: spec.RequiredStatuses,
+		RequiredFields:          spec.RequiredFields,
+		Capabilities:            spec.Capabilities,
+		StaleSteps:              defaultJobClaimStaleSteps(),
+	})
 }
 
 func BuiltinPluginConfigs() []ConfigSchema {
@@ -575,17 +557,17 @@ func BuiltinPluginConfigs() []ConfigSchema {
 			DisplayName: "Browser Auth",
 			Owner:       "gpt",
 			Fields: []ConfigField{
-				configField("browser_auth_proxy_ref", "Browser Auth Proxy Ref", ConfigFieldString, "register"),
-				configField("browser_auth_locale", "Browser Auth Locale", ConfigFieldString, "en-US"),
-				configField("browser_auth_accept_language", "Browser Auth Accept Language", ConfigFieldString, "en-US,en;q=0.9"),
-				configField("browser_auth_timezone", "Browser Auth Timezone", ConfigFieldString, ""),
-				configField("browser_auth_window_width", "Browser Auth Window Width", ConfigFieldInteger, "1365"),
-				configField("browser_auth_window_height", "Browser Auth Window Height", ConfigFieldInteger, "768"),
-				configField("browser_auth_session_ttl_seconds", "Browser Auth Session TTL Seconds", ConfigFieldDurationSeconds, "1800"),
-				configField("browser_auth_command_timeout_seconds", "Browser Auth Command Timeout Seconds", ConfigFieldDurationSeconds, "120"),
-				configField("browser_auth_block_images", "Browser Auth Block Images", ConfigFieldBoolean, "false"),
-				configField("browser_auth_geoip", "Browser Auth GeoIP", ConfigFieldBoolean, "true"),
-				configField("browser_auth_humanize", "Browser Auth Humanize", ConfigFieldString, "true"),
+				gptplugin.Field("browser_auth_proxy_ref", "Browser Auth Proxy Ref", ConfigFieldString, "register"),
+				gptplugin.Field("browser_auth_locale", "Browser Auth Locale", ConfigFieldString, "en-US"),
+				gptplugin.Field("browser_auth_accept_language", "Browser Auth Accept Language", ConfigFieldString, "en-US,en;q=0.9"),
+				gptplugin.Field("browser_auth_timezone", "Browser Auth Timezone", ConfigFieldString, ""),
+				gptplugin.Field("browser_auth_window_width", "Browser Auth Window Width", ConfigFieldInteger, "1365"),
+				gptplugin.Field("browser_auth_window_height", "Browser Auth Window Height", ConfigFieldInteger, "768"),
+				gptplugin.Field("browser_auth_session_ttl_seconds", "Browser Auth Session TTL Seconds", ConfigFieldDurationSeconds, "1800"),
+				gptplugin.Field("browser_auth_command_timeout_seconds", "Browser Auth Command Timeout Seconds", ConfigFieldDurationSeconds, "120"),
+				gptplugin.Field("browser_auth_block_images", "Browser Auth Block Images", ConfigFieldBoolean, "false"),
+				gptplugin.Field("browser_auth_geoip", "Browser Auth GeoIP", ConfigFieldBoolean, "true"),
+				gptplugin.Field("browser_auth_humanize", "Browser Auth Humanize", ConfigFieldString, "true"),
 			},
 		},
 		{
@@ -593,30 +575,26 @@ func BuiltinPluginConfigs() []ConfigSchema {
 			DisplayName: "Codex OAuth",
 			Owner:       "gpt",
 			Fields: []ConfigField{
-				configField("client_id", "Client ID", ConfigFieldString, "app_EMoamEEZ73f0CkXaXp7hrann"),
-				configField("redirect_uri", "Redirect URI", ConfigFieldURL, "http://localhost:1455/auth/callback"),
-				configField("auth_url", "Auth URL", ConfigFieldURL, "https://auth.openai.com/oauth/authorize"),
-				configField("token_url", "Token URL", ConfigFieldURL, "https://auth.openai.com/oauth/token"),
-				configField("token_proxy_url", "Token Proxy URL", ConfigFieldString, ""),
-				configField("protocol_proxy_url", "Protocol Proxy URL", ConfigFieldString, ""),
-				configField("protocol_proxy_runtime_http_addr", "Protocol Proxy Runtime HTTP", ConfigFieldString, ""),
-				configField("protocol_tls_profile", "Protocol TLS Profile", ConfigFieldString, "chrome_146"),
-				configField("protocol_session_dump_enabled", "Protocol Session Dump", ConfigFieldBoolean, "true"),
-				configField("scope", "Scope", ConfigFieldString, "openid profile email offline_access api.connectors.read api.connectors.invoke"),
-				configField("phone_label", "Phone Label", ConfigFieldString, contracts.WorkflowLabelForAction(contracts.ActionCodexOAuthAddPhone)),
-				configField("phone_profile_key", "Phone Profile Key", ConfigFieldString, "openai-th"),
-				configField("phone_max_reuse_count", "Phone Max Reuse Count", ConfigFieldInteger, "3"),
-				configField("phone_country_iso2", "Phone Country ISO2", ConfigFieldString, "TH"),
-				configField("phone_country_calling_code", "Phone Country Calling Code", ConfigFieldString, "66"),
-				configField("phone_wait_seconds", "Phone Wait Seconds", ConfigFieldDurationSeconds, "120"),
-				configField("phone_min_reuse_remaining_seconds", "Phone Min Reuse Remaining Seconds", ConfigFieldDurationSeconds, "180"),
+				gptplugin.Field("client_id", "Client ID", ConfigFieldString, "app_EMoamEEZ73f0CkXaXp7hrann"),
+				gptplugin.Field("redirect_uri", "Redirect URI", ConfigFieldURL, "http://localhost:1455/auth/callback"),
+				gptplugin.Field("auth_url", "Auth URL", ConfigFieldURL, "https://auth.openai.com/oauth/authorize"),
+				gptplugin.Field("token_url", "Token URL", ConfigFieldURL, "https://auth.openai.com/oauth/token"),
+				gptplugin.Field("token_proxy_url", "Token Proxy URL", ConfigFieldString, ""),
+				gptplugin.Field("protocol_proxy_url", "Protocol Proxy URL", ConfigFieldString, ""),
+				gptplugin.Field("protocol_proxy_runtime_http_addr", "Protocol Proxy Runtime HTTP", ConfigFieldString, ""),
+				gptplugin.Field("protocol_tls_profile", "Protocol TLS Profile", ConfigFieldString, "chrome_146"),
+				gptplugin.Field("protocol_session_dump_enabled", "Protocol Session Dump", ConfigFieldBoolean, "true"),
+				gptplugin.Field("scope", "Scope", ConfigFieldString, "openid profile email offline_access api.connectors.read api.connectors.invoke"),
+				gptplugin.Field("phone_label", "Phone Label", ConfigFieldString, contracts.WorkflowLabelForAction(contracts.ActionCodexOAuthAddPhone)),
+				gptplugin.Field("phone_profile_key", "Phone Profile Key", ConfigFieldString, "openai-th"),
+				gptplugin.Field("phone_max_reuse_count", "Phone Max Reuse Count", ConfigFieldInteger, "3"),
+				gptplugin.Field("phone_country_iso2", "Phone Country ISO2", ConfigFieldString, "TH"),
+				gptplugin.Field("phone_country_calling_code", "Phone Country Calling Code", ConfigFieldString, "66"),
+				gptplugin.Field("phone_wait_seconds", "Phone Wait Seconds", ConfigFieldDurationSeconds, "120"),
+				gptplugin.Field("phone_min_reuse_remaining_seconds", "Phone Min Reuse Remaining Seconds", ConfigFieldDurationSeconds, "180"),
 			},
 		},
 	}
-}
-
-func configField(key string, label string, kind ConfigFieldKind, defaultValue string) ConfigField {
-	return ConfigField{Key: key, Label: label, Kind: kind, DefaultValue: defaultValue}
 }
 
 func RegisterBuiltins(registry gptplugin.ActionRegistry) error {
@@ -624,58 +602,6 @@ func RegisterBuiltins(registry gptplugin.ActionRegistry) error {
 		return err
 	}
 	return registry.RegisterPluginConfigs(BuiltinPluginConfigs()...)
-}
-
-func baseAction(actionID string, displayName string, workflowKey string, workflowIDPrefix string, startPath string, requestProto string, responseProto string, buttonLabel string, placement string) ActionDefinition {
-	return ActionDefinition{
-		ActionID:      actionID,
-		DisplayName:   displayName,
-		Owner:         "gpt",
-		Engine:        EngineN8N,
-		RequestProto:  requestProto,
-		ResponseProto: responseProto,
-		Visibility:    "account",
-		Workflow: WorkflowDefinition{
-			Key:       workflowKey,
-			IDPrefix:  workflowIDPrefix,
-			StartPath: startPath,
-		},
-		UIButtons:  []UIButton{{ID: strings.ToLower(strings.ReplaceAll(actionID, "_", "-")), Label: buttonLabel, Placement: placement}},
-		StaleSteps: defaultJobClaimStaleSteps(),
-		BlockedAccountStatuses: []string{
-			gptplugin.AccountStatusDeactivated,
-			gptplugin.AccountStatusEmailAlreadyExists,
-			gptplugin.AccountStatusUserAlreadyExists,
-		},
-	}
-}
-
-func withRequiredStatuses(def ActionDefinition, statuses ...string) ActionDefinition {
-	def.RequiredAccountStatuses = append(def.RequiredAccountStatuses, statuses...)
-	return def
-}
-
-func withBlockedStatuses(def ActionDefinition, statuses ...string) ActionDefinition {
-	def.BlockedAccountStatuses = append(def.BlockedAccountStatuses, statuses...)
-	return def
-}
-
-func withRequiredFields(def ActionDefinition, fields ...string) ActionDefinition {
-	def.RequiredFields = append(def.RequiredFields, fields...)
-	return def
-}
-
-func withCapabilities(def ActionDefinition, capabilities ...string) ActionDefinition {
-	def.Capabilities = append(def.Capabilities, capabilities...)
-	return def
-}
-
-func n8nAction(actionID string, displayName string, workflowKey string, workflowIDPrefix string, startPath string, actionScope string, webhookPath string, actionPathPrefix string, requestProto string, responseProto string, buttonLabel string, placement string) ActionDefinition {
-	def := baseAction(actionID, displayName, workflowKey, workflowIDPrefix, startPath, requestProto, responseProto, buttonLabel, placement)
-	def.Workflow.N8NActionScope = actionScope
-	def.Workflow.N8NWebhookPath = webhookPath
-	def.Workflow.ActionPathPrefix = actionPathPrefix
-	return def
 }
 
 func defaultJobClaimStaleSteps() []string {

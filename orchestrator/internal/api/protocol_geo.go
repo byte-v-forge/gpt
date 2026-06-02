@@ -65,5 +65,8 @@ func normalizeProtocolRegion(countryCode string, value string) string {
 	if countryCode == "" {
 		return value
 	}
+	if strings.EqualFold(value, countryCode) {
+		return countryCode
+	}
 	return countryCode + "-" + value
 }

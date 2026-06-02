@@ -29,6 +29,7 @@ const (
 	goPayWAPaymentScope           = "gopay-wa-payment"
 	goPayPaymentRebindScope       = "gopay-payment-rebind"
 
+	goPayDefaultProxyCountryCode      = "ID"
 	goPayEngineParam                  = "engine"
 	manualGoPayPaymentConfirmParam    = "manual_gopay_payment_confirmed"
 	stepGoPayPaymentPrepareCheckout   = "gopay_payment_prepare_checkout"
@@ -64,6 +65,7 @@ type goPayWorkflowStartRequest struct {
 	AccountID      string `json:"account_id"`
 	SourceJobID    string `json:"source_job_id"`
 	GopayAccountID string `json:"gopay_account_id"`
+	CountryCode    string `json:"country_code"`
 	Tokenization   string `json:"tokenization"`
 }
 
@@ -143,6 +145,8 @@ func goPayWorkflowParams(actionID string, req goPayWorkflowStartRequest) map[str
 	if value := strings.TrimSpace(req.GopayAccountID); value != "" {
 		params["gopay_account_id"] = value
 	}
+	countryCode := firstNonEmpty(req.CountryCode, goPayDefaultProxyCountryCode)
+	putProtocolGeoParams(params, countryCode, countryCode)
 	switch actionID {
 	case actionGoPayQRISPaymentActivate:
 		params["activation_mode"] = "qris_payment"

@@ -30,6 +30,7 @@ const (
 	goPayPaymentRebindScope       = "gopay-payment-rebind"
 
 	goPayDefaultProxyCountryCode      = "ID"
+	goPayPrepareLinkMaxAttempts       = 3
 	goPayEngineParam                  = "engine"
 	manualGoPayPaymentConfirmParam    = "manual_gopay_payment_confirmed"
 	stepGoPayPaymentPrepareCheckout   = "gopay_payment_prepare_checkout"
@@ -338,7 +339,7 @@ func (s *Server) prepareN8NGoPayPayment(ctx context.Context, actionID string, re
 			GopayCountryCode:  strings.TrimSpace(req.CountryCode),
 		})
 	} else {
-		resp, err = s.paymentClient.PrepareGoPayLink(ctx, &pb.PrepareGoPayLinkRequest{FlowId: strings.TrimSpace(req.FlowID)})
+		resp, err = s.prepareGoPayLinkWithFreshCheckoutRetry(ctx, req.FlowID)
 	}
 	data := goPayPrepareData(resp)
 	result := goPayPrepareResult(actionID, step, req, scope, resp, data, err == nil)
@@ -349,15 +350,38 @@ func (s *Server) prepareN8NGoPayPayment(ctx context.Context, actionID string, re
 		err := fmt.Errorf("payment service returned empty gopay prepare response")
 		return result, s.markGoPayHostActionFailed(ctx, req.JobID, step, jobstatus.FailedRetryable, false, true, err, data)
 	}
-	if !resp.GetSuccess() {
-		err := fmt.Errorf("%s", firstNonEmpty(resp.GetErrorMessage(), "gopay payment prepare failed"))
-		return result, s.markGoPayHostActionFailed(ctx, req.JobID, step, jobstatus.FailedRetryable, false, true, err, data)
-	}
 	if resp.GetRetryableFreshCheckout() {
 		err := fmt.Errorf("payment prepare link blocked: %s", firstNonEmpty(resp.GetErrorMessage(), "chatgpt approve blocked"))
 		return result, s.markGoPayHostActionFailed(ctx, req.JobID, step, jobstatus.FailedRetryable, false, true, err, data)
 	}
+	if !resp.GetSuccess() {
+		err := fmt.Errorf("%s", firstNonEmpty(resp.GetErrorMessage(), "gopay payment prepare failed"))
+		return result, s.markGoPayHostActionFailed(ctx, req.JobID, step, jobstatus.FailedRetryable, false, true, err, data)
+	}
 	return result, nil
+}
+
+func (s *Server) prepareGoPayLinkWithFreshCheckoutRetry(ctx context.Context, flowID string) (*pb.PrepareGoPayResponse, error) {
+	flowID = strings.TrimSpace(flowID)
+	var resp *pb.PrepareGoPayResponse
+	var err error
+	for attempt := 1; attempt <= goPayPrepareLinkMaxAttempts; attempt++ {
+		resp, err = s.paymentClient.PrepareGoPayLink(ctx, &pb.PrepareGoPayLinkRequest{FlowId: flowID})
+		if err != nil || resp == nil || !resp.GetRetryableFreshCheckout() || attempt == goPayPrepareLinkMaxAttempts {
+			return resp, err
+		}
+		refreshed, refreshErr := s.paymentClient.RefreshPrepareGoPayCheckout(ctx, &pb.RefreshPrepareGoPayCheckoutRequest{FlowId: flowID})
+		if refreshErr != nil {
+			return refreshed, refreshErr
+		}
+		if refreshed == nil || !refreshed.GetSuccess() {
+			return refreshed, nil
+		}
+		if refreshedFlowID := strings.TrimSpace(refreshed.GetFlowId()); refreshedFlowID != "" {
+			flowID = refreshedFlowID
+		}
+	}
+	return resp, err
 }
 
 func (s *Server) goPayPaymentCredential(ctx context.Context, jobID string, accountID string) (*pb.ChatGPTCredential, error) {

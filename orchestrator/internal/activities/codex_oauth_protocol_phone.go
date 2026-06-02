@@ -11,10 +11,10 @@ import (
 	"orchestrator/pb"
 )
 
-func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input CodexOAuthAddPhoneBrowserInput) (CodexOAuthAddPhoneBrowserOutput, error) {
+func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input *CodexOAuthAddPhoneBrowserInput) (*CodexOAuthAddPhoneBrowserOutput, error) {
 	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
-	output := CodexOAuthAddPhoneBrowserOutput{PhoneReuseCount: input.GetPhone().GetReuseCount(), PhoneReuseLimit: input.GetPhone().GetReuseLimit()}
+	output := &CodexOAuthAddPhoneBrowserOutput{PhoneReuseCount: input.GetPhone().GetReuseCount(), PhoneReuseLimit: input.GetPhone().GetReuseLimit()}
 	data := codexOAuthBrowserData(label, input.GetPhone())
 	data.setDriver("protocol")
 	step := s.activityStep(ctx, input.GetJobId(), contracts.StepCodexOAuthProtocolAddPhone, false, true)
@@ -81,7 +81,7 @@ func (s *Server) CodexOAuthAddPhoneProtocolActivity(ctx context.Context, input C
 	return output, err
 }
 
-func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, input CodexOAuthAddPhoneBrowserInput, cfg CodexOAuthConfig, data *codexOAuthStepData) (bool, error) {
+func (s *Server) codexOAuthProtocolAddPhone(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, input *CodexOAuthAddPhoneBrowserInput, cfg CodexOAuthConfig, data *codexOAuthStepData) (bool, error) {
 	phone := input.GetPhone()
 	phoneNumber := strings.TrimSpace(phone.GetPhoneE164())
 	if phoneNumber == "" {

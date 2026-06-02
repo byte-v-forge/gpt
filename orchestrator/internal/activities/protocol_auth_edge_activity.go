@@ -7,14 +7,14 @@ import (
 	"time"
 )
 
-func (s *Server) ProtocolAuthEdgeCheckActivity(ctx context.Context, input ProtocolAuthStartInput) (ProtocolAuthStartOutput, error) {
+func (s *Server) ProtocolAuthEdgeCheckActivity(ctx context.Context, input *ProtocolAuthStartInput) (*ProtocolAuthStartOutput, error) {
 	cfg := codexOAuthConfigWithInputProxy(s.codexOAuthSettings(ctx), input)
 	mode := strings.TrimSpace(input.GetMode())
 	if mode == "" {
 		mode = "protocol"
 	}
 	data := newProtocolAuthEdgeStepData(input, mode)
-	output := ProtocolAuthStartOutput{AccountId: input.GetAccountId(), Data: data.outputData()}
+	output := &ProtocolAuthStartOutput{AccountId: input.GetAccountId(), Data: data.outputData()}
 	if strings.TrimSpace(cfg.ProtocolProxyURL) == "" {
 		err := fmt.Errorf("protocol proxy url is required")
 		data.setResult(false, err)

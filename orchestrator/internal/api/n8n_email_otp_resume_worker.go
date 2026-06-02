@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byte-v-forge/common-lib/eventcatalog"
 	mailboxv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/mailbox/v1"
 
 	"orchestrator/internal/accountmail"
@@ -16,6 +17,7 @@ import (
 func emailN8NChannelOTPResumeWorkerConfig() n8nChannelOTPResumeWorkerConfig[*mailboxv1.MailboxEmailReceivedEvent] {
 	return newN8NChannelOTPResumeWorkerConfig(
 		channelotpwait.ChannelEmail,
+		eventcatalog.MailboxEmailReceived,
 		func() *mailboxv1.MailboxEmailReceivedEvent { return &mailboxv1.MailboxEmailReceivedEvent{} },
 		emailChannelOTPEvent,
 	)

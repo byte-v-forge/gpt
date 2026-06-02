@@ -10,21 +10,21 @@ import (
 	"orchestrator/pb"
 )
 
-func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input ProbePlusTrialActivityInput) (ProbePlusTrialActivityOutput, error) {
+func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input *ProbePlusTrialActivityInput) (*ProbePlusTrialActivityOutput, error) {
 	var account *pb.Account
 	accountID := strings.TrimSpace(input.GetAccountId())
 	if accountID != "" {
 		var err error
 		account, err = s.getAccount(ctx, accountID)
 		if err != nil {
-			return ProbePlusTrialActivityOutput{}, err
+			return nil, err
 		}
 		if err := rejectUserAlreadyExistsAccount(account); err != nil {
-			return ProbePlusTrialActivityOutput{}, err
+			return nil, err
 		}
 	}
 
-	var output ProbePlusTrialActivityOutput
+	output := &ProbePlusTrialActivityOutput{}
 	var err error
 	step := s.activityStep(ctx, input.GetJobId(), contracts.StepProbePlusTrial, false, true)
 	_, err = step.run(func() (activityStepResult, error) {
@@ -60,7 +60,7 @@ func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input ProbePl
 			return data, callErr
 		}
 		resp, callErr := s.paymentClient.ProbePlusTrial(ctx, &pb.ProbePlusTrialPaymentRequest{Credential: credential})
-		applyPlusTrialProbeResponse(&output, data, resp)
+		applyPlusTrialProbeResponse(output, data, resp)
 		if callErr != nil {
 			output.Data = data
 			return data, callErr
@@ -86,16 +86,16 @@ func (s *Server) ProbePlusTrialAtomicActivity(ctx context.Context, input ProbePl
 	return output, nil
 }
 
-func (s *Server) ProbeTierAtomicActivity(ctx context.Context, input ProbeTierActivityInput) (ProbeTierActivityOutput, error) {
+func (s *Server) ProbeTierAtomicActivity(ctx context.Context, input *ProbeTierActivityInput) (*ProbeTierActivityOutput, error) {
 	account, err := s.getAccount(ctx, input.GetAccountId())
 	if err != nil {
-		return ProbeTierActivityOutput{}, err
+		return nil, err
 	}
 	if err := rejectUserAlreadyExistsAccount(account); err != nil {
-		return ProbeTierActivityOutput{}, err
+		return nil, err
 	}
 
-	var output ProbeTierActivityOutput
+	output := &ProbeTierActivityOutput{}
 	step := s.activityStep(ctx, input.GetJobId(), contracts.StepProbeTier, false, true)
 	_, err = step.run(func() (activityStepResult, error) {
 		sessionToken := s.cachedChatGPTSessionToken(ctx, gptaccount.ID(account))
@@ -118,7 +118,7 @@ func (s *Server) ProbeTierAtomicActivity(ctx context.Context, input ProbeTierAct
 			return data, callErr
 		}
 		resp, callErr := s.paymentClient.ProbeTier(ctx, &pb.ProbeTierPaymentRequest{Credential: credential})
-		applyTierProbeResponse(&output, data, resp)
+		applyTierProbeResponse(output, data, resp)
 		if callErr != nil {
 			output.Data = data
 			return data, callErr

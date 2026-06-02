@@ -10,7 +10,7 @@ type protocolAuthEdgeStepData struct {
 	message *pb.ActivityProtocolAuthEdgeData
 }
 
-func newProtocolAuthEdgeStepData(input ProtocolAuthStartInput, mode string) *protocolAuthEdgeStepData {
+func newProtocolAuthEdgeStepData(input *ProtocolAuthStartInput, mode string) *protocolAuthEdgeStepData {
 	return &protocolAuthEdgeStepData{message: &pb.ActivityProtocolAuthEdgeData{
 		Driver:              "protocol",
 		Mode:                strings.TrimSpace(mode),

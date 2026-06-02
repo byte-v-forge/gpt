@@ -41,7 +41,7 @@ func (s *Server) startN8NRegisterJob(ctx context.Context, req *pb.RegisterAccoun
 	if s.activities == nil {
 		return jobID, "", fmt.Errorf("GPT action API is not configured")
 	}
-	account, err := s.activities.EnsureAccountActivity(ctx, pb.EnsureAccountInput{Account: &pb.AccountSpec{
+	account, err := s.activities.EnsureAccountActivity(ctx, &pb.EnsureAccountInput{Account: &pb.AccountSpec{
 		AccountId:     accountID,
 		Email:         req.GetEmail(),
 		Password:      req.GetPassword(),

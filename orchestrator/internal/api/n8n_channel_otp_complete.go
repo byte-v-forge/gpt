@@ -45,7 +45,7 @@ func (s *Server) completeChannelOTPWait(ctx context.Context, req channelOTPCompl
 	if err := s.setJobParams(ctx, req.Job.JobID, params); err != nil {
 		return nil, err
 	}
-	if err := s.activities.CompleteJobStepActivity(ctx, pb.JobStepCompleteInput{JobId: req.Job.JobID, StepName: req.Job.StepName, Recoverable: false, Retryable: true, Result: jobDataMessage(otpData)}); err != nil {
+	if err := s.activities.CompleteJobStepActivity(ctx, &pb.JobStepCompleteInput{JobId: req.Job.JobID, StepName: req.Job.StepName, Recoverable: false, Retryable: true, Result: jobDataMessage(otpData)}); err != nil {
 		return nil, err
 	}
 	return otpData, nil

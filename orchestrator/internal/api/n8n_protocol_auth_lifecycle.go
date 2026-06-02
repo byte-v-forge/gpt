@@ -42,7 +42,7 @@ func (s *Server) startN8NProtocolAuth(ctx context.Context, cfg n8nProtocolAuthLi
 		return nil, err
 	}
 	out, err := s.activities.ProtocolAuthStartActivity(ctx, s.protocolAuthStartInput(ctx, jobID, accountID, cfg.Mode))
-	result, resultErr := s.n8nProtocolAuthProgressResult(ctx, cfg.ResultSecretPrefix, jobID, accountID, n8nExecutionID, cfg.StartStep, &out)
+	result, resultErr := s.n8nProtocolAuthProgressResult(ctx, cfg.ResultSecretPrefix, jobID, accountID, n8nExecutionID, cfg.StartStep, out)
 	if err != nil {
 		return result, s.markN8NAuthFailed(ctx, cfg.Failure, jobID, cfg.StartStep, err, out.GetData())
 	}
@@ -57,8 +57,8 @@ func (s *Server) waitN8NProtocolAuth(ctx context.Context, cfg n8nProtocolAuthLif
 	if err := s.bindN8NExecution(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
-	out, err := s.activities.ProtocolAuthWaitActivity(ctx, pb.ProtocolAuthWaitInput{JobId: jobID, AccountId: accountID, FlowId: strings.TrimSpace(flowID), Mode: cfg.Mode, Email: strings.TrimSpace(email), ProxyUrl: s.protocolProxyURL(ctx, jobID)})
-	result, resultErr := s.n8nProtocolAuthProgressResult(ctx, cfg.ResultSecretPrefix, jobID, accountID, n8nExecutionID, cfg.WaitStep, &out)
+	out, err := s.activities.ProtocolAuthWaitActivity(ctx, &pb.ProtocolAuthWaitInput{JobId: jobID, AccountId: accountID, FlowId: strings.TrimSpace(flowID), Mode: cfg.Mode, Email: strings.TrimSpace(email), ProxyUrl: s.protocolProxyURL(ctx, jobID)})
+	result, resultErr := s.n8nProtocolAuthProgressResult(ctx, cfg.ResultSecretPrefix, jobID, accountID, n8nExecutionID, cfg.WaitStep, out)
 	if err != nil {
 		return result, s.markN8NAuthFailed(ctx, cfg.Failure, jobID, cfg.WaitStep, err, out.GetData())
 	}
@@ -74,8 +74,8 @@ func (s *Server) completeN8NProtocolAuth(ctx context.Context, cfg n8nProtocolAut
 	if err := s.bindN8NExecution(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
-	out, err := s.activities.ProtocolAuthCompleteActivity(ctx, pb.ProtocolAuthCompleteInput{JobId: jobID, AccountId: accountID, FlowId: flowID, Mode: cfg.Mode, OtpParam: contracts.JobParamRegistrationOTP, SubmittedAtParam: contracts.JobParamRegistrationOTPSubmittedAtUnix, OtpIssuedAfterUnix: otpIssuedAfterUnix, OtpSource: strings.TrimSpace(otpSource), ProxyUrl: s.protocolProxyURL(ctx, jobID)})
-	result, resultErr := s.n8nProtocolAuthProgressResult(ctx, cfg.ResultSecretPrefix, jobID, accountID, n8nExecutionID, cfg.CompleteStep, &registerOutputProgress{accountID: accountID, flowID: flowID, result: &out})
+	out, err := s.activities.ProtocolAuthCompleteActivity(ctx, &pb.ProtocolAuthCompleteInput{JobId: jobID, AccountId: accountID, FlowId: flowID, Mode: cfg.Mode, OtpParam: contracts.JobParamRegistrationOTP, SubmittedAtParam: contracts.JobParamRegistrationOTPSubmittedAtUnix, OtpIssuedAfterUnix: otpIssuedAfterUnix, OtpSource: strings.TrimSpace(otpSource), ProxyUrl: s.protocolProxyURL(ctx, jobID)})
+	result, resultErr := s.n8nProtocolAuthProgressResult(ctx, cfg.ResultSecretPrefix, jobID, accountID, n8nExecutionID, cfg.CompleteStep, &registerOutputProgress{accountID: accountID, flowID: flowID, result: out})
 	if err != nil {
 		return result, s.markN8NAuthFailed(ctx, cfg.Failure, jobID, cfg.CompleteStep, err, out.GetData())
 	}

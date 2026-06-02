@@ -10,8 +10,8 @@ import (
 	"orchestrator/pb"
 )
 
-func (s *Server) BrowserAuthResendOTPActivity(ctx context.Context, input BrowserAuthResendOTPInput) (BrowserAuthResendOTPOutput, error) {
-	output := BrowserAuthResendOTPOutput{
+func (s *Server) BrowserAuthResendOTPActivity(ctx context.Context, input *BrowserAuthResendOTPInput) (*BrowserAuthResendOTPOutput, error) {
+	output := &BrowserAuthResendOTPOutput{
 		BrowserSessionId:  input.GetBrowserSessionId(),
 		OtpTimeoutSeconds: s.registrationOtpTimeout(ctx),
 	}

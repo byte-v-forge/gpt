@@ -7,7 +7,7 @@ import (
 	"orchestrator/pb"
 )
 
-func (s *Server) CodexOAuthStopBrowserActivity(ctx context.Context, input CodexOAuthStopBrowserInput) error {
+func (s *Server) CodexOAuthStopBrowserActivity(ctx context.Context, input *CodexOAuthStopBrowserInput) error {
 	session := input.GetSession()
 	if session == nil {
 		return nil

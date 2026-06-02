@@ -21,11 +21,11 @@ func rejectUserAlreadyExistsAccount(account *pb.Account) error {
 	return nil
 }
 
-func accountRef(account *pb.Account) AccountRef {
+func accountRef(account *pb.Account) *AccountRef {
 	if account == nil {
-		return AccountRef{}
+		return nil
 	}
-	return AccountRef{
+	return &AccountRef{
 		AccountId:         gptaccount.ID(account),
 		PlusTrialKnown:    account.PlusTrialEligible != nil,
 		PlusTrialEligible: account.GetPlusTrialEligible(),
@@ -34,29 +34,29 @@ func accountRef(account *pb.Account) AccountRef {
 	}
 }
 
-func (s *Server) CreateJobActivity(ctx context.Context, input CreateJobInput) error {
+func (s *Server) CreateJobActivity(ctx context.Context, input *CreateJobInput) error {
 	_, err := s.createJobWithID(ctx, input.GetJobId(), input.GetAccountId(), input.GetAction(), input.GetParams())
 	return err
 }
 
-func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountInput) (AccountRef, error) {
+func (s *Server) EnsureAccountActivity(ctx context.Context, input *EnsureAccountInput) (*AccountRef, error) {
 	spec := input.GetAccount()
 	if spec.GetAccountId() == "" {
-		return AccountRef{}, fmt.Errorf("account_id is required")
+		return nil, fmt.Errorf("account_id is required")
 	}
 
 	if account, err := s.getAccount(ctx, spec.GetAccountId()); err == nil {
 		if err := rejectUserAlreadyExistsAccount(account); err != nil {
-			return AccountRef{}, err
+			return nil, err
 		}
 		if strings.TrimSpace(gptaccount.Email(account)) == "" {
-			return AccountRef{}, fmt.Errorf("account email is required")
+			return nil, fmt.Errorf("account email is required")
 		}
 		if err := s.generateAccountFingerprint(ctx, gptaccount.ID(account), accountfingerprint.GenerateParams{
 			CountryCode: spec.GetCountryCode(),
 			Region:      spec.GetRegion(),
 		}); err != nil {
-			return AccountRef{}, err
+			return nil, err
 		}
 		return accountRef(account), nil
 	}
@@ -66,7 +66,7 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 		var err error
 		email, err = s.acquireEmail(ctx, spec.GetAccountId(), nil, accountEmailStrategy(spec))
 		if err != nil {
-			return AccountRef{}, err
+			return nil, err
 		}
 	}
 
@@ -77,20 +77,20 @@ func (s *Server) EnsureAccountActivity(ctx context.Context, input EnsureAccountI
 	if err != nil {
 		if account, getErr := s.getAccount(ctx, spec.GetAccountId()); getErr == nil {
 			if err := rejectUserAlreadyExistsAccount(account); err != nil {
-				return AccountRef{}, err
+				return nil, err
 			}
 			return accountRef(account), nil
 		}
-		return AccountRef{}, err
+		return nil, err
 	}
 	if resp.GetAccount() == nil || gptaccount.ID(resp.GetAccount()) == "" {
-		return AccountRef{}, fmt.Errorf("gpt-account returned empty account")
+		return nil, fmt.Errorf("gpt-account returned empty account")
 	}
 	if err := s.generateAccountFingerprint(ctx, gptaccount.ID(resp.GetAccount()), accountfingerprint.GenerateParams{
 		CountryCode: spec.GetCountryCode(),
 		Region:      spec.GetRegion(),
 	}); err != nil {
-		return AccountRef{}, err
+		return nil, err
 	}
 	return accountRef(resp.GetAccount()), nil
 }
@@ -118,27 +118,27 @@ func accountEmailStrategy(spec *pb.AccountSpec) pb.AccountEmailStrategy {
 	return spec.GetEmailStrategy()
 }
 
-func (s *Server) ResolveAccountFromJobActivity(ctx context.Context, input ResolveAccountInput) (AccountRef, error) {
+func (s *Server) ResolveAccountFromJobActivity(ctx context.Context, input *ResolveAccountInput) (*AccountRef, error) {
 	if input.GetAccountId() != "" {
 		account, err := s.getAccount(ctx, input.GetAccountId())
 		if err != nil {
-			return AccountRef{}, err
+			return nil, err
 		}
 		if err := rejectUserAlreadyExistsAccount(account); err != nil {
-			return AccountRef{}, err
+			return nil, err
 		}
 		return accountRef(account), nil
 	}
 	job, err := s.getJob(ctx, input.GetSourceJobId())
 	if err != nil {
-		return AccountRef{}, err
+		return nil, err
 	}
 	account, err := s.getAccount(ctx, job.AccountID)
 	if err != nil {
-		return AccountRef{}, err
+		return nil, err
 	}
 	if err := rejectUserAlreadyExistsAccount(account); err != nil {
-		return AccountRef{}, err
+		return nil, err
 	}
 	return accountRef(account), nil
 }

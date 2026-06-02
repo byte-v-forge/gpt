@@ -10,10 +10,10 @@ import (
 	"orchestrator/pb"
 )
 
-func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input CodexOAuthCompleteBrowserInput) (CodexOAuthCompleteBrowserOutput, error) {
+func (s *Server) CodexOAuthCompleteProtocolActivity(ctx context.Context, input *CodexOAuthCompleteBrowserInput) (*CodexOAuthCompleteBrowserOutput, error) {
 	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
-	output := CodexOAuthCompleteBrowserOutput{}
+	output := &CodexOAuthCompleteBrowserOutput{}
 	data := codexOAuthProtocolData(label)
 	data.setAuthSecretWritten(false)
 	data.setAccountAuthWritten(false)
@@ -142,7 +142,7 @@ func codexOAuthProtocolCanCompleteStage(stage string) bool {
 	}
 }
 
-func (s *Server) CodexOAuthStopProtocolActivity(ctx context.Context, input CodexOAuthStopBrowserInput) error {
+func (s *Server) CodexOAuthStopProtocolActivity(ctx context.Context, input *CodexOAuthStopBrowserInput) error {
 	if input.GetSession() == nil {
 		return nil
 	}

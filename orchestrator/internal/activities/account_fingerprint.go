@@ -68,7 +68,7 @@ func codexOAuthProtocolProfileFromAccount(profile accountfingerprint.Profile, cf
 	return gptProtocolHTTPProfile{ProxyURL: cfg.ProtocolProxyURL, TLSProfileName: fingerprint.TLSProfileName}
 }
 
-func codexOAuthConfigWithInputProxy(cfg CodexOAuthConfig, input ProtocolAuthStartInput) CodexOAuthConfig {
+func codexOAuthConfigWithInputProxy(cfg CodexOAuthConfig, input *ProtocolAuthStartInput) CodexOAuthConfig {
 	cfg = cfg.withDefaults()
 	if proxyURL := strings.TrimSpace(input.GetProxyUrl()); proxyURL != "" {
 		cfg.ProtocolProxyURL = proxyURL

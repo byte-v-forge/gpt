@@ -99,7 +99,7 @@ func (s *Server) awaitN8NChannelOTP(ctx context.Context, req n8nChannelOTPWaitRe
 	if cfg.Poll != nil {
 		detail.MailboxPollRequested = true
 	}
-	if err := s.activities.StartJobStepActivity(ctx, pb.JobStepStartInput{JobId: req.JobID, StepName: req.StepName, Recoverable: false, Retryable: true, Detail: jobDataMessage(detail)}); err != nil {
+	if err := s.activities.StartJobStepActivity(ctx, &pb.JobStepStartInput{JobId: req.JobID, StepName: req.StepName, Recoverable: false, Retryable: true, Detail: jobDataMessage(detail)}); err != nil {
 		return nil, err
 	}
 	params := map[string]string{

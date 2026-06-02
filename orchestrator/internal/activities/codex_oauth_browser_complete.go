@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-func (s *Server) CodexOAuthCompleteBrowserActivity(ctx context.Context, input CodexOAuthCompleteBrowserInput) (CodexOAuthCompleteBrowserOutput, error) {
+func (s *Server) CodexOAuthCompleteBrowserActivity(ctx context.Context, input *CodexOAuthCompleteBrowserInput) (*CodexOAuthCompleteBrowserOutput, error) {
 	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
-	output := CodexOAuthCompleteBrowserOutput{}
+	output := &CodexOAuthCompleteBrowserOutput{}
 	data := codexOAuthBrowserData(label, nil)
 	data.setAuthSecretWritten(false)
 	data.setAccountAuthWritten(false)

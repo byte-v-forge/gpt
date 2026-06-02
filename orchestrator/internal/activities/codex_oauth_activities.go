@@ -19,7 +19,7 @@ func codexOAuthAuthSecretKey(accountID string) string {
 	return chatgptauth.AccountAuthSecretKey(accountID)
 }
 
-func (s *Server) CodexOAuthAcquirePhoneActivity(ctx context.Context, input CodexOAuthAcquirePhoneInput) (*CodexOAuthPhoneLease, error) {
+func (s *Server) CodexOAuthAcquirePhoneActivity(ctx context.Context, input *CodexOAuthAcquirePhoneInput) (*CodexOAuthPhoneLease, error) {
 	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
 	reuseLimit := input.GetMaxReuseCount()
@@ -47,7 +47,7 @@ func (s *Server) CodexOAuthAcquirePhoneActivity(ctx context.Context, input Codex
 	return lease, err
 }
 
-func (s *Server) CodexOAuthReleasePhoneActivity(ctx context.Context, input CodexOAuthReleasePhoneInput) error {
+func (s *Server) CodexOAuthReleasePhoneActivity(ctx context.Context, input *CodexOAuthReleasePhoneInput) error {
 	step := s.activityStep(ctx, input.GetJobId(), contracts.StepCodexOAuthReleasePhone, true, false)
 	_, err := step.run(func() (activityStepResult, error) {
 		if strings.TrimSpace(input.GetActivationId()) == "" {

@@ -172,7 +172,7 @@ func (s *Server) failBoundN8NActionMessage(ctx context.Context, cfg n8nActionFai
 }
 
 func (s *Server) storeN8NActionSuccessMessage(ctx context.Context, jobID string, result proto.Message) error {
-	return s.activities.MarkJobSucceededActivity(ctx, pb.JobSuccessInput{
+	return s.activities.MarkJobSucceededActivity(ctx, &pb.JobSuccessInput{
 		JobId:  strings.TrimSpace(jobID),
 		Result: jobDataMessage(result),
 	})
@@ -187,7 +187,7 @@ func (s *Server) storeN8NActionFailure(ctx context.Context, jobID string, record
 	if status == "" {
 		status = jobstatus.FailedRetryable
 	}
-	return s.activities.MarkJobFailedActivity(ctx, pb.JobFailureInput{
+	return s.activities.MarkJobFailedActivity(ctx, &pb.JobFailureInput{
 		JobId:        strings.TrimSpace(jobID),
 		StepName:     strings.TrimSpace(record.Step),
 		Status:       status,

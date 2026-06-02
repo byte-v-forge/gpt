@@ -9,7 +9,7 @@ import (
 	"orchestrator/pb"
 )
 
-func (s *Server) ProtocolUseProxyActivity(ctx context.Context, input ProtocolAuthStartInput) (ProtocolAuthStartOutput, error) {
+func (s *Server) ProtocolUseProxyActivity(ctx context.Context, input *ProtocolAuthStartInput) (*ProtocolAuthStartOutput, error) {
 	cfg := s.codexOAuthSettings(ctx)
 	mode := strings.TrimSpace(input.GetMode())
 	if mode == "" {
@@ -23,7 +23,7 @@ func (s *Server) ProtocolUseProxyActivity(ctx context.Context, input ProtocolAut
 	}
 	geo := codexOAuthProtocolProxyGeoFromInput(input.GetCountryCode(), input.GetRegion())
 	recordCodexOAuthProtocolProxyRequestGeo(data, geo)
-	output := ProtocolAuthStartOutput{AccountId: input.GetAccountId(), Data: protocolAuthOutputData(data)}
+	output := &ProtocolAuthStartOutput{AccountId: input.GetAccountId(), Data: protocolAuthOutputData(data)}
 	step, err := s.startActivityStep(ctx, input.GetJobId(), contracts.StepProtocolUseProxy, false, true)
 	if err != nil {
 		return output, err

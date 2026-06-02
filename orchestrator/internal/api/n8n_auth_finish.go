@@ -46,7 +46,7 @@ func (s *Server) finishN8NAuth(ctx context.Context, cfg n8nAuthFinishConfig, job
 		return nil, s.markN8NActionFailure(ctx, jobID, n8nActionFailureRecord{Step: cfg.CompleteStep, Status: jobstatus.FailedRetryable, Retryable: true}, err)
 	}
 	result := n8nAuthFinishResult(accountID, n8nExecutionID, authResult, cfg)
-	persist := pb.PersistRegisteredInput{
+	persist := &pb.PersistRegisteredInput{
 		AccountId:    accountID,
 		SessionToken: authResult.GetSessionToken(),
 		AccessToken:  authResult.GetAccessToken(),

@@ -23,10 +23,10 @@ func (s *Server) startN8NBrowserAuth(ctx context.Context, cfg n8nBrowserAuthLife
 	if err := s.bindN8NExecution(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
-	out, err := s.activities.BrowserAuthStartActivity(ctx, pb.BrowserAuthStartInput{JobId: jobID, AccountId: accountID, Mode: cfg.Mode})
+	out, err := s.activities.BrowserAuthStartActivity(ctx, &pb.BrowserAuthStartInput{JobId: jobID, AccountId: accountID, Mode: cfg.Mode})
 	result := s.n8nBrowserAuthStartResult(ctx, cfg.ResultSecretPrefix, jobID, accountID, n8nExecutionID, cfg.StartStep, out)
 	if err != nil {
-		_ = s.activities.BrowserAuthCancelActivity(ctx, pb.BrowserAuthCancelInput{JobId: jobID, BrowserSessionId: out.GetBrowserSessionId(), Mode: cfg.Mode})
+		_ = s.activities.BrowserAuthCancelActivity(ctx, &pb.BrowserAuthCancelInput{JobId: jobID, BrowserSessionId: out.GetBrowserSessionId(), Mode: cfg.Mode})
 		return result, s.markN8NAuthFailed(ctx, cfg.Failure, jobID, cfg.StartStep, err, out.GetData())
 	}
 	if result.GetResultReady() && strings.TrimSpace(result.GetResultRef()) == "" {
@@ -44,10 +44,10 @@ func (s *Server) completeN8NBrowserAuth(ctx context.Context, cfg n8nBrowserAuthL
 	if err := s.bindN8NExecution(ctx, jobID, n8nExecutionID); err != nil {
 		return nil, err
 	}
-	out, err := s.activities.BrowserAuthCompleteActivity(ctx, pb.BrowserAuthCompleteInput{JobId: jobID, AccountId: accountID, BrowserSessionId: flowID, Mode: cfg.Mode, OtpParam: contracts.JobParamRegistrationOTP, SubmittedAtParam: contracts.JobParamRegistrationOTPSubmittedAtUnix, OtpIssuedAfterUnix: otpIssuedAfterUnix, OtpSource: strings.TrimSpace(otpSource)})
-	result, resultErr := s.n8nBrowserAuthOutputResult(ctx, cfg.ResultSecretPrefix, jobID, accountID, n8nExecutionID, cfg.CompleteStep, flowID, &out)
+	out, err := s.activities.BrowserAuthCompleteActivity(ctx, &pb.BrowserAuthCompleteInput{JobId: jobID, AccountId: accountID, BrowserSessionId: flowID, Mode: cfg.Mode, OtpParam: contracts.JobParamRegistrationOTP, SubmittedAtParam: contracts.JobParamRegistrationOTPSubmittedAtUnix, OtpIssuedAfterUnix: otpIssuedAfterUnix, OtpSource: strings.TrimSpace(otpSource)})
+	result, resultErr := s.n8nBrowserAuthOutputResult(ctx, cfg.ResultSecretPrefix, jobID, accountID, n8nExecutionID, cfg.CompleteStep, flowID, out)
 	if err != nil {
-		_ = s.activities.BrowserAuthCancelActivity(ctx, pb.BrowserAuthCancelInput{JobId: jobID, BrowserSessionId: flowID, Mode: cfg.Mode})
+		_ = s.activities.BrowserAuthCancelActivity(ctx, &pb.BrowserAuthCancelInput{JobId: jobID, BrowserSessionId: flowID, Mode: cfg.Mode})
 		return result, s.markN8NAuthFailed(ctx, cfg.Failure, jobID, cfg.CompleteStep, err, out.GetData())
 	}
 	if resultErr != nil {

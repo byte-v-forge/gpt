@@ -63,7 +63,7 @@ func (s *Server) failN8NAuth(ctx context.Context, cfg n8nAuthFailConfig, jobID s
 		return nil, markErr
 	}
 	if cfg.BrowserCancel {
-		_ = s.activities.BrowserAuthCancelActivity(ctx, pb.BrowserAuthCancelInput{JobId: jobID, BrowserSessionId: strings.TrimSpace(flowID), Mode: cfg.Mode})
+		_ = s.activities.BrowserAuthCancelActivity(ctx, &pb.BrowserAuthCancelInput{JobId: jobID, BrowserSessionId: strings.TrimSpace(flowID), Mode: cfg.Mode})
 	} else if strings.TrimSpace(cfg.ProtocolFlowParam) != "" {
 		_ = s.cancelN8NProtocolAuthState(ctx, jobID, firstNonEmpty(flowID, data.GetFlowId()), cfg.ProtocolFlowParam, cfg.Mode)
 	}
@@ -112,7 +112,7 @@ func (s *Server) cancelN8NProtocolAuthState(ctx context.Context, jobID string, f
 	if flowID == "" {
 		return nil
 	}
-	return s.activities.ProtocolAuthCancelActivity(ctx, pb.ProtocolAuthCancelInput{JobId: jobID, FlowId: flowID, Mode: mode})
+	return s.activities.ProtocolAuthCancelActivity(ctx, &pb.ProtocolAuthCancelInput{JobId: jobID, FlowId: flowID, Mode: mode})
 }
 
 func n8nAuthFailureData(scope n8nActionScope, flowID string, mode string, errorMessage string, data *pb.N8NAuthFailureData) *pb.N8NAuthFailureData {

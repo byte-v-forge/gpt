@@ -5,10 +5,10 @@ import (
 	"orchestrator/internal/contracts"
 )
 
-func (s *Server) CodexOAuthAddPhoneBrowserActivity(ctx context.Context, input CodexOAuthAddPhoneBrowserInput) (CodexOAuthAddPhoneBrowserOutput, error) {
+func (s *Server) CodexOAuthAddPhoneBrowserActivity(ctx context.Context, input *CodexOAuthAddPhoneBrowserInput) (*CodexOAuthAddPhoneBrowserOutput, error) {
 	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
-	output := CodexOAuthAddPhoneBrowserOutput{PhoneReuseCount: input.GetPhone().GetReuseCount(), PhoneReuseLimit: input.GetPhone().GetReuseLimit()}
+	output := &CodexOAuthAddPhoneBrowserOutput{PhoneReuseCount: input.GetPhone().GetReuseCount(), PhoneReuseLimit: input.GetPhone().GetReuseLimit()}
 	data := codexOAuthBrowserData(label, input.GetPhone())
 	step := s.activityStep(ctx, input.GetJobId(), contracts.StepCodexOAuthBrowserAddPhone, false, true)
 	_, err := step.run(func() (activityStepResult, error) {

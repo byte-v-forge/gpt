@@ -44,10 +44,10 @@ func (s *Server) recordN8NDynamicProxy(ctx context.Context, jobID string, accoun
 	if err := s.accountProxyUsages.Record(ctx, accountproxyusage.RecordInput{JobID: scope.JobID, AccountID: scope.AccountID, N8NExecutionID: scope.N8NExecutionID, Purpose: profile.Purpose, ProxyURL: proxyURL, Data: data}); err != nil {
 		return nil, err
 	}
-	if err := s.activities.StartJobStepActivity(ctx, pb.JobStepStartInput{JobId: scope.JobID, StepName: contracts.StepDynamicIPPreflight, Recoverable: false, Retryable: true, Detail: jobDataMessage(data)}); err != nil {
+	if err := s.activities.StartJobStepActivity(ctx, &pb.JobStepStartInput{JobId: scope.JobID, StepName: contracts.StepDynamicIPPreflight, Recoverable: false, Retryable: true, Detail: jobDataMessage(data)}); err != nil {
 		return nil, err
 	}
-	if err := s.activities.CompleteJobStepActivity(ctx, pb.JobStepCompleteInput{
+	if err := s.activities.CompleteJobStepActivity(ctx, &pb.JobStepCompleteInput{
 		JobId:       scope.JobID,
 		StepName:    contracts.StepDynamicIPPreflight,
 		Recoverable: false,

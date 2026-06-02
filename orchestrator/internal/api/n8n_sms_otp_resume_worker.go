@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byte-v-forge/common-lib/eventcatalog"
 	smsv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/sms/v1"
 
 	"orchestrator/internal/channelotpwait"
@@ -12,6 +13,7 @@ import (
 func smsN8NChannelOTPResumeWorkerConfig() n8nChannelOTPResumeWorkerConfig[*smsv1.SmsCodeReceivedEvent] {
 	return newN8NChannelOTPResumeWorkerConfig(
 		channelotpwait.ChannelSMS,
+		eventcatalog.SMSCodeReceived,
 		func() *smsv1.SmsCodeReceivedEvent { return &smsv1.SmsCodeReceivedEvent{} },
 		smsChannelOTPEvent,
 	)

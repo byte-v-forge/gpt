@@ -25,9 +25,9 @@ const (
 	protocolAuthChatGPTSessionURL = "https://chatgpt.com/api/auth/session"
 )
 
-func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input ProtocolAuthStartInput) (ProtocolAuthStartOutput, error) {
+func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input *ProtocolAuthStartInput) (*ProtocolAuthStartOutput, error) {
 	cfg := codexOAuthConfigWithInputProxy(s.codexOAuthSettings(ctx), input)
-	output := ProtocolAuthStartOutput{AccountId: input.GetAccountId(), OtpTimeoutSeconds: s.registrationOtpTimeout(ctx)}
+	output := &ProtocolAuthStartOutput{AccountId: input.GetAccountId(), OtpTimeoutSeconds: s.registrationOtpTimeout(ctx)}
 	account, err := s.protocolAuthAccount(ctx, input.GetAccountId(), input.GetMode())
 	if err != nil {
 		return output, err
@@ -81,7 +81,7 @@ func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input ProtocolAu
 	}
 	if protocolAuthReadyStage(state.Stage) {
 		result, captureErr := s.protocolAuthCaptureSession(ctx, client, state, data)
-		output.Result = &result
+		output.Result = result
 		output.Data = protocolAuthOutputData(protocolAuthStepMessage(data))
 		err = captureErr
 		if err == nil {
@@ -99,8 +99,8 @@ func (s *Server) ProtocolAuthStartActivity(ctx context.Context, input ProtocolAu
 	return output, step.complete(protocolAuthStepMessage(data), err)
 }
 
-func (s *Server) ProtocolAuthWaitActivity(ctx context.Context, input ProtocolAuthWaitInput) (ProtocolAuthWaitOutput, error) {
-	output := ProtocolAuthWaitOutput{
+func (s *Server) ProtocolAuthWaitActivity(ctx context.Context, input *ProtocolAuthWaitInput) (*ProtocolAuthWaitOutput, error) {
+	output := &ProtocolAuthWaitOutput{
 		AccountId:          input.GetAccountId(),
 		FlowId:             input.GetFlowId(),
 		Email:              input.GetEmail(),
@@ -162,7 +162,7 @@ func (s *Server) ProtocolAuthWaitActivity(ctx context.Context, input ProtocolAut
 	}
 	if protocolAuthReadyStage(state.Stage) {
 		result, captureErr := s.protocolAuthCaptureSession(ctx, client, state, data)
-		output.Result = &result
+		output.Result = result
 		output.Data = protocolAuthStepMessage(data)
 		if captureErr == nil {
 			_ = s.deleteCodexOAuthProtocolState(ctx, input.GetJobId(), &CodexOAuthBrowserSession{FlowId: input.GetFlowId()})
@@ -184,28 +184,28 @@ func (s *Server) ProtocolAuthWaitActivity(ctx context.Context, input ProtocolAut
 	return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
 }
 
-func (s *Server) ProtocolAuthCompleteActivity(ctx context.Context, input ProtocolAuthCompleteInput) (RegisterActivityOutput, error) {
+func (s *Server) ProtocolAuthCompleteActivity(ctx context.Context, input *ProtocolAuthCompleteInput) (*RegisterActivityOutput, error) {
 	stepName, err := protocolAuthCompleteStepName(input.GetMode())
 	if err != nil {
-		return RegisterActivityOutput{}, err
+		return nil, err
 	}
 	account, err := s.protocolAuthAccount(ctx, input.GetAccountId(), input.GetMode())
 	if err != nil {
-		return RegisterActivityOutput{}, err
+		return nil, err
 	}
 	data := newProtocolAuthStepData(input.GetMode(), account)
 	data.setFlowID(input.GetFlowId())
 	data.setOTPSource(input.GetOtpSource())
 	step, err := s.startActivityStep(ctx, input.GetJobId(), stepName, false, true)
 	if err != nil {
-		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
+		return &RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
 	}
 	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "completing protocol auth", protocolAuthStepMessage(data))
 	defer stopHeartbeat()
 
 	state, client, err := s.protocolAuthStateClient(ctx, input.GetJobId(), input.GetFlowId(), gptaccount.ID(account), input.GetProxyUrl())
 	if err != nil {
-		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
+		return &RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, gptaccount.ID(account), protocolAuthStepMessage(data), err)
 	}
 	err = s.protocolAuthValidateEmailOTP(ctx, client, state, input, data)
 	if err == nil && input.GetMode() == browserAuthModeRegister && (state.Stage == "about_you" || state.Stage == "email_otp" || state.Stage == "") {
@@ -217,7 +217,7 @@ func (s *Server) ProtocolAuthCompleteActivity(ctx context.Context, input Protoco
 	if saveErr := s.saveCodexOAuthProtocolState(ctx, input.GetJobId(), state); saveErr != nil && err == nil {
 		err = saveErr
 	}
-	var output RegisterActivityOutput
+	output := &RegisterActivityOutput{}
 	if err == nil {
 		output, err = s.protocolAuthCaptureSession(ctx, client, state, data)
 	}
@@ -229,7 +229,7 @@ func (s *Server) ProtocolAuthCompleteActivity(ctx context.Context, input Protoco
 	return output, step.complete(protocolAuthStepMessage(data), nil)
 }
 
-func (s *Server) ProtocolAuthCancelActivity(ctx context.Context, input ProtocolAuthCancelInput) error {
+func (s *Server) ProtocolAuthCancelActivity(ctx context.Context, input *ProtocolAuthCancelInput) error {
 	return s.deleteCodexOAuthProtocolState(ctx, input.GetJobId(), &CodexOAuthBrowserSession{FlowId: input.GetFlowId()})
 }
 
@@ -435,7 +435,7 @@ func protocolAuthKickoffRegisterOTP(ctx context.Context, client *GptClient, stat
 	return "", fmt.Errorf("protocol register email otp send failed")
 }
 
-func (s *Server) protocolAuthValidateEmailOTP(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, input ProtocolAuthCompleteInput, data *protocolAuthStepData) error {
+func (s *Server) protocolAuthValidateEmailOTP(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, input *ProtocolAuthCompleteInput, data *protocolAuthStepData) error {
 	otp, err := s.consumeStoredOTP(ctx, input.GetJobId(), input.GetOtpParam(), input.GetSubmittedAtParam(), input.GetOtpIssuedAfterUnix())
 	if err != nil {
 		return err
@@ -489,15 +489,15 @@ func protocolAuthAdvanceStage(ctx context.Context, client *GptClient, state *pb.
 	return state.Stage, nil
 }
 
-func (s *Server) protocolAuthCaptureSession(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *protocolAuthStepData) (RegisterActivityOutput, error) {
+func (s *Server) protocolAuthCaptureSession(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *protocolAuthStepData) (*RegisterActivityOutput, error) {
 	if _, err := protocolAuthCallbackURL(ctx, client, state, data); err != nil {
 		if session, sessionErr := protocolAuthSession(ctx, client, state, data); sessionErr == nil {
 			return session, nil
 		}
-		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
+		return &RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
 	}
 	if err := protocolAuthConsumeCallback(ctx, client, state); err != nil {
-		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
+		return &RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
 	}
 	return protocolAuthSession(ctx, client, state, data)
 }
@@ -543,22 +543,22 @@ func protocolAuthConsumeCallback(ctx context.Context, client *GptClient, state *
 	return nil
 }
 
-func protocolAuthSession(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *protocolAuthStepData) (RegisterActivityOutput, error) {
+func protocolAuthSession(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, data *protocolAuthStepData) (*RegisterActivityOutput, error) {
 	resp, err := client.get(ctx, protocolAuthChatGPTSessionURL, "https://chatgpt.com/", false)
 	if err != nil {
-		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
+		return &RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
 	}
 	if err := codexOAuthProtocolRequireOK(resp, "chatgpt auth session"); err != nil {
-		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
+		return &RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, err
 	}
 	sessionToken := client.sessionTokenValue("chatgpt.com")
 	accessToken := strings.TrimSpace(stringAny(codexOAuthProtocolResponseJSON(resp)["accessToken"]))
 	data.setSessionTokenPresent(sessionToken != "")
 	data.setAccessTokenPresent(accessToken != "")
 	if accessToken == "" {
-		return RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, fmt.Errorf("protocol auth session missing access token")
+		return &RegisterActivityOutput{Data: registerOutputData(protocolAuthStepMessage(data))}, fmt.Errorf("protocol auth session missing access token")
 	}
-	return RegisterActivityOutput{
+	return &RegisterActivityOutput{
 		SessionToken: sessionToken,
 		AccessToken:  accessToken,
 		DeviceId:     state.DeviceId,

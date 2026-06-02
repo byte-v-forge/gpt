@@ -48,7 +48,7 @@ func (s *Server) startN8NProbeJob(ctx context.Context, profile n8nProbeProfile, 
 	if accountID == "" {
 		return n8nStartResponse("", fmt.Errorf("account_id is required"), n8nProbeStartResponse)
 	}
-	account, err := s.activities.ResolveAccountFromJobActivity(ctx, pb.ResolveAccountInput{AccountId: accountID})
+	account, err := s.activities.ResolveAccountFromJobActivity(ctx, &pb.ResolveAccountInput{AccountId: accountID})
 	if err != nil {
 		return n8nStartResponse("", err, n8nProbeStartResponse)
 	}
@@ -89,11 +89,11 @@ func (s *Server) runN8NProbeAtomicStep(ctx context.Context, jobID string, accoun
 }
 
 func (s *Server) probePlusTrialAtomic(ctx context.Context, scope n8nProbeScope) (bool, proto.Message, error) {
-	out, err := s.activities.ProbePlusTrialAtomicActivity(ctx, pb.ProbePlusTrialActivityInput{JobId: scope.JobID, AccountId: scope.AccountID, ProxyUrl: scope.ProxyURL})
+	out, err := s.activities.ProbePlusTrialAtomicActivity(ctx, &pb.ProbePlusTrialActivityInput{JobId: scope.JobID, AccountId: scope.AccountID, ProxyUrl: scope.ProxyURL})
 	return out.GetSuccess(), out.GetData(), err
 }
 
 func (s *Server) probeTierAtomic(ctx context.Context, scope n8nProbeScope) (bool, proto.Message, error) {
-	out, err := s.activities.ProbeTierAtomicActivity(ctx, pb.ProbeTierActivityInput{JobId: scope.JobID, AccountId: scope.AccountID, ProxyUrl: scope.ProxyURL})
+	out, err := s.activities.ProbeTierAtomicActivity(ctx, &pb.ProbeTierActivityInput{JobId: scope.JobID, AccountId: scope.AccountID, ProxyUrl: scope.ProxyURL})
 	return out.GetSuccess(), out.GetData(), err
 }

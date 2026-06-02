@@ -13,7 +13,7 @@ import (
 	"orchestrator/pb"
 )
 
-func (s *Server) PersistRegisteredActivity(ctx context.Context, input PersistRegisteredInput) error {
+func (s *Server) PersistRegisteredActivity(ctx context.Context, input *PersistRegisteredInput) error {
 	if err := s.saveChatGPTSessionToken(ctx, input.GetAccountId(), input.GetSessionToken()); err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func (s *Server) PersistRegisteredActivity(ctx context.Context, input PersistReg
 	return err
 }
 
-func (s *Server) MarkJobFailedActivity(ctx context.Context, input JobFailureInput) error {
+func (s *Server) MarkJobFailedActivity(ctx context.Context, input *JobFailureInput) error {
 	if input.Status == "" {
 		input.Status = failedStatus(input.Recoverable, input.Retryable)
 	}
@@ -54,7 +54,7 @@ func (s *Server) MarkJobFailedActivity(ctx context.Context, input JobFailureInpu
 	return nil
 }
 
-func (s *Server) MarkJobSucceededActivity(ctx context.Context, input JobSuccessInput) error {
+func (s *Server) MarkJobSucceededActivity(ctx context.Context, input *JobSuccessInput) error {
 	if err := s.ensureJobCanSucceed(ctx, input.GetJobId()); err != nil {
 		return err
 	}
@@ -66,7 +66,7 @@ func (s *Server) createJobWithID(ctx context.Context, jobID, accountID, action s
 	return s.jobStore.CreateWithID(ctx, jobID, accountID, action, params)
 }
 
-func (s *Server) markStepFailed(ctx context.Context, input JobFailureInput) error {
+func (s *Server) markStepFailed(ctx context.Context, input *JobFailureInput) error {
 	return s.jobStore.MarkStepFailed(ctx, jobprojection.StepFailure{
 		JobID:        input.GetJobId(),
 		StepName:     input.GetStepName(),

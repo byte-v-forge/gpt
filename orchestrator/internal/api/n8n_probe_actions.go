@@ -108,7 +108,7 @@ func (s *Server) CheckN8NProbeToken(ctx context.Context, req *pb.N8NDynamicProxy
 		AccountId:      scope.AccountID,
 		N8NExecutionId: scope.N8NExecutionID,
 		ProxyUrl:       scope.ProxyURL,
-		Account: probeAccountFacts(pb.AccountRef{
+		Account: probeAccountFacts(&pb.AccountRef{
 			AccountId:         gptaccount.ID(account),
 			PlusTrialKnown:    account.PlusTrialEligible != nil,
 			PlusTrialEligible: account.GetPlusTrialEligible(),
@@ -326,7 +326,7 @@ func probeBool(value *bool) (bool, bool) {
 	return *value, true
 }
 
-func probeAccountFacts(account pb.AccountRef) *pb.N8NProbeAccountFacts {
+func probeAccountFacts(account *pb.AccountRef) *pb.N8NProbeAccountFacts {
 	return &pb.N8NProbeAccountFacts{
 		AccountId:         account.GetAccountId(),
 		PlusTrialKnown:    account.GetPlusTrialKnown(),

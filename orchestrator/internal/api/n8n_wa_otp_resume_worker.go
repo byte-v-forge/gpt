@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/byte-v-forge/common-lib/eventcatalog"
 	wav1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/wa/v1"
 
 	"orchestrator/internal/channelotpwait"
@@ -12,6 +13,7 @@ import (
 func waN8NChannelOTPResumeWorkerConfig() n8nChannelOTPResumeWorkerConfig[*wav1.WaOtpReceivedEvent] {
 	return newN8NChannelOTPResumeWorkerConfig(
 		channelotpwait.ChannelWA,
+		eventcatalog.WAOTPReceived,
 		func() *wav1.WaOtpReceivedEvent { return &wav1.WaOtpReceivedEvent{} },
 		waChannelOTPEvent,
 	)

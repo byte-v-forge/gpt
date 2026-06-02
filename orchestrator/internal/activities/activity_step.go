@@ -35,7 +35,7 @@ func (s *Server) startActivityStep(ctx context.Context, jobID, stepName string, 
 	return step, nil
 }
 
-func (s *Server) StartJobStepActivity(ctx context.Context, input JobStepStartInput) error {
+func (s *Server) StartJobStepActivity(ctx context.Context, input *JobStepStartInput) error {
 	jobID := strings.TrimSpace(input.GetJobId())
 	stepName := strings.TrimSpace(input.GetStepName())
 	if jobID == "" {
@@ -54,7 +54,7 @@ func (s *Server) StartJobStepActivity(ctx context.Context, input JobStepStartInp
 	return nil
 }
 
-func (s *Server) CompleteJobStepActivity(ctx context.Context, input JobStepCompleteInput) error {
+func (s *Server) CompleteJobStepActivity(ctx context.Context, input *JobStepCompleteInput) error {
 	jobID := strings.TrimSpace(input.GetJobId())
 	stepName := strings.TrimSpace(input.GetStepName())
 	if jobID == "" {

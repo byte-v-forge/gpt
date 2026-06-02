@@ -6,14 +6,14 @@ import (
 	"orchestrator/internal/gptaccount"
 )
 
-func (s *Server) CodexOAuthDetectBrowserStageActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) CodexOAuthDetectBrowserStageActivity(ctx context.Context, input *CodexOAuthBrowserStepInput) (*CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthBrowserStageStep(ctx, input, contracts.StepCodexOAuthBrowserDetect, "detecting codex oauth stage", func(flow *codexOAuthBrowserFlow, accountEmail string) (string, int64, error) {
 		stage, err := flow.browserFlow.detectCodexOAuthStage(flow.server.browserAutomationClient, flow.server.browserAuthConfig)
 		return stage, 0, err
 	})
 }
 
-func (s *Server) CodexOAuthSubmitEmailActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) CodexOAuthSubmitEmailActivity(ctx context.Context, input *CodexOAuthBrowserStepInput) (*CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthBrowserStageStep(ctx, input, contracts.StepCodexOAuthBrowserEmail, "submitting codex oauth email", func(flow *codexOAuthBrowserFlow, accountEmail string) (string, int64, error) {
 		issuedAfter, err := flow.browserFlow.submitCodexOAuthEmail(flow.server.browserAutomationClient, flow.server.browserAuthConfig, accountEmail)
 		if err != nil {
@@ -24,7 +24,7 @@ func (s *Server) CodexOAuthSubmitEmailActivity(ctx context.Context, input CodexO
 	})
 }
 
-func (s *Server) CodexOAuthSubmitPasswordActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) CodexOAuthSubmitPasswordActivity(ctx context.Context, input *CodexOAuthBrowserStepInput) (*CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthBrowserStageStep(ctx, input, contracts.StepCodexOAuthBrowserPassword, "submitting codex oauth password", func(flow *codexOAuthBrowserFlow, _ string) (string, int64, error) {
 		issuedAfter, err := flow.browserFlow.submitCodexOAuthPassword(flow.server.browserAutomationClient, flow.server.browserAuthConfig, flow.browserFlow.password)
 		if err != nil {
@@ -35,9 +35,9 @@ func (s *Server) CodexOAuthSubmitPasswordActivity(ctx context.Context, input Cod
 	})
 }
 
-func (s *Server) CodexOAuthSubmitEmailOTPActivity(ctx context.Context, input CodexOAuthSubmitEmailOTPInput) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) CodexOAuthSubmitEmailOTPActivity(ctx context.Context, input *CodexOAuthSubmitEmailOTPInput) (*CodexOAuthBrowserStageOutput, error) {
 	stepInput := CodexOAuthBrowserStepInput{JobId: input.GetJobId(), AccountId: input.GetAccountId(), Label: input.GetLabel(), Session: input.GetSession()}
-	return s.codexOAuthBrowserStageStep(ctx, stepInput, contracts.StepCodexOAuthBrowserEmailOTP, "submitting codex oauth email otp", func(flow *codexOAuthBrowserFlow, _ string) (string, int64, error) {
+	return s.codexOAuthBrowserStageStep(ctx, &stepInput, contracts.StepCodexOAuthBrowserEmailOTP, "submitting codex oauth email otp", func(flow *codexOAuthBrowserFlow, _ string) (string, int64, error) {
 		otp, err := s.consumeStoredOTP(ctx, input.GetJobId(), contracts.JobParamRegistrationOTP, contracts.JobParamRegistrationOTPSubmittedAtUnix, input.GetIssuedAfterUnix())
 		if err != nil {
 			return "", input.GetIssuedAfterUnix(), err
@@ -50,10 +50,10 @@ func (s *Server) CodexOAuthSubmitEmailOTPActivity(ctx context.Context, input Cod
 	})
 }
 
-func (s *Server) codexOAuthBrowserStageStep(ctx context.Context, input CodexOAuthBrowserStepInput, stepName, heartbeat string, fn func(*codexOAuthBrowserFlow, string) (string, int64, error)) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) codexOAuthBrowserStageStep(ctx context.Context, input *CodexOAuthBrowserStepInput, stepName, heartbeat string, fn func(*codexOAuthBrowserFlow, string) (string, int64, error)) (*CodexOAuthBrowserStageOutput, error) {
 	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
-	output := CodexOAuthBrowserStageOutput{}
+	output := &CodexOAuthBrowserStageOutput{}
 	data := codexOAuthBrowserData(label, nil)
 	step := s.activityStep(ctx, input.GetJobId(), stepName, false, true)
 	_, err := step.run(func() (activityStepResult, error) {

@@ -43,7 +43,10 @@ func n8nAuthStepResultFromBase(base *pb.N8NActionStepResult) *pb.N8NAuthStepResu
 	}
 }
 
-func (s *Server) n8nBrowserAuthStartResult(ctx context.Context, resultSecretPrefix string, jobID string, accountID string, n8nExecutionID string, step string, out pb.BrowserAuthStartOutput) *pb.N8NAuthStepResult {
+func (s *Server) n8nBrowserAuthStartResult(ctx context.Context, resultSecretPrefix string, jobID string, accountID string, n8nExecutionID string, step string, out *pb.BrowserAuthStartOutput) *pb.N8NAuthStepResult {
+	if out == nil {
+		return n8nAuthStepResultFromBase(n8nActionStep(jobID, accountID, n8nExecutionID, step, true))
+	}
 	flowID := strings.TrimSpace(out.GetBrowserSessionId())
 	result := n8nAuthStepResultFromBase(n8nActionStep(jobID, accountID, n8nExecutionID, step, true))
 	result.FlowId = flowID

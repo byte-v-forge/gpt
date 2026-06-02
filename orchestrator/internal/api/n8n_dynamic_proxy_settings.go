@@ -70,7 +70,7 @@ func (s *Server) n8nDynamicProxySettingsForGeo(ctx context.Context, jobID string
 	if err != nil {
 		return nil, err
 	}
-	if err := s.activities.StartJobStepActivity(ctx, pb.JobStepStartInput{
+	if err := s.activities.StartJobStepActivity(ctx, &pb.JobStepStartInput{
 		JobId:       scope.JobID,
 		StepName:    contracts.StepDynamicIPPreflight,
 		Recoverable: false,

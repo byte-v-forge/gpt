@@ -9,10 +9,10 @@ import (
 	"orchestrator/pb"
 )
 
-func (s *Server) CodexOAuthStartProtocolActivity(ctx context.Context, input CodexOAuthStartBrowserInput) (CodexOAuthStartBrowserOutput, error) {
+func (s *Server) CodexOAuthStartProtocolActivity(ctx context.Context, input *CodexOAuthStartBrowserInput) (*CodexOAuthStartBrowserOutput, error) {
 	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
-	output := CodexOAuthStartBrowserOutput{PhoneLabel: label}
+	output := &CodexOAuthStartBrowserOutput{PhoneLabel: label}
 	data := codexOAuthProtocolData(label)
 	step := s.activityStep(ctx, input.GetJobId(), contracts.StepCodexOAuthProtocolStart, false, true)
 	_, err := step.run(func() (activityStepResult, error) {
@@ -78,7 +78,7 @@ func (s *Server) CodexOAuthStartProtocolActivity(ctx context.Context, input Code
 	return output, err
 }
 
-func (s *Server) CodexOAuthDetectProtocolStageActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) CodexOAuthDetectProtocolStageActivity(ctx context.Context, input *CodexOAuthBrowserStepInput) (*CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthProtocolStageStep(ctx, input, contracts.StepCodexOAuthProtocolDetect, "detecting codex oauth protocol stage", func(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, account *pb.Account, data *codexOAuthStepData) (string, int64, error) {
 		stage := state.Stage
 		if stage == "" && state.LastUrl != "" {
@@ -90,7 +90,7 @@ func (s *Server) CodexOAuthDetectProtocolStageActivity(ctx context.Context, inpu
 	})
 }
 
-func (s *Server) CodexOAuthSubmitProtocolEmailActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) CodexOAuthSubmitProtocolEmailActivity(ctx context.Context, input *CodexOAuthBrowserStepInput) (*CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthProtocolStageStep(ctx, input, contracts.StepCodexOAuthProtocolEmail, "submitting codex oauth protocol email", func(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, account *pb.Account, data *codexOAuthStepData) (string, int64, error) {
 		sentinel := codexOAuthProtocolSentinelHeader(ctx, client, state, data, "authorize_continue")
 		resp, err := client.postJSON(ctx, "https://auth.openai.com/api/accounts/authorize/continue", "https://auth.openai.com/log-in", map[string]any{
@@ -107,7 +107,7 @@ func (s *Server) CodexOAuthSubmitProtocolEmailActivity(ctx context.Context, inpu
 	})
 }
 
-func (s *Server) CodexOAuthSubmitProtocolPasswordActivity(ctx context.Context, input CodexOAuthBrowserStepInput) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) CodexOAuthSubmitProtocolPasswordActivity(ctx context.Context, input *CodexOAuthBrowserStepInput) (*CodexOAuthBrowserStageOutput, error) {
 	return s.codexOAuthProtocolStageStep(ctx, input, contracts.StepCodexOAuthProtocolPassword, "submitting codex oauth protocol password", func(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, account *pb.Account, data *codexOAuthStepData) (string, int64, error) {
 		password, err := s.getAccountPassword(ctx, gptaccount.ID(account))
 		if err != nil {
@@ -135,9 +135,9 @@ func codexOAuthProtocolResponseSentAtUnix(client *GptClient, resp *codexOAuthPro
 	return 0
 }
 
-func (s *Server) CodexOAuthSubmitProtocolEmailOTPActivity(ctx context.Context, input CodexOAuthSubmitEmailOTPInput) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) CodexOAuthSubmitProtocolEmailOTPActivity(ctx context.Context, input *CodexOAuthSubmitEmailOTPInput) (*CodexOAuthBrowserStageOutput, error) {
 	stepInput := CodexOAuthBrowserStepInput{JobId: input.GetJobId(), AccountId: input.GetAccountId(), Label: input.GetLabel(), Session: input.GetSession()}
-	return s.codexOAuthProtocolStageStep(ctx, stepInput, contracts.StepCodexOAuthProtocolEmailOTP, "submitting codex oauth protocol email otp", func(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, _ *pb.Account, data *codexOAuthStepData) (string, int64, error) {
+	return s.codexOAuthProtocolStageStep(ctx, &stepInput, contracts.StepCodexOAuthProtocolEmailOTP, "submitting codex oauth protocol email otp", func(ctx context.Context, client *GptClient, state *pb.CodexOAuthProtocolState, _ *pb.Account, data *codexOAuthStepData) (string, int64, error) {
 		otp, err := s.consumeStoredOTP(ctx, input.GetJobId(), contracts.JobParamRegistrationOTP, contracts.JobParamRegistrationOTPSubmittedAtUnix, input.GetIssuedAfterUnix())
 		if err != nil {
 			return "", input.GetIssuedAfterUnix(), err
@@ -157,10 +157,10 @@ func (s *Server) CodexOAuthSubmitProtocolEmailOTPActivity(ctx context.Context, i
 	})
 }
 
-func (s *Server) codexOAuthProtocolStageStep(ctx context.Context, input CodexOAuthBrowserStepInput, stepName, heartbeat string, fn func(context.Context, *GptClient, *pb.CodexOAuthProtocolState, *pb.Account, *codexOAuthStepData) (string, int64, error)) (CodexOAuthBrowserStageOutput, error) {
+func (s *Server) codexOAuthProtocolStageStep(ctx context.Context, input *CodexOAuthBrowserStepInput, stepName, heartbeat string, fn func(context.Context, *GptClient, *pb.CodexOAuthProtocolState, *pb.Account, *codexOAuthStepData) (string, int64, error)) (*CodexOAuthBrowserStageOutput, error) {
 	cfg := s.codexOAuthSettings(ctx)
 	label := cfg.label(input.GetLabel())
-	output := CodexOAuthBrowserStageOutput{}
+	output := &CodexOAuthBrowserStageOutput{}
 	data := codexOAuthProtocolData(label)
 	step := s.activityStep(ctx, input.GetJobId(), stepName, false, true)
 	_, err := step.run(func() (activityStepResult, error) {

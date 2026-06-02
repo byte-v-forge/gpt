@@ -10,14 +10,14 @@ import (
 )
 
 type n8nCodexOAuthFlowSteps struct {
-	Start          func(context.Context, pb.CodexOAuthStartBrowserInput) (pb.CodexOAuthStartBrowserOutput, error)
-	Detect         func(context.Context, pb.CodexOAuthBrowserStepInput) (pb.CodexOAuthBrowserStageOutput, error)
-	SubmitEmail    func(context.Context, pb.CodexOAuthBrowserStepInput) (pb.CodexOAuthBrowserStageOutput, error)
-	SubmitPassword func(context.Context, pb.CodexOAuthBrowserStepInput) (pb.CodexOAuthBrowserStageOutput, error)
-	SubmitEmailOTP func(context.Context, pb.CodexOAuthSubmitEmailOTPInput) (pb.CodexOAuthBrowserStageOutput, error)
-	AddPhone       func(context.Context, pb.CodexOAuthAddPhoneBrowserInput) (pb.CodexOAuthAddPhoneBrowserOutput, error)
-	Complete       func(context.Context, pb.CodexOAuthCompleteBrowserInput) (pb.CodexOAuthCompleteBrowserOutput, error)
-	Stop           func(context.Context, pb.CodexOAuthStopBrowserInput) error
+	Start          func(context.Context, *pb.CodexOAuthStartBrowserInput) (*pb.CodexOAuthStartBrowserOutput, error)
+	Detect         func(context.Context, *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error)
+	SubmitEmail    func(context.Context, *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error)
+	SubmitPassword func(context.Context, *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error)
+	SubmitEmailOTP func(context.Context, *pb.CodexOAuthSubmitEmailOTPInput) (*pb.CodexOAuthBrowserStageOutput, error)
+	AddPhone       func(context.Context, *pb.CodexOAuthAddPhoneBrowserInput) (*pb.CodexOAuthAddPhoneBrowserOutput, error)
+	Complete       func(context.Context, *pb.CodexOAuthCompleteBrowserInput) (*pb.CodexOAuthCompleteBrowserOutput, error)
+	Stop           func(context.Context, *pb.CodexOAuthStopBrowserInput) error
 }
 
 func (s *Server) n8nCodexOAuthBrowserSteps() n8nCodexOAuthFlowSteps {
@@ -51,8 +51,8 @@ func (s *Server) CodexOAuthStartFlow(ctx context.Context, actionID string, req *
 	if err != nil {
 		return nil, err
 	}
-	out, err := steps.Start(ctx, *req)
-	return &out, err
+	out, err := steps.Start(ctx, req)
+	return out, err
 }
 
 func (s *Server) CodexOAuthDetectFlowStage(ctx context.Context, actionID string, req *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error) {
@@ -60,8 +60,8 @@ func (s *Server) CodexOAuthDetectFlowStage(ctx context.Context, actionID string,
 	if err != nil {
 		return nil, err
 	}
-	out, err := steps.Detect(ctx, *req)
-	return &out, err
+	out, err := steps.Detect(ctx, req)
+	return out, err
 }
 
 func (s *Server) CodexOAuthSubmitFlowEmail(ctx context.Context, actionID string, req *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error) {
@@ -69,8 +69,8 @@ func (s *Server) CodexOAuthSubmitFlowEmail(ctx context.Context, actionID string,
 	if err != nil {
 		return nil, err
 	}
-	out, err := steps.SubmitEmail(ctx, *req)
-	return &out, err
+	out, err := steps.SubmitEmail(ctx, req)
+	return out, err
 }
 
 func (s *Server) CodexOAuthSubmitFlowPassword(ctx context.Context, actionID string, req *pb.CodexOAuthBrowserStepInput) (*pb.CodexOAuthBrowserStageOutput, error) {
@@ -78,8 +78,8 @@ func (s *Server) CodexOAuthSubmitFlowPassword(ctx context.Context, actionID stri
 	if err != nil {
 		return nil, err
 	}
-	out, err := steps.SubmitPassword(ctx, *req)
-	return &out, err
+	out, err := steps.SubmitPassword(ctx, req)
+	return out, err
 }
 
 func (s *Server) CodexOAuthAwaitFlowEmailOTP(ctx context.Context, actionID string, req *pb.N8NAuthOTPWaitRequest) (*pb.N8NChannelOTPWaitResult, error) {
@@ -117,8 +117,8 @@ func (s *Server) CodexOAuthSubmitFlowEmailOTP(ctx context.Context, actionID stri
 	if err != nil {
 		return nil, err
 	}
-	out, err := steps.SubmitEmailOTP(ctx, *req)
-	return &out, err
+	out, err := steps.SubmitEmailOTP(ctx, req)
+	return out, err
 }
 
 func (s *Server) CodexOAuthAddPhoneFlow(ctx context.Context, actionID string, req *pb.CodexOAuthAddPhoneBrowserInput) (*pb.CodexOAuthAddPhoneBrowserOutput, error) {
@@ -126,8 +126,8 @@ func (s *Server) CodexOAuthAddPhoneFlow(ctx context.Context, actionID string, re
 	if err != nil {
 		return nil, err
 	}
-	out, err := steps.AddPhone(ctx, *req)
-	return &out, err
+	out, err := steps.AddPhone(ctx, req)
+	return out, err
 }
 
 func (s *Server) CodexOAuthCompleteFlow(ctx context.Context, actionID string, req *pb.CodexOAuthCompleteBrowserInput) (*pb.CodexOAuthCompleteBrowserOutput, error) {
@@ -135,8 +135,8 @@ func (s *Server) CodexOAuthCompleteFlow(ctx context.Context, actionID string, re
 	if err != nil {
 		return nil, err
 	}
-	out, err := steps.Complete(ctx, *req)
-	return &out, err
+	out, err := steps.Complete(ctx, req)
+	return out, err
 }
 
 func (s *Server) CodexOAuthStopFlow(ctx context.Context, actionID string, req *pb.CodexOAuthStopBrowserInput) (any, error) {
@@ -144,7 +144,7 @@ func (s *Server) CodexOAuthStopFlow(ctx context.Context, actionID string, req *p
 	if err != nil {
 		return nil, err
 	}
-	if err := steps.Stop(ctx, *req); err != nil {
+	if err := steps.Stop(ctx, req); err != nil {
 		return nil, err
 	}
 	return n8nJobSuccess(req.GetJobId()), nil

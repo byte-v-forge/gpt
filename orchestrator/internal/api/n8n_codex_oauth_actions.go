@@ -127,11 +127,11 @@ func (s *Server) StartN8NCodexOAuthAddPhoneAccount(ctx context.Context, actionID
 }
 
 func (s *Server) CodexOAuthAcquirePhone(ctx context.Context, req *pb.CodexOAuthAcquirePhoneInput) (*pb.CodexOAuthPhoneLease, error) {
-	return s.activities.CodexOAuthAcquirePhoneActivity(ctx, *req)
+	return s.activities.CodexOAuthAcquirePhoneActivity(ctx, req)
 }
 
 func (s *Server) CodexOAuthReleasePhone(ctx context.Context, req *pb.CodexOAuthReleasePhoneInput) (any, error) {
-	if err := s.activities.CodexOAuthReleasePhoneActivity(ctx, *req); err != nil {
+	if err := s.activities.CodexOAuthReleasePhoneActivity(ctx, req); err != nil {
 		return nil, err
 	}
 	return n8nActionSuccess(&pb.N8NActionSuccessResult{JobId: req.GetJobId(), ActivationId: req.GetActivationId()}), nil

@@ -25,12 +25,12 @@ func putProtocolGeoParams(params map[string]string, countryCode string, region s
 	}
 }
 
-func (s *Server) protocolAuthStartInput(ctx context.Context, jobID string, accountID string, mode string) pb.ProtocolAuthStartInput {
+func (s *Server) protocolAuthStartInput(ctx context.Context, jobID string, accountID string, mode string) *pb.ProtocolAuthStartInput {
 	params := map[string]string{}
 	if s.jobStore != nil {
 		params, _ = s.jobStore.Params(ctx, strings.TrimSpace(jobID))
 	}
-	return pb.ProtocolAuthStartInput{
+	return &pb.ProtocolAuthStartInput{
 		JobId:       strings.TrimSpace(jobID),
 		AccountId:   strings.TrimSpace(accountID),
 		Mode:        strings.TrimSpace(mode),

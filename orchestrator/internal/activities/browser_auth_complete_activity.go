@@ -13,10 +13,10 @@ import (
 	"orchestrator/pb"
 )
 
-func (s *Server) BrowserAuthCompleteActivity(ctx context.Context, input BrowserAuthCompleteInput) (RegisterActivityOutput, error) {
+func (s *Server) BrowserAuthCompleteActivity(ctx context.Context, input *BrowserAuthCompleteInput) (*RegisterActivityOutput, error) {
 	stepName, err := browserAuthCompleteStepName(input.Mode)
 	if err != nil {
-		return RegisterActivityOutput{}, err
+		return nil, err
 	}
 	data := &pb.ActivityBrowserAuthCompleteStepData{
 		AccountId:        input.GetAccountId(),
@@ -26,7 +26,7 @@ func (s *Server) BrowserAuthCompleteActivity(ctx context.Context, input BrowserA
 	}
 	step, err := s.startActivityStep(ctx, input.GetJobId(), stepName, false, true)
 	if err != nil {
-		return RegisterActivityOutput{Data: registerOutputData(data)}, err
+		return &RegisterActivityOutput{Data: registerOutputData(data)}, err
 	}
 	step.progress("completing browser auth", data)
 	stopHeartbeat := startActivityHeartbeat(ctx, input.GetJobId(), stepName, "completing browser auth", data)
@@ -34,38 +34,38 @@ func (s *Server) BrowserAuthCompleteActivity(ctx context.Context, input BrowserA
 
 	account, err := s.getAccount(ctx, input.GetAccountId())
 	if err != nil {
-		return RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
+		return &RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 	otpKind, _, err := s.getJobParam(ctx, input.GetJobId(), browserAuthOTPKindParam)
 	if err != nil {
-		return RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
+		return &RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 	if otpKind != "" {
 		data.OtpKind = otpKind
 	}
 	otp, err := s.consumeStoredOTP(ctx, input.GetJobId(), input.GetOtpParam(), input.GetSubmittedAtParam(), input.GetOtpIssuedAfterUnix())
 	if err != nil {
-		return RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
+		return &RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 	result, err := s.browserAuthComplete(ctx, input.GetMode(), input.GetJobId(), account, input.GetBrowserSessionId(), otp, otpKind)
 	data.BrowserComplete = registerResultData(result)
 	if err != nil {
-		return RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
+		return &RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 	if result == nil {
 		err := fmt.Errorf("browser %s complete returned empty response", input.GetMode())
-		return RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
+		return &RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 	if !result.GetSuccess() {
 		err := fmt.Errorf("browser %s complete failed: %s", input.GetMode(), result.GetErrorMessage())
-		return RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
+		return &RegisterActivityOutput{Data: registerOutputData(data)}, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 	}
 
 	output := registerActivityOutputFromResponse(result, data)
 	return output, step.complete(data, nil)
 }
 
-func (s *Server) BrowserAuthCancelActivity(ctx context.Context, input BrowserAuthCancelInput) error {
+func (s *Server) BrowserAuthCancelActivity(ctx context.Context, input *BrowserAuthCancelInput) error {
 	if strings.TrimSpace(input.GetBrowserSessionId()) == "" {
 		return nil
 	}
@@ -121,11 +121,11 @@ func (s *Server) markAccountEmailUserAlreadyExists(ctx context.Context, accountI
 	return err
 }
 
-func registerActivityOutputFromResponse(resp *pb.RegisterResponse, data proto.Message) RegisterActivityOutput {
+func registerActivityOutputFromResponse(resp *pb.RegisterResponse, data proto.Message) *RegisterActivityOutput {
 	if resp == nil {
-		return RegisterActivityOutput{Data: registerOutputData(data)}
+		return &RegisterActivityOutput{Data: registerOutputData(data)}
 	}
-	return RegisterActivityOutput{
+	return &RegisterActivityOutput{
 		SessionToken:      resp.GetSessionToken(),
 		AccessToken:       resp.GetAccessToken(),
 		DeviceId:          resp.GetDeviceId(),

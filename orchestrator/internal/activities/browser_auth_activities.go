@@ -14,8 +14,8 @@ const (
 	browserAuthModeLogin    = "login"
 )
 
-func (s *Server) BrowserAuthStartActivity(ctx context.Context, input BrowserAuthStartInput) (BrowserAuthStartOutput, error) {
-	output := BrowserAuthStartOutput{
+func (s *Server) BrowserAuthStartActivity(ctx context.Context, input *BrowserAuthStartInput) (*BrowserAuthStartOutput, error) {
+	output := &BrowserAuthStartOutput{
 		AccountId: input.GetAccountId(),
 	}
 	account, err := s.getAccount(ctx, input.GetAccountId())
@@ -100,7 +100,7 @@ func (s *Server) BrowserAuthStartActivity(ctx context.Context, input BrowserAuth
 			return output, s.completeBrowserAuthStep(ctx, input.GetJobId(), stepName, input.GetAccountId(), data, err)
 		}
 		resultOutput := registerActivityOutputFromResponse(result, data)
-		output.Result = &resultOutput
+		output.Result = resultOutput
 		output.Data = data
 		return output, step.complete(data, nil)
 	}

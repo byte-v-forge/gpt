@@ -109,10 +109,9 @@ func Run(options Options) {
 }
 
 func runOTPResumeWorker(ctx context.Context, cfg orchestratorConfig, deps *orchestratorDependencies, apiServer *api.Server, worker api.N8NChannelOTPResumeWorkerSpec) error {
-	consumer, err := deps.platformBus.PullWorkerConsumer(
+	consumer, err := deps.platformBus.PullWorkerForBinding(
 		cfg.EventStreamName,
-		worker.Subject,
-		worker.Durable,
+		worker.Binding,
 		10,
 		30*time.Second,
 	)

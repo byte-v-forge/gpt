@@ -15,14 +15,14 @@ import (
 )
 
 type N8NChannelOTPResumeWorkerSpec struct {
-	Subject string
-	Durable string
+	Binding eventcatalog.ConsumerBinding
 	Run     func(context.Context, eventbus.Consumer, *Server) error
 }
 
 type n8nChannelOTPResumeWorkerConfig[T proto.Message] struct {
 	Name           string
 	Label          string
+	Expected       eventbus.ExpectedMessage
 	MalformedLabel string
 	RetryLabel     string
 	AckLabel       string
@@ -30,12 +30,13 @@ type n8nChannelOTPResumeWorkerConfig[T proto.Message] struct {
 	Event          func(T) channelOTPEvent
 }
 
-func newN8NChannelOTPResumeWorkerConfig[T proto.Message](channel string, newEvent func() T, event func(T) channelOTPEvent) n8nChannelOTPResumeWorkerConfig[T] {
+func newN8NChannelOTPResumeWorkerConfig[T proto.Message](channel string, definition eventcatalog.Definition, newEvent func() T, event func(T) channelOTPEvent) n8nChannelOTPResumeWorkerConfig[T] {
 	label := channelOTPLogLabel(channel)
 	lowerLabel := strings.ToLower(label)
 	return n8nChannelOTPResumeWorkerConfig[T]{
 		Name:           "GPT " + label + " OTP resume events",
 		Label:          label,
+		Expected:       definition.ExpectedMessage(),
 		MalformedLabel: "terminate malformed " + lowerLabel + " otp event",
 		RetryLabel:     "retry " + label + " OTP resume",
 		AckLabel:       "ack " + label + " OTP resume event",
@@ -53,6 +54,7 @@ func startN8NChannelOTPResumeWorker[T proto.Message](ctx context.Context, consum
 	return eventbus.RunTypedConsumerWorker(ctx, eventbus.TypedConsumerWorkerConfig[T]{
 		Name:           worker.cfg.Name,
 		Consumer:       consumer,
+		Expected:       worker.cfg.Expected,
 		NewMessage:     worker.cfg.NewEvent,
 		Handler:        worker.handle,
 		MalformedLabel: worker.cfg.MalformedLabel,
@@ -62,23 +64,22 @@ func startN8NChannelOTPResumeWorker[T proto.Message](ctx context.Context, consum
 
 func N8NChannelOTPResumeWorkerSpecs() []N8NChannelOTPResumeWorkerSpec {
 	return []N8NChannelOTPResumeWorkerSpec{
-		n8nChannelOTPResumeWorkerSpec(channelotpwait.ChannelEmail, eventcatalog.MailboxEmailReceived.Subject, func(ctx context.Context, consumer eventbus.Consumer, server *Server) error {
+		n8nChannelOTPResumeWorkerSpec(channelotpwait.ChannelEmail, eventcatalog.MailboxEmailReceived, func(ctx context.Context, consumer eventbus.Consumer, server *Server) error {
 			return startN8NChannelOTPResumeWorker(ctx, consumer, server, emailN8NChannelOTPResumeWorkerConfig())
 		}),
-		n8nChannelOTPResumeWorkerSpec(channelotpwait.ChannelSMS, eventcatalog.SMSCodeReceived.Subject, func(ctx context.Context, consumer eventbus.Consumer, server *Server) error {
+		n8nChannelOTPResumeWorkerSpec(channelotpwait.ChannelSMS, eventcatalog.SMSCodeReceived, func(ctx context.Context, consumer eventbus.Consumer, server *Server) error {
 			return startN8NChannelOTPResumeWorker(ctx, consumer, server, smsN8NChannelOTPResumeWorkerConfig())
 		}),
-		n8nChannelOTPResumeWorkerSpec(channelotpwait.ChannelWA, eventcatalog.WAOTPReceived.Subject, func(ctx context.Context, consumer eventbus.Consumer, server *Server) error {
+		n8nChannelOTPResumeWorkerSpec(channelotpwait.ChannelWA, eventcatalog.WAOTPReceived, func(ctx context.Context, consumer eventbus.Consumer, server *Server) error {
 			return startN8NChannelOTPResumeWorker(ctx, consumer, server, waN8NChannelOTPResumeWorkerConfig())
 		}),
 	}
 }
 
-func n8nChannelOTPResumeWorkerSpec(channel string, subject string, run func(context.Context, eventbus.Consumer, *Server) error) N8NChannelOTPResumeWorkerSpec {
+func n8nChannelOTPResumeWorkerSpec(channel string, definition eventcatalog.Definition, run func(context.Context, eventbus.Consumer, *Server) error) N8NChannelOTPResumeWorkerSpec {
 	channel = channelotpwait.NormalizeChannel(channel)
 	return N8NChannelOTPResumeWorkerSpec{
-		Subject: strings.TrimSpace(subject),
-		Durable: "gpt-" + channel + "-otp-resume",
+		Binding: definition.ConsumerBinding("gpt-" + channel + "-otp-resume"),
 		Run:     run,
 	}
 }

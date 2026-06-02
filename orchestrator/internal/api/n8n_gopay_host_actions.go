@@ -252,7 +252,7 @@ func (s *Server) resolveN8NGoPayPaymentAccount(ctx context.Context, actionID str
 		result := goPayStepResult(actionID, "resolve_account", req, false, data)
 		return result, s.markGoPayHostActionFailed(ctx, req.JobID, "resolve_account", jobstatus.FailedFinal, false, false, err, data)
 	}
-	account, err := s.activities.ResolveAccountFromJobActivity(ctx, pb.ResolveAccountInput{AccountId: firstNonEmpty(req.AccountID, params["account_id"]), SourceJobId: params["source_job_id"]})
+	account, err := s.activities.ResolveAccountFromJobActivity(ctx, &pb.ResolveAccountInput{AccountId: firstNonEmpty(req.AccountID, params["account_id"]), SourceJobId: params["source_job_id"]})
 	req.AccountID = strings.TrimSpace(account.GetAccountId())
 	result := goPayStepResult(actionID, "resolve_account", req, err == nil, data)
 	result.GopayAccountID = gopayAccountID
@@ -272,7 +272,7 @@ func (s *Server) probeN8NGoPayPaymentPlusTrial(ctx context.Context, actionID str
 	if err := s.bindN8NExecution(ctx, req.JobID, req.N8NExecutionID); err != nil {
 		return nil, err
 	}
-	probe, err := s.activities.ProbePlusTrialAtomicActivity(ctx, pb.ProbePlusTrialActivityInput{JobId: req.JobID, AccountId: req.AccountID, ProxyUrl: s.protocolProxyURL(ctx, req.JobID)})
+	probe, err := s.activities.ProbePlusTrialAtomicActivity(ctx, &pb.ProbePlusTrialActivityInput{JobId: req.JobID, AccountId: req.AccountID, ProxyUrl: s.protocolProxyURL(ctx, req.JobID)})
 	data := protoMessageMap(probe.GetData())
 	result := goPayStepResult(actionID, "probe_plus_trial", req, err == nil, data)
 	result.Checked = probe.GetChecked()
@@ -423,12 +423,12 @@ func (s *Server) finishN8NGoPayPayment(ctx context.Context, actionID string, req
 	resultData["plus_trial_checked"] = req.PlusTrialChecked
 	resultData["plus_active"] = req.PlusActive
 	resultData["n8n_execution_id"] = req.N8NExecutionID
-	tier, err := s.activities.ProbeTierAtomicActivity(ctx, pb.ProbeTierActivityInput{JobId: req.JobID, AccountId: req.AccountID, ProxyUrl: s.protocolProxyURL(ctx, req.JobID)})
+	tier, err := s.activities.ProbeTierAtomicActivity(ctx, &pb.ProbeTierActivityInput{JobId: req.JobID, AccountId: req.AccountID, ProxyUrl: s.protocolProxyURL(ctx, req.JobID)})
 	resultData["probe_tier"] = protoMessageMap(tier.GetData())
 	if err != nil {
 		return nil, s.markGoPayHostActionFailed(ctx, req.JobID, "probe_tier", jobstatus.FailedRecoverable, true, false, err, resultData)
 	}
-	if err := s.activities.MarkJobSucceededActivity(ctx, pb.JobSuccessInput{JobId: req.JobID, Result: mapJobData(resultData)}); err != nil {
+	if err := s.activities.MarkJobSucceededActivity(ctx, &pb.JobSuccessInput{JobId: req.JobID, Result: mapJobData(resultData)}); err != nil {
 		return nil, err
 	}
 	result := goPayStepResult(actionID, "finish", req, true, resultData)

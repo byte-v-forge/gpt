@@ -49,6 +49,7 @@ RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 
 COPY common-lib /common-lib
 COPY gpt/pkg/gptplugin /gpt/pkg/gptplugin
+COPY gpt-private /gpt-private
 COPY gpt/orchestrator/go.mod gpt/orchestrator/go.sum ./
 RUN go mod edit -replace github.com/byte-v-forge/common-lib=/common-lib \
     && go mod edit -replace github.com/byte-v-forge/gpt/pkg/gptplugin=/gpt/pkg/gptplugin \

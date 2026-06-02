@@ -207,7 +207,7 @@ func startOTPProjectionConsumers(ctx context.Context, bus *natseventbus.Bus, cfg
 	group, groupCtx := errgroup.WithContext(ctx)
 	for _, spec := range otpprojection.ConsumerSpecs(store, mailboxProjector) {
 		spec := spec
-		consumer, err := bus.PullWorkerConsumer(cfg.EventStreamName, spec.Subject, spec.Durable, 10, 30*time.Second)
+		consumer, err := bus.PullWorkerForBinding(cfg.EventStreamName, spec.Binding, 10, 30*time.Second)
 		if err != nil {
 			return fmt.Errorf("initialize GPT %s projection consumer: %w", spec.Label, err)
 		}

@@ -55,7 +55,8 @@ func (r *Requester) RequestMailboxEmailPoll(ctx context.Context, email string, k
 		SourceService: sourceService,
 		CorrelationID: email,
 	})
-	message, err := eventcatalog.MailboxEmailPollRequested.NewMessage(
+	record, err := eventoutbox.NewRecordFor(
+		eventcatalog.MailboxEmailPollRequested,
 		request,
 		eventCtx,
 		eventbus.Attributes(
@@ -64,10 +65,6 @@ func (r *Requester) RequestMailboxEmailPoll(ctx context.Context, email string, k
 			"reason", request.GetReason(),
 		),
 	)
-	if err != nil {
-		return err
-	}
-	record, err := eventoutbox.NewRecord(message)
 	if err != nil {
 		return err
 	}

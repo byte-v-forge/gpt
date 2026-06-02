@@ -18,16 +18,16 @@ type MailboxEmailProjector interface {
 
 type ConsumerSpec struct {
 	Label   string
-	Subject string
-	Durable string
+	Binding eventcatalog.ConsumerBinding
 	Run     func(context.Context, eventbus.Consumer) error
 }
 
 type projectionConfig[T proto.Message] struct {
-	Source  string
-	Name    string
-	New     func() T
-	Project func(context.Context, T) error
+	Source   string
+	Name     string
+	Expected eventbus.ExpectedMessage
+	New      func() T
+	Project  func(context.Context, T) error
 }
 
 type projectionConsumer[T proto.Message] struct {
@@ -36,9 +36,10 @@ type projectionConsumer[T proto.Message] struct {
 
 func runSMSCodeConsumer(ctx context.Context, consumer eventbus.Consumer, store *Store) error {
 	return runProjectionConsumer(ctx, consumer, projectionConfig[*smsv1.SmsCodeReceivedEvent]{
-		Source: SourceSMS,
-		Name:   SourceSMS + " otp projection events",
-		New:    func() *smsv1.SmsCodeReceivedEvent { return &smsv1.SmsCodeReceivedEvent{} },
+		Source:   SourceSMS,
+		Name:     SourceSMS + " otp projection events",
+		Expected: eventcatalog.SMSCodeReceived.ExpectedMessage(),
+		New:      func() *smsv1.SmsCodeReceivedEvent { return &smsv1.SmsCodeReceivedEvent{} },
 		Project: func(ctx context.Context, event *smsv1.SmsCodeReceivedEvent) error {
 			return store.RecordSMSCode(ctx, event)
 		},
@@ -47,9 +48,10 @@ func runSMSCodeConsumer(ctx context.Context, consumer eventbus.Consumer, store *
 
 func runMailboxEmailConsumer(ctx context.Context, consumer eventbus.Consumer, store *Store, projector MailboxEmailProjector) error {
 	return runProjectionConsumer(ctx, consumer, projectionConfig[*mailboxv1.MailboxEmailReceivedEvent]{
-		Source: SourceMailbox,
-		Name:   SourceMailbox + " otp projection events",
-		New:    func() *mailboxv1.MailboxEmailReceivedEvent { return &mailboxv1.MailboxEmailReceivedEvent{} },
+		Source:   SourceMailbox,
+		Name:     SourceMailbox + " otp projection events",
+		Expected: eventcatalog.MailboxEmailReceived.ExpectedMessage(),
+		New:      func() *mailboxv1.MailboxEmailReceivedEvent { return &mailboxv1.MailboxEmailReceivedEvent{} },
 		Project: func(ctx context.Context, event *mailboxv1.MailboxEmailReceivedEvent) error {
 			if err := store.RecordMailboxEmail(ctx, event); err != nil {
 				return err
@@ -64,9 +66,10 @@ func runMailboxEmailConsumer(ctx context.Context, consumer eventbus.Consumer, st
 
 func runWAOTPConsumer(ctx context.Context, consumer eventbus.Consumer, store *Store) error {
 	return runProjectionConsumer(ctx, consumer, projectionConfig[*wav1.WaOtpReceivedEvent]{
-		Source: SourceWA,
-		Name:   SourceWA + " otp projection events",
-		New:    func() *wav1.WaOtpReceivedEvent { return &wav1.WaOtpReceivedEvent{} },
+		Source:   SourceWA,
+		Name:     SourceWA + " otp projection events",
+		Expected: eventcatalog.WAOTPReceived.ExpectedMessage(),
+		New:      func() *wav1.WaOtpReceivedEvent { return &wav1.WaOtpReceivedEvent{} },
 		Project: func(ctx context.Context, event *wav1.WaOtpReceivedEvent) error {
 			return store.RecordWAOTP(ctx, event)
 		},
@@ -77,24 +80,21 @@ func ConsumerSpecs(store *Store, mailboxProjector MailboxEmailProjector) []Consu
 	return []ConsumerSpec{
 		{
 			Label:   "SMS OTP",
-			Subject: eventcatalog.SMSCodeReceived.Subject,
-			Durable: "gpt-otp-sms-code",
+			Binding: eventcatalog.SMSCodeReceived.ConsumerBinding("gpt-otp-sms-code"),
 			Run: func(ctx context.Context, consumer eventbus.Consumer) error {
 				return runSMSCodeConsumer(ctx, consumer, store)
 			},
 		},
 		{
 			Label:   "mailbox OTP",
-			Subject: eventcatalog.MailboxEmailReceived.Subject,
-			Durable: "gpt-otp-mailbox-email",
+			Binding: eventcatalog.MailboxEmailReceived.ConsumerBinding("gpt-otp-mailbox-email"),
 			Run: func(ctx context.Context, consumer eventbus.Consumer) error {
 				return runMailboxEmailConsumer(ctx, consumer, store, mailboxProjector)
 			},
 		},
 		{
 			Label:   "WA OTP",
-			Subject: eventcatalog.WAOTPReceived.Subject,
-			Durable: "gpt-otp-wa-otp",
+			Binding: eventcatalog.WAOTPReceived.ConsumerBinding("gpt-otp-wa-otp"),
 			Run: func(ctx context.Context, consumer eventbus.Consumer) error {
 				return runWAOTPConsumer(ctx, consumer, store)
 			},
@@ -107,6 +107,7 @@ func runProjectionConsumer[T proto.Message](ctx context.Context, consumer eventb
 	return eventbus.RunTypedConsumerWorker(ctx, eventbus.TypedConsumerWorkerConfig[T]{
 		Name:           cfg.Name,
 		Consumer:       consumer,
+		Expected:       cfg.Expected,
 		NewMessage:     cfg.New,
 		Handler:        worker.handle,
 		MalformedLabel: "terminate malformed otp projection event",

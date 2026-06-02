@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/byte-v-forge/common-lib/grpchealth"
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"orchestrator/internal/api"
@@ -19,13 +20,17 @@ import (
 	"orchestrator/pb"
 )
 
-func Run() {
+type Options struct {
+	ActionPlugins []gptplugin.Plugin
+}
+
+func Run(options Options) {
 	log.Println("Initializing GPT service API...")
 
 	cfg := loadOrchestratorConfig()
 	rootCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	deps, err := newOrchestratorDependencies(rootCtx, cfg)
+	deps, err := newOrchestratorDependencies(rootCtx, cfg, options.ActionPlugins)
 	if err != nil {
 		log.Fatalf("Failed to initialize GPT service dependencies: %v", err)
 	}

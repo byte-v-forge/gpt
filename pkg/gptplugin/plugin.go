@@ -3,7 +3,6 @@ package gptplugin
 import (
 	"context"
 	"fmt"
-	"sync"
 )
 
 type Engine string
@@ -135,33 +134,14 @@ func (fn PluginFunc) RegisterGPTActions(registry ActionRegistry) error {
 	return fn(registry)
 }
 
-var plugins = struct {
-	sync.RWMutex
-	items []Plugin
-}{}
-
-func Register(plugin Plugin) {
-	if plugin == nil {
-		panic("gptplugin: nil plugin")
-	}
-	plugins.Lock()
-	defer plugins.Unlock()
-	plugins.items = append(plugins.items, plugin)
-}
-
-func RegisteredPlugins() []Plugin {
-	plugins.RLock()
-	defer plugins.RUnlock()
-	out := make([]Plugin, len(plugins.items))
-	copy(out, plugins.items)
-	return out
-}
-
-func ApplyRegistered(registry ActionRegistry) error {
+func ApplyPlugins(registry ActionRegistry, plugins ...Plugin) error {
 	if registry == nil {
 		return fmt.Errorf("gptplugin: action registry is nil")
 	}
-	for _, plugin := range RegisteredPlugins() {
+	for _, plugin := range plugins {
+		if plugin == nil {
+			return fmt.Errorf("gptplugin: nil plugin")
+		}
 		if err := plugin.RegisterGPTActions(registry); err != nil {
 			return err
 		}

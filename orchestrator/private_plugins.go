@@ -2,4 +2,11 @@
 
 package main
 
-import _ "github.com/byte-v-forge/gpt-private/plugins"
+import (
+	privateplugins "github.com/byte-v-forge/gpt-private/plugins"
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
+)
+
+func privatePlugins() []gptplugin.Plugin {
+	return privateplugins.Plugins()
+}

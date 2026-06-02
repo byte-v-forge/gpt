@@ -3,9 +3,9 @@ module orchestrator
 go 1.26.2
 
 require (
-	github.com/byte-v-forge/gpt/pkg/gptplugin v0.0.0
 	github.com/bogdanfinn/fhttp v0.6.8
 	github.com/brianvoe/gofakeit/v6 v6.28.0
+	github.com/byte-v-forge/gpt/pkg/gptplugin v0.0.0
 	github.com/google/uuid v1.6.0
 	github.com/redis/go-redis/v9 v9.19.0
 	golang.org/x/oauth2 v0.36.0
@@ -33,6 +33,7 @@ require (
 	github.com/bogdanfinn/utls v1.7.7-barnius // indirect
 	github.com/bogdanfinn/websocket v1.5.5-barnius // indirect
 	github.com/byte-v-forge/common-lib v0.0.0
+	github.com/byte-v-forge/gpt-private v0.0.0
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
@@ -50,4 +51,7 @@ require (
 )
 
 replace github.com/byte-v-forge/common-lib => ../../common-lib
+
 replace github.com/byte-v-forge/gpt/pkg/gptplugin => ../pkg/gptplugin
+
+replace github.com/byte-v-forge/gpt-private => ../../gpt-private

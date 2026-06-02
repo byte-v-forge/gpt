@@ -70,7 +70,7 @@ type Server struct {
 func NewServer(cfg Config) *Server {
 	actionRegistry := cfg.ActionRegistry
 	if actionRegistry == nil {
-		actionRegistry = actionregistry.Default()
+		panic("activities: action registry is required")
 	}
 	return &Server{
 		db:                      cfg.DB,

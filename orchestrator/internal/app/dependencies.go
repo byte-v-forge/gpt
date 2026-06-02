@@ -15,6 +15,7 @@ import (
 	"github.com/byte-v-forge/common-lib/hotstreamnats"
 	"github.com/byte-v-forge/common-lib/natseventbus"
 	"github.com/byte-v-forge/common-lib/redisx"
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -60,8 +61,8 @@ type orchestratorDependencies struct {
 	closers []func() error
 }
 
-func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*orchestratorDependencies, error) {
-	deps := &orchestratorDependencies{actionRegistry: actionregistry.NewDefault()}
+func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig, actionPlugins []gptplugin.Plugin) (*orchestratorDependencies, error) {
+	deps := &orchestratorDependencies{actionRegistry: actionregistry.NewDefault(actionPlugins...)}
 	runtimeSecretClient, err := newRequiredRedisClient(ctx, cfg.RuntimeSecretRedisURL, "GPT_RUNTIME_SECRET_REDIS_URL is required for GPT runtime secrets")
 	if err != nil {
 		return nil, err
@@ -139,8 +140,7 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig) (*
 	deps.hotStream = hotStream
 	deps.jobEvents = jobevents.NewStore(database, db.DSN()).WithHotStream(deps.hotStream)
 	deps.addCloser(deps.jobEvents.Close)
-	deps.jobStore = jobprojection.NewStore(database).
-		WithActionRegistry(deps.actionRegistry).
+	deps.jobStore = jobprojection.NewStore(database, deps.actionRegistry).
 		WithPublisher(deps.jobEvents)
 	deps.fingerprints = accountfingerprint.NewStore(database)
 	deps.accountProxyUsage = accountproxyusage.NewStore(database)

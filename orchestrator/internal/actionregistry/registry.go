@@ -45,8 +45,6 @@ type Registry struct {
 	configSchemas map[string]ConfigSchema
 }
 
-var defaultRegistry = sync.OnceValue(NewDefault)
-
 func New() *Registry {
 	return &Registry{
 		actions:       map[string]ActionDefinition{},
@@ -54,16 +52,12 @@ func New() *Registry {
 	}
 }
 
-func Default() *Registry {
-	return defaultRegistry()
-}
-
-func NewDefault() *Registry {
+func NewDefault(plugins ...gptplugin.Plugin) *Registry {
 	registry := New()
 	if err := RegisterBuiltins(registry); err != nil {
 		panic(err)
 	}
-	if err := gptplugin.ApplyRegistered(registry); err != nil {
+	if err := gptplugin.ApplyPlugins(registry, plugins...); err != nil {
 		panic(err)
 	}
 	return registry

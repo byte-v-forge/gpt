@@ -103,7 +103,7 @@ func Start(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	actionRegistry := cfg.ActionRegistry
 	if actionRegistry == nil {
-		actionRegistry = actionregistry.Default()
+		return nil, errors.New("action registry is required")
 	}
 	s := &server{
 		accountClient:      cfg.AccountClient,
@@ -149,9 +149,6 @@ func Start(ctx context.Context, cfg Config) (*Server, error) {
 
 func catalogN8NWebhookClients(registry *actionregistry.Registry, baseURL string) map[string]*n8nWebhookClient {
 	out := map[string]*n8nWebhookClient{}
-	if registry == nil {
-		registry = actionregistry.Default()
-	}
 	for _, def := range registry.Actions() {
 		if def.Engine != actionregistry.EngineN8N {
 			continue

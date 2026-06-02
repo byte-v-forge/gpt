@@ -51,19 +51,15 @@ type ListFilter struct {
 	BeforeJobID     string
 }
 
-func NewStore(db *gorm.DB) *Store {
-	return &Store{db: db, actionRegistry: actionregistry.Default()}
+func NewStore(db *gorm.DB, registry *actionregistry.Registry) *Store {
+	if registry != nil {
+		return &Store{db: db, actionRegistry: registry}
+	}
+	panic("jobprojection: action registry is required")
 }
 
 func (s *Store) WithPublisher(publisher EventPublisher) *Store {
 	s.publisher = publisher
-	return s
-}
-
-func (s *Store) WithActionRegistry(registry *actionregistry.Registry) *Store {
-	if registry != nil {
-		s.actionRegistry = registry
-	}
 	return s
 }
 
@@ -572,9 +568,6 @@ func ApplyProgress(snapshot *pb.JobSnapshot, progress *pb.WorkflowProgress) {
 func progressFromJob(registry *actionregistry.Registry, job *db.Job) *pb.WorkflowProgress {
 	if job == nil {
 		return nil
-	}
-	if registry == nil {
-		registry = actionregistry.Default()
 	}
 	workflowID, _ := registry.WorkflowID(job.Action, job.ID)
 	stepName := strings.TrimSpace(job.LastStep)

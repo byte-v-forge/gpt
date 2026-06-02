@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	browserautomationv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/browserautomation/v1"
@@ -18,7 +17,6 @@ import (
 	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/grpc"
 	"gorm.io/gorm"
 
 	"orchestrator/db"
@@ -79,28 +77,28 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig, ac
 		return nil, err
 	}
 
-	browserAutomationConn, err := newGRPCClientConn("browser-automation service", cfg.BrowserAutomationAddr)
+	browserAutomationConn, err := grpcclient.NewRequiredInsecure("browser-automation service", cfg.BrowserAutomationAddr)
 	if err != nil {
 		deps.Close()
 		return nil, err
 	}
 	deps.addCloser(browserAutomationConn.Close)
 
-	paymentConn, err := newGRPCClientConn("payment service", cfg.PaymentAddr)
+	paymentConn, err := grpcclient.NewRequiredInsecure("payment service", cfg.PaymentAddr)
 	if err != nil {
 		deps.Close()
 		return nil, err
 	}
 	deps.addCloser(paymentConn.Close)
 
-	smsConn, err := newGRPCClientConn("sms service", cfg.SmsAddr)
+	smsConn, err := grpcclient.NewRequiredInsecure("sms service", cfg.SmsAddr)
 	if err != nil {
 		deps.Close()
 		return nil, err
 	}
 	deps.addCloser(smsConn.Close)
 
-	gptAccountConn, err := newGRPCClientConn("GPT account service", cfg.GPTAccountAddr)
+	gptAccountConn, err := grpcclient.NewRequiredInsecure("GPT account service", cfg.GPTAccountAddr)
 	if err != nil {
 		deps.Close()
 		return nil, err
@@ -174,14 +172,11 @@ func (d *orchestratorDependencies) hasAnyAction(actionIDs ...string) bool {
 	return false
 }
 
-func newPlatformEventBus(ctx context.Context, cfg orchestratorConfig) (*natseventbus.Bus, func(), error) {
-	if strings.TrimSpace(cfg.PlatformNATSURL) == "" {
-		return nil, nil, fmt.Errorf("PLATFORM_NATS_URL is required for GPT platform events")
-	}
-	bus, err := natseventbus.Connect(natseventbus.Config{
+func newPlatformEventBus(_ context.Context, cfg orchestratorConfig) (*natseventbus.Bus, func(), error) {
+	bus, err := natseventbus.ConnectRequired(natseventbus.Config{
 		URL:        cfg.PlatformNATSURL,
 		ClientName: "gpt-service",
-	})
+	}, "PLATFORM_NATS_URL is required for GPT platform events")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -189,13 +184,11 @@ func newPlatformEventBus(ctx context.Context, cfg orchestratorConfig) (*natseven
 }
 
 func newHotStreamBus(ctx context.Context, cfg orchestratorConfig) (hotstream.Bus, func(), error) {
-	if strings.TrimSpace(cfg.PlatformNATSURL) == "" {
-		return nil, nil, fmt.Errorf("PLATFORM_NATS_URL is required for GPT hotstream")
-	}
-	bus, err := hotstreamnats.Connect(ctx, hotstreamnats.Config{
-		URL:        cfg.PlatformNATSURL,
-		ClientName: "gpt-service",
-		Subject:    hotstream.ServiceStateSubject("gpt"),
+	bus, err := hotstreamnats.ConnectService(ctx, hotstreamnats.ServiceConfig{
+		URL:             cfg.PlatformNATSURL,
+		ClientName:      "gpt-service",
+		Service:         "gpt",
+		RequiredMessage: "PLATFORM_NATS_URL is required for GPT hotstream",
 	})
 	if err != nil {
 		return nil, nil, err
@@ -229,14 +222,6 @@ func newRuntimeSecretStore(client redis.Cmdable, cfg orchestratorConfig) (runtim
 		return nil, fmt.Errorf("GPT_RUNTIME_SECRET_REDIS_URL is required for GPT runtime secrets")
 	}
 	return redisx.NewStringStore(client, cfg.RuntimeSecretKeyPrefix, cfg.RuntimeSecretTTL), nil
-}
-
-func newGRPCClientConn(name string, addr string, extraOpts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	conn, err := grpcclient.NewInsecure(addr, extraOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("connect to %s: %w", name, err)
-	}
-	return conn, nil
 }
 
 func (d *orchestratorDependencies) addCloser(closeFn func() error) {

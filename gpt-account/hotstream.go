@@ -24,10 +24,12 @@ const (
 )
 
 func newAccountHotStream(ctx context.Context, natsURL string) (hotstream.Bus, func(), error) {
-	bus, err := hotstreamnats.Connect(ctx, hotstreamnats.Config{
-		URL:        natsURL,
-		ClientName: "gpt-account",
-		Subject:    hotstream.ServiceStateSubject("gpt"),
+	bus, err := hotstreamnats.ConnectService(ctx, hotstreamnats.ServiceConfig{
+		URL:             natsURL,
+		ClientName:      "gpt-account",
+		Service:         "gpt-account",
+		Subject:         hotstream.ServiceStateSubject("gpt"),
+		RequiredMessage: "PLATFORM_NATS_URL is required for account hotstream",
 	})
 	if err != nil {
 		return nil, nil, err

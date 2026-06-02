@@ -701,9 +701,6 @@ func main() {
 	}
 	defer closeStateStore()
 	platformNATSURL := envx.StringDefault("PLATFORM_NATS_URL", "")
-	if strings.TrimSpace(platformNATSURL) == "" {
-		log.Fatal("PLATFORM_NATS_URL is required for account hotstream")
-	}
 	hot, closeHot, err := newAccountHotStream(ctx, platformNATSURL)
 	if err != nil {
 		log.Fatalf("failed to initialize account hotstream: %v", err)

@@ -342,7 +342,7 @@ func (s *Server) prepareN8NGoPayPayment(ctx context.Context, actionID string, re
 		resp, err = s.prepareGoPayLinkWithFreshCheckoutRetry(ctx, req.FlowID)
 	}
 	data := goPayPrepareData(resp)
-	result := goPayPrepareResult(actionID, step, req, scope, resp, data, err == nil)
+	result := goPayPrepareResult(actionID, step, req, scope, resp, data, err == nil && resp != nil && resp.GetSuccess())
 	if err != nil {
 		return result, s.markGoPayHostActionFailed(ctx, req.JobID, step, jobstatus.FailedRetryable, false, true, err, data)
 	}

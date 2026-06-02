@@ -111,11 +111,7 @@ func (s *server) goPayActionHandler(actionID string, prefix string) http.Handler
 			SubPath:  strings.Trim(strings.TrimPrefix(r.URL.Path, strings.TrimRight(prefix, "/")+"/"), "/"),
 			RawJSON:  body,
 		})
-		if err != nil {
-			writeError(w, http.StatusBadGateway, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, resp)
+		writeN8NAction(w, resp, err)
 	}
 }
 

@@ -47,9 +47,5 @@ func (s *server) handleRawN8NAction(actionID string, w http.ResponseWriter, r *h
 		SubPath:  s.actionSubPath(r, actionID),
 		RawJSON:  body,
 	})
-	if err != nil {
-		writeError(w, http.StatusBadGateway, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, resp)
+	writeN8NAction(w, resp, err)
 }

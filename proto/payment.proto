@@ -26,6 +26,44 @@ message ChatGPTRequestProfile {
   string timezone = 13;
 }
 
+message PrepareGoPayRequest {
+  ChatGPTCredential credential = 1;
+  string tokenization = 2;
+  string checkout_url = 3;
+  string checkout_session_id = 4;
+  string gopay_phone = 5;
+  string gopay_country_code = 6;
+}
+
+message PrepareGoPayResponse {
+  bool success = 1;
+  string error_message = 2;
+  string flow_id = 3;
+  string snap_token = 4;
+  string checkout_url = 5;
+  string checkout_session_id = 6;
+  bool retryable_fresh_checkout = 7;
+  int32 checkout_attempt = 8;
+  string stage = 9;
+}
+
+message PrepareGoPayCheckoutRequest {
+  ChatGPTCredential credential = 1;
+  string tokenization = 2;
+  string checkout_url = 3;
+  string checkout_session_id = 4;
+  string gopay_phone = 5;
+  string gopay_country_code = 6;
+}
+
+message RefreshPrepareGoPayCheckoutRequest {
+  string flow_id = 1;
+}
+
+message PrepareGoPayLinkRequest {
+  string flow_id = 1;
+}
+
 message ProbePlusTrialPaymentRequest {
   ChatGPTCredential credential = 1;
 }
@@ -79,6 +117,12 @@ message ProbeTierPaymentResponse {
 }
 
 service PaymentService {
+  // GPT-owned payment preparation/probing only. Midtrans + GoPay linking,
+  // OTP, PIN, charge and confirmation runtime belongs to gopay-app.
+  rpc PrepareGoPayCheckout(PrepareGoPayCheckoutRequest) returns (PrepareGoPayResponse);
+  rpc RefreshPrepareGoPayCheckout(RefreshPrepareGoPayCheckoutRequest) returns (PrepareGoPayResponse);
+  rpc PrepareGoPayLink(PrepareGoPayLinkRequest) returns (PrepareGoPayResponse);
+  rpc PrepareGoPay(PrepareGoPayRequest) returns (PrepareGoPayResponse);
   rpc CreateCheckoutLink(CreateCheckoutLinkRequest) returns (CreateCheckoutLinkResponse);
   rpc FetchAccessToken(FetchAccessTokenPaymentRequest) returns (FetchAccessTokenPaymentResponse);
   rpc ProbePlusTrial(ProbePlusTrialPaymentRequest) returns (ProbePlusTrialPaymentResponse);

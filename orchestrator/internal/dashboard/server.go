@@ -66,6 +66,7 @@ type server struct {
 	accountProxyUsages accountProxyUsageStore
 	settings           SettingsStore
 	n8nWorkflows       map[string]*n8nWebhookClient
+	n8nWebhookBaseURL  string
 	n8nActions         N8NActions
 	hotstream          hotstream.Subscriber
 	staticDir          string
@@ -113,6 +114,7 @@ func Start(ctx context.Context, cfg Config) (*Server, error) {
 		accountProxyUsages: cfg.AccountProxyUsages,
 		settings:           cfg.Settings,
 		n8nWorkflows:       catalogN8NWebhookClients(actionRegistry, cfg.N8NWebhookBaseURL),
+		n8nWebhookBaseURL:  cfg.N8NWebhookBaseURL,
 		n8nActions:         cfg.N8NActions,
 		hotstream:          cfg.HotStream,
 		staticDir:          gptDashboardStaticDir,

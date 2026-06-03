@@ -59,6 +59,7 @@ type rawGoPayActionRequest struct {
 	PlusActive        bool           `json:"plus_active"`
 	ProxyURL          string         `json:"proxy_url"`
 	ErrorMessage      string         `json:"error_message"`
+	Step              string         `json:"step"`
 	Data              map[string]any `json:"data"`
 }
 
@@ -222,7 +223,7 @@ func (s *Server) invokeN8NGoPayPayment(ctx context.Context, actionID string, act
 	case "finish":
 		return s.finishN8NGoPayPayment(ctx, actionID, req)
 	case "fail":
-		return s.failN8NGoPayHostAction(ctx, actionID, req.JobID, req.N8NExecutionID, req.ErrorMessage, req.Data)
+		return s.failN8NGoPayHostAction(ctx, actionID, req.JobID, req.N8NExecutionID, req.Step, req.ErrorMessage, req.Data)
 	default:
 		return nil, fmt.Errorf("unsupported %s action: %s", scope, action)
 	}
@@ -235,7 +236,7 @@ func (s *Server) invokeN8NGoPayRebind(ctx context.Context, actionID string, acti
 	case "finish":
 		return s.finishN8NGoPayPayment(ctx, actionID, req)
 	case "fail":
-		return s.failN8NGoPayHostAction(ctx, actionID, req.JobID, req.N8NExecutionID, req.ErrorMessage, req.Data)
+		return s.failN8NGoPayHostAction(ctx, actionID, req.JobID, req.N8NExecutionID, req.Step, req.ErrorMessage, req.Data)
 	default:
 		return nil, fmt.Errorf("unsupported %s action: %s", goPayPaymentRebindScope, action)
 	}
@@ -456,6 +457,12 @@ func (s *Server) finishN8NGoPayPayment(ctx context.Context, actionID string, req
 	if err != nil {
 		return nil, s.markGoPayHostActionFailed(ctx, req.JobID, "probe_tier", jobstatus.FailedRecoverable, true, false, err, resultData)
 	}
+	resultData["tier"] = tier.GetTier()
+	resultData["plus_active"] = tier.GetPlusActive()
+	if !goPayTierActivated(tier) {
+		err := fmt.Errorf("gopay payment did not activate plus: tier=%s plus_active=%t", firstNonEmpty(tier.GetTier(), "unknown"), tier.GetPlusActive())
+		return nil, s.markGoPayHostActionFailed(ctx, req.JobID, "probe_tier", jobstatus.FailedRetryable, false, true, err, resultData)
+	}
 	if err := s.activities.MarkJobSucceededActivity(ctx, &pb.JobSuccessInput{JobId: req.JobID, Result: mapJobData(resultData)}); err != nil {
 		return nil, err
 	}
@@ -464,7 +471,14 @@ func (s *Server) finishN8NGoPayPayment(ctx context.Context, actionID string, req
 	return result, nil
 }
 
-func (s *Server) failN8NGoPayHostAction(ctx context.Context, actionID string, jobID string, n8nExecutionID string, errorMessage string, data map[string]any) (any, error) {
+func goPayTierActivated(tier *pb.ProbeTierActivityOutput) bool {
+	if tier == nil {
+		return false
+	}
+	return tier.GetPlusActive() || strings.EqualFold(strings.TrimSpace(tier.GetTier()), "plus")
+}
+
+func (s *Server) failN8NGoPayHostAction(ctx context.Context, actionID string, jobID string, n8nExecutionID string, step string, errorMessage string, data map[string]any) (any, error) {
 	jobID = strings.TrimSpace(jobID)
 	n8nExecutionID = strings.TrimSpace(n8nExecutionID)
 	if err := s.bindN8NExecution(ctx, jobID, n8nExecutionID); err != nil {
@@ -478,7 +492,7 @@ func (s *Server) failN8NGoPayHostAction(ctx context.Context, actionID string, jo
 	}
 	data["action"] = actionID
 	data["n8n_execution_id"] = n8nExecutionID
-	step := s.goPayHostFailureStep(ctx, jobID)
+	step = firstNonEmpty(step, s.goPayHostFailureStep(ctx, jobID))
 	if err := s.markGoPayHostActionFailed(ctx, jobID, step, jobstatus.FailedRetryable, false, true, fmt.Errorf("%s", errorMessage), data); err != nil {
 		return nil, err
 	}

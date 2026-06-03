@@ -48,7 +48,7 @@ func (s *Server) FailN8NWorkflowTrigger(ctx context.Context, failure gptplugin.N
 		if failure.AccountID != "" {
 			data["account_id"] = failure.AccountID
 		}
-		_, err := s.failN8NGoPayHostAction(ctx, actionID, failure.JobID, failure.N8NExecutionID, failure.ErrorMessage, data)
+		_, err := s.failN8NGoPayHostAction(ctx, actionID, failure.JobID, failure.N8NExecutionID, "", failure.ErrorMessage, data)
 		return err
 	default:
 		if actionID == "" {

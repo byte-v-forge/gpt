@@ -1,6 +1,6 @@
 import { Badge, EmptyBlock, api, formatUnix, useQuery } from '@byte-v-forge/common-ui';
 import type { ReactNode } from 'react';
-import { ProxyChainHops } from './account-proxy-chain';
+import { ProxyRouteHops } from './account-proxy-chain';
 import type { AccountProxyUsage } from './types';
 import type { ListAccountProxyUsagesResponse } from '../proto/orchestrator_account';
 
@@ -35,7 +35,7 @@ function ProxyUsageCard({ row }: { row: AccountProxyUsage }) {
           <InfoLine label="位置" value={locationText(row)} />
         </InfoGroup>
         <InfoGroup title="代理链路" className="proxyUsageGroupWide">
-          <ProxyChainHops hops={chainHops(row)} />
+          <ProxyRouteHops hops={routeHops(row)} />
         </InfoGroup>
         <InfoGroup title="IP 风控">
           <RiskBadge value={row.ip_fraud_check?.risk_level} score={riskScore(row.ip_fraud_check)} />
@@ -86,8 +86,8 @@ function locationText(row: AccountProxyUsage) {
   return [row.country_code, row.region, row.city].filter(Boolean).join(' / ') || '-';
 }
 
-function chainHops(row: AccountProxyUsage) {
-  return [...(row.chain?.hops || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
+function routeHops(row: AccountProxyUsage) {
+  return [...(row.route?.route?.hops || [])].sort((a, b) => (a.order || 0) - (b.order || 0));
 }
 
 function riskLabel(value?: unknown) {

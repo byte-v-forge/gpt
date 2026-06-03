@@ -13,7 +13,7 @@ Rules:
 
 Test mailbox domain: `edu.pood1e.space`
 
-1. Start a browser-automation session with Camoufox Firefox, proxy ref `register`, locale `en-US`, timezone `America/New_York`, viewport `1365x768`, and labels `camoufox.geoip=true`, `camoufox.humanize=true`, `camoufox.disable_coop=true`, `camoufox.main_world_eval=false`.
+1. Start a browser-automation session with Camoufox Firefox, proxy ref `register`, locale `en-US`, timezone `America/New_York`, viewport `1365x768`, and workflow metadata in `StartBrowserSessionRequest.labels`. Camoufox runtime options are service-owned; any main-world script execution must set `trusted=true` on the individual `EvaluateCommand`.
    Result: session reached `BROWSER_SESSION_STATUS_RUNNING`.
 
 2. Navigate directly to `https://chatgpt.com/auth/login` with `BROWSER_NAVIGATION_WAIT_UNTIL_DOM_CONTENT_LOADED`, then dismiss the cookie banner with exact role selector `button[name="Reject non-essential"]`.

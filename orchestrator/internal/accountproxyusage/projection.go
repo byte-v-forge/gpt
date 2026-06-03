@@ -37,7 +37,7 @@ func Response(row Usage) *pb.AccountProxyUsage {
 		Accepted:        row.Accepted,
 		ErrorMessage:    row.ErrorMessage,
 		CreatedAt:       row.CreatedAt,
-		Chain:           data.GetChainPlan(),
+		Route:           data.GetRoutePlan(),
 	}
 }
 

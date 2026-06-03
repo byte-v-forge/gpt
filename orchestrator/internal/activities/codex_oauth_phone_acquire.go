@@ -107,7 +107,7 @@ func (s *Server) acquireCodexSMSActivation(ctx context.Context, jobID, accountID
 	}
 	request := &smsv1.AcquireNumberRequest{
 		RequestId:     "codex-oauth-" + strings.TrimSpace(jobID),
-		AcquireParams: offer.GetAcquireParams(),
+		AcquireParams: smsAcquireParamsFromOffer(offer, query),
 		LeaseDuration: durationOrNil(defaultSMSLeaseDuration),
 	}
 	resp, err := s.smsClient.AcquireNumber(ctx, request)

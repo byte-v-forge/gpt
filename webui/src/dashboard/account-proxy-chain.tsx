@@ -1,12 +1,12 @@
 import { Badge } from '@byte-v-forge/common-ui';
-import type { ProxyChainHop } from '@byte-v-forge/common-ui/proto/byte/v/forge/contracts/proxyruntime/v1/proxy_runtime';
+import { EgressHopRole, ProxySourceKind, type EgressHop } from '@byte-v-forge/common-ui/proto/byte/v/forge/contracts/proxyruntime/v1/proxy_runtime';
 
-export function ProxyChainHops({ hops }: { hops: ProxyChainHop[] }) {
+export function ProxyRouteHops({ hops }: { hops: EgressHop[] }) {
   if (!hops.length) return <p className="proxyUsageLine"><span>链路</span><strong>-</strong></p>;
-  return <div className="proxyChainHopList">{hops.map((hop) => <ProxyChainHopCard key={hop.hop_id || `${hop.role}-${hop.order}`} hop={hop} />)}</div>;
+  return <div className="proxyChainHopList">{hops.map((hop) => <ProxyRouteHopCard key={hop.hop_id || `${hop.role}-${hop.order}`} hop={hop} />)}</div>;
 }
 
-function ProxyChainHopCard({ hop }: { hop: ProxyChainHop }) {
+function ProxyRouteHopCard({ hop }: { hop: EgressHop }) {
   const role = hopRole(hop);
   return (
     <article className={`proxyChainHop ${role.className}`}>
@@ -17,9 +17,9 @@ function ProxyChainHopCard({ hop }: { hop: ProxyChainHop }) {
       <div className="proxyChainHopMeta">
         <MetaLine label="来源" value={sourceText(hop)} />
         <MetaLine label="节点" value={nodeText(hop)} />
-        <MetaLine label="节点 IP" value={hop.observed_ip} mono />
+        <MetaLine label="节点 IP" value={hopLabel(hop, 'observed_ip')} mono />
         <MetaLine label="位置" value={geoText(hop)} />
-        <MetaLine label="延迟" value={hop.delay_ms ? `${hop.delay_ms}ms` : ''} />
+        <MetaLine label="延迟" value={hopLabel(hop, 'delay_ms') ? `${hopLabel(hop, 'delay_ms')}ms` : ''} />
       </div>
     </article>
   );
@@ -30,45 +30,37 @@ function MetaLine({ label, value, mono }: { label: string; value?: string; mono?
   return <p><span>{label}</span><strong className={mono ? 'monoCell' : undefined} title={value}>{value}</strong></p>;
 }
 
-function hopRole(hop: ProxyChainHop) {
-  const role = roleText(hop);
-  if (role.includes('LINE_PROXY')) return { label: '线路代理', className: 'line' };
-  if (role.includes('DYNAMIC_GATEWAY')) return { label: '动态网关', className: 'gateway' };
-  if (role.includes('DYNAMIC_EXIT')) return { label: '动态出口', className: 'exit' };
+function hopRole(hop: EgressHop) {
+  if (hop.role === EgressHopRole.EGRESS_HOP_ROLE_FORWARD) return { label: '线路代理', className: 'line' };
+  if (hop.role === EgressHopRole.EGRESS_HOP_ROLE_EXIT) return { label: '动态出口', className: 'exit' };
   return { label: `Hop ${hop.order || ''}`.trim(), className: 'neutral' };
 }
 
-function hopTitle(hop: ProxyChainHop) {
-  if (roleText(hop).includes('LINE_PROXY')) return [hop.source_display_name, hop.node_display_name || hop.node_id].filter(Boolean).join(' / ') || '线路代理';
-  if (roleText(hop).includes('DYNAMIC_GATEWAY')) return [providerName(hop.provider_id), gatewayName(hop.gateway_display_name, hop.gateway_id)].filter(Boolean).join(' / ') || '动态网关';
-  if (roleText(hop).includes('DYNAMIC_EXIT')) return [providerName(hop.provider_id), '最终出口'].filter(Boolean).join(' / ') || '动态出口';
-  return hop.node_display_name || hop.source_display_name || hop.node_id || hop.source_id || '-';
+function hopTitle(hop: EgressHop) {
+  if (hop.role === EgressHopRole.EGRESS_HOP_ROLE_FORWARD) return [hopLabel(hop, 'source_display_name'), hopLabel(hop, 'node_display_name') || hopLabel(hop, 'node_id')].filter(Boolean).join(' / ') || '线路代理';
+  if (hop.role === EgressHopRole.EGRESS_HOP_ROLE_EXIT) return [providerName(hop.endpoints[0]?.provider_id), gatewayName(hopLabel(hop, 'gateway_display_name'), hopLabel(hop, 'gateway_id'))].filter(Boolean).join(' / ') || '动态出口';
+  return hopLabel(hop, 'node_display_name') || hopLabel(hop, 'source_display_name') || hopLabel(hop, 'node_id') || hopLabel(hop, 'source_id') || hop.hop_id || '-';
 }
 
-function sourceText(hop: ProxyChainHop) {
-  if (sourceKindText(hop).includes('SUBSCRIPTION')) return hop.source_display_name || hop.source_id || '订阅线路';
-  if (sourceKindText(hop).includes('FIXED')) return hop.source_display_name || hop.source_id || '固定代理';
-  if (sourceKindText(hop).includes('DYNAMIC')) return providerName(hop.provider_id) || '动态 IP';
-  return hop.source_display_name || hop.source_id || providerName(hop.provider_id);
+function sourceText(hop: EgressHop) {
+  if (sourceKindText(hop) === ProxySourceKind.PROXY_SOURCE_KIND_SUBSCRIPTION) return hopLabel(hop, 'source_display_name') || hopLabel(hop, 'source_id') || '订阅线路';
+  if (sourceKindText(hop) === ProxySourceKind.PROXY_SOURCE_KIND_FIXED_PROXY) return hopLabel(hop, 'source_display_name') || hopLabel(hop, 'source_id') || '固定代理';
+  if (sourceKindText(hop) === ProxySourceKind.PROXY_SOURCE_KIND_DYNAMIC_IP) return providerName(hop.endpoints[0]?.provider_id) || '动态 IP';
+  return hopLabel(hop, 'source_display_name') || hopLabel(hop, 'source_id') || providerName(hop.endpoints[0]?.provider_id);
 }
 
-function nodeText(hop: ProxyChainHop) {
-  if (roleText(hop).includes('DYNAMIC_GATEWAY')) return gatewayName(hop.gateway_display_name, hop.gateway_id);
-  if (roleText(hop).includes('DYNAMIC_EXIT')) return '最终出口';
-  return hop.node_display_name || hop.node_id || '';
+function nodeText(hop: EgressHop) {
+  if (hop.role === EgressHopRole.EGRESS_HOP_ROLE_EXIT) return gatewayName(hopLabel(hop, 'gateway_display_name'), hopLabel(hop, 'gateway_id')) || '最终出口';
+  return hopLabel(hop, 'node_display_name') || hopLabel(hop, 'node_id') || '';
 }
 
-function geoText(hop: ProxyChainHop) {
-  return [hop.country_code, hop.region, hop.city].filter(Boolean).join(' / ');
+function geoText(hop: EgressHop) {
+  return [hopLabel(hop, 'country_code'), hopLabel(hop, 'region'), hopLabel(hop, 'city')].filter(Boolean).join(' / ');
 }
 
 
-function roleText(hop: ProxyChainHop) {
-  return String(hop.role || '');
-}
-
-function sourceKindText(hop: ProxyChainHop) {
-  return String(hop.source_kind || '');
+function sourceKindText(hop: EgressHop) {
+  return hopLabel(hop, 'source_kind');
 }
 
 function providerName(value?: string) {
@@ -84,4 +76,12 @@ function gatewayName(name?: string, id?: string) {
   if (!name && !id) return '';
   if (!id || name === id) return name || id || '';
   return `${name || id} (${id})`;
+}
+
+function hopLabel(hop: EgressHop, key: string) {
+  for (const endpoint of hop.endpoints || []) {
+    const value = String(endpoint.labels?.[key] || '').trim();
+    if (value) return value;
+  }
+  return '';
 }

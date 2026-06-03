@@ -281,7 +281,7 @@ message N8NDynamicProxyPreflightData {
   byte.v.forge.contracts.proxyruntime.v1.ProxyIPFraudCheck ip_fraud_check = 17;
   byte.v.forge.contracts.proxyruntime.v1.ProxyEdgeAccessCheck edge_access_check = 18;
   byte.v.forge.contracts.proxyruntime.v1.ProxyDynamicLease proxy_runtime_lease = 19;
-  byte.v.forge.contracts.proxyruntime.v1.ProxyChainPlan chain_plan = 20;
+  byte.v.forge.contracts.proxyruntime.v1.EgressRoutePlan route_plan = 20;
   byte.v.forge.contracts.proxyruntime.v1.ProxyTargetConnectivityCheck target_connectivity_check = 21;
   bool target_connectivity_enabled = 22;
   bool target_connectivity_reachable = 23;

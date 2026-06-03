@@ -47,7 +47,7 @@ func (s *Server) acquireSMSNumber(ctx context.Context, query smsOfferQuery, requ
 	}
 	request := &smsv1.AcquireNumberRequest{
 		RequestId:     strings.TrimSpace(requestID),
-		AcquireParams: offer.GetAcquireParams(),
+		AcquireParams: smsAcquireParamsFromOffer(offer, query),
 		LeaseDuration: durationOrNil(defaultSMSLeaseDuration),
 	}
 	resp, err := s.smsClient.AcquireNumber(ctx, request)
@@ -130,7 +130,7 @@ func (s *Server) recommendSMSOffer(ctx context.Context, query smsOfferQuery) (*s
 	}
 	for _, recommendation := range resp.GetRecommendations() {
 		offer := recommendation.GetOffer()
-		if smsAcquireParamsExact(offer.GetAcquireParams()) {
+		if smsOfferRefExact(offer.GetOfferRef()) {
 			return offer, nil
 		}
 	}
@@ -140,7 +140,7 @@ func (s *Server) recommendSMSOffer(ctx context.Context, query smsOfferQuery) (*s
 func filterSMSOffers(offers []*smsv1.SmsPriceOffer, query smsOfferQuery) []*smsv1.SmsPriceOffer {
 	out := make([]*smsv1.SmsPriceOffer, 0, len(offers))
 	for _, offer := range offers {
-		if !smsAcquireParamsExact(offer.GetAcquireParams()) {
+		if !smsOfferRefExact(offer.GetOfferRef()) {
 			continue
 		}
 		if query.ApplicationKey != "" && !strings.EqualFold(offer.GetApplicationKey(), query.ApplicationKey) {
@@ -160,25 +160,28 @@ func filterSMSOffers(offers []*smsv1.SmsPriceOffer, query smsOfferQuery) []*smsv
 	return out
 }
 
-func smsAcquireParamsExact(params *smsv1.SmsNumberAcquireParams) bool {
-	if params == nil {
+func smsAcquireParamsFromOffer(offer *smsv1.SmsPriceOffer, query smsOfferQuery) *smsv1.SmsNumberAcquireParams {
+	if offer == nil {
+		return nil
+	}
+	return &smsv1.SmsNumberAcquireParams{
+		OfferRef:           offer.GetOfferRef(),
+		ApplicationKey:     firstNonEmpty(offer.GetApplicationKey(), query.ApplicationKey),
+		CountryIso2:        firstNonEmpty(offer.GetCountryIso2(), query.CountryISO2),
+		CountryCallingCode: firstNonEmpty(strings.TrimPrefix(offer.GetCountryCallingCode(), "+"), query.CountryCallingCode),
+		MinAvailableCount:  query.MinAvailableCount,
+		MaxPrice:           smsMaxPrice(query),
+		RouteFailurePolicy: smsFailurePolicy(query),
+	}
+}
+
+func smsOfferRefExact(ref *smsv1.SmsOfferRef) bool {
+	if ref == nil {
 		return false
 	}
-	switch value := params.GetProviderParams().(type) {
-	case *smsv1.SmsNumberAcquireParams_FiveSim:
-		return strings.TrimSpace(value.FiveSim.GetProduct()) != "" &&
-			strings.TrimSpace(value.FiveSim.GetCountry()) != "" &&
-			strings.TrimSpace(value.FiveSim.GetOperator()) != ""
-	case *smsv1.SmsNumberAcquireParams_SmsBower:
-		return strings.TrimSpace(value.SmsBower.GetService()) != "" &&
-			strings.TrimSpace(value.SmsBower.GetCountry()) != "" &&
-			strings.TrimSpace(value.SmsBower.GetProviderId()) != ""
-	case *smsv1.SmsNumberAcquireParams_HeroSms:
-		return strings.TrimSpace(value.HeroSms.GetService()) != "" &&
-			strings.TrimSpace(value.HeroSms.GetCountry()) != ""
-	default:
-		return false
-	}
+	return strings.TrimSpace(ref.GetProviderKey()) != "" &&
+		strings.TrimSpace(ref.GetUpstreamServiceKey()) != "" &&
+		strings.TrimSpace(ref.GetProviderCountryId()) != ""
 }
 
 func normalizeSMSOfferQuery(query smsOfferQuery) smsOfferQuery {
@@ -215,21 +218,31 @@ func smsRoutePolicy(query smsOfferQuery) *smsv1.SmsRoutePolicy {
 		Limit:             query.RouteLimit,
 		MinAvailableCount: query.MinAvailableCount,
 	}
-	if query.MaxPriceAmount != "" {
-		policy.MaxPrice = &smsv1.DecimalMoney{
-			AmountDecimal: query.MaxPriceAmount,
-			CurrencyCode:  query.MaxPriceCurrency,
-		}
-	}
-	if smsRouteFailurePolicyConfigured(query) {
-		policy.FailurePolicy = &smsv1.SmsRouteFailurePolicy{
-			ScopeKey:             query.FailureScopeKey,
-			FailureThreshold:     query.FailureThreshold,
-			FailureWindowSeconds: query.FailureWindowSeconds,
-			DisableTtlSeconds:    query.DisableTTLSeconds,
-		}
-	}
+	policy.MaxPrice = smsMaxPrice(query)
+	policy.FailurePolicy = smsFailurePolicy(query)
 	return policy
+}
+
+func smsMaxPrice(query smsOfferQuery) *smsv1.DecimalMoney {
+	if query.MaxPriceAmount == "" {
+		return nil
+	}
+	return &smsv1.DecimalMoney{
+		AmountDecimal: query.MaxPriceAmount,
+		CurrencyCode:  query.MaxPriceCurrency,
+	}
+}
+
+func smsFailurePolicy(query smsOfferQuery) *smsv1.SmsRouteFailurePolicy {
+	if !smsRouteFailurePolicyConfigured(query) {
+		return nil
+	}
+	return &smsv1.SmsRouteFailurePolicy{
+		ScopeKey:             query.FailureScopeKey,
+		FailureThreshold:     query.FailureThreshold,
+		FailureWindowSeconds: query.FailureWindowSeconds,
+		DisableTtlSeconds:    query.DisableTTLSeconds,
+	}
 }
 
 func smsRouteStrategy(value string) smsv1.SmsRouteStrategy {
@@ -289,6 +302,15 @@ func parseDecimal(value string) float64 {
 	var out float64
 	_, _ = fmt.Sscanf(strings.TrimSpace(value), "%f", &out)
 	return out
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func (s *Server) waitSMSActivationAcquired(ctx context.Context, activation *smsv1.SmsOrder, timeout time.Duration) (*smsv1.SmsOrder, error) {

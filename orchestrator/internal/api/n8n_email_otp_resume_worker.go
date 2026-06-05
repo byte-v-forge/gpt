@@ -23,21 +23,21 @@ func emailN8NChannelOTPResumeWorkerConfig() n8nChannelOTPResumeWorkerConfig[*mai
 	)
 }
 
-func emailChannelOTPEvent(event *mailboxv1.MailboxEmailReceivedEvent) channelOTPEvent {
+func emailChannelOTPEvent(_ context.Context, _ *Server, event *mailboxv1.MailboxEmailReceivedEvent) (channelOTPEvent, error) {
 	if event == nil || event.GetMessage() == nil {
-		return channelOTPEvent{}
+		return channelOTPEvent{}, nil
 	}
 	message := accountmail.EnrichMessage(event.GetMessage())
 	if !accountmail.IsOpenAIMessage(message) {
-		return channelOTPEvent{}
+		return channelOTPEvent{}, nil
 	}
 	code := channelotpwait.NormalizeCode(accountmail.OTPCode(message))
 	if code == "" {
-		return channelOTPEvent{}
+		return channelOTPEvent{}, nil
 	}
 	emails := emailOTPMessageEmails(message)
 	if len(emails) == 0 {
-		return channelOTPEvent{}
+		return channelOTPEvent{}, nil
 	}
 	receivedAt := message.GetReceivedAtUnix()
 	if receivedAt <= 0 {
@@ -52,7 +52,7 @@ func emailChannelOTPEvent(event *mailboxv1.MailboxEmailReceivedEvent) channelOTP
 		ReceivedAtUnix: receivedAt,
 		Metadata:       emailOTPMetadata(message, messageID),
 		MessageID:      messageID,
-	}
+	}, nil
 }
 
 func (s *Server) latestMailboxEmailChannelOTP(ctx context.Context, email string, issuedAfterUnix int64) (n8nChannelOTPLatestResult, error) {

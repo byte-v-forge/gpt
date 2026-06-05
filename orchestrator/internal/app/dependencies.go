@@ -31,6 +31,7 @@ import (
 	"orchestrator/internal/mailboxevents"
 	"orchestrator/internal/otpprojection"
 	"orchestrator/internal/runtimesecrets"
+	"orchestrator/internal/smsotp"
 	"orchestrator/pb"
 )
 
@@ -54,6 +55,7 @@ type orchestratorDependencies struct {
 	paymentClient           pb.PaymentServiceClient
 	smsClient               smsv1.SmsOrderServiceClient
 	smsCatalogClient        smsv1.SmsCatalogServiceClient
+	smsCodeResolver         smsotp.Resolver
 	mailboxPollRequester    *mailboxevents.Requester
 
 	closers []func() error
@@ -156,6 +158,7 @@ func newOrchestratorDependencies(ctx context.Context, cfg orchestratorConfig, ac
 	deps.paymentClient = pb.NewPaymentServiceClient(paymentConn)
 	deps.smsClient = smsv1.NewSmsOrderServiceClient(smsConn)
 	deps.smsCatalogClient = smsv1.NewSmsCatalogServiceClient(smsConn)
+	deps.smsCodeResolver = smsotp.NewClientResolver(deps.smsClient, 10*time.Second)
 
 	return deps, nil
 }
@@ -196,9 +199,9 @@ func newHotStreamBus(ctx context.Context, cfg orchestratorConfig) (hotstream.Bus
 	return bus, bus.Close, nil
 }
 
-func startOTPProjectionConsumers(ctx context.Context, bus *natseventbus.Bus, cfg orchestratorConfig, store *otpprojection.Store, mailboxProjector otpprojection.MailboxEmailProjector) error {
+func startOTPProjectionConsumers(ctx context.Context, bus *natseventbus.Bus, cfg orchestratorConfig, store *otpprojection.Store, mailboxProjector otpprojection.MailboxEmailProjector, smsResolver smsotp.Resolver) error {
 	group, groupCtx := errgroup.WithContext(ctx)
-	for _, spec := range otpprojection.ConsumerSpecs(store, mailboxProjector) {
+	for _, spec := range otpprojection.ConsumerSpecs(store, mailboxProjector, smsResolver) {
 		spec := spec
 		consumer, err := bus.PullWorkerForBinding(cfg.EventStreamName, spec.Binding, 10, 30*time.Second)
 		if err != nil {

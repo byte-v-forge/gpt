@@ -17,6 +17,7 @@ import (
 
 	"orchestrator/internal/accountmail"
 	"orchestrator/internal/channelotpwait"
+	"orchestrator/internal/smsotp"
 )
 
 const (
@@ -59,21 +60,34 @@ func NewStore(client redis.Cmdable, keyPrefix string, ttl time.Duration) (*Store
 	return &Store{client: client, keys: redisx.NewKeyspace(keyPrefix), ttl: ttl}, nil
 }
 
-func (s *Store) RecordSMSCode(ctx context.Context, event *smsv1.SmsCodeReceivedEvent) error {
+func (s *Store) RecordSMSCode(ctx context.Context, event *smsv1.SmsCodeReceivedEvent, resolver smsotp.Resolver) error {
 	if s == nil || event == nil || event.GetCode() == nil {
 		return nil
 	}
 	activationID := strings.TrimSpace(event.GetOrderId())
-	code := channelotpwait.NormalizeCode(event.GetCode().GetValue())
-	if activationID == "" || code == "" {
+	secretRef := event.GetCode().GetSecretRef()
+	if activationID == "" || secretRef.GetSecretId() == "" {
 		return nil
 	}
-	receivedAt := smsReceivedAt(event)
+	if resolver == nil {
+		return errors.New("sms code secret resolver is required")
+	}
+	code, err := resolver.ResolveCode(ctx, activationID, secretRef)
+	if err != nil {
+		if !smsotp.Retryable(err) {
+			return nil
+		}
+		return err
+	}
+	code = channelotpwait.NormalizeCode(code)
+	if code == "" {
+		return nil
+	}
 	return s.set(ctx, s.smsKey(activationID), otpRecord{
 		Source:         SourceSMS,
 		SMSOrderID:     activationID,
 		Code:           code,
-		ReceivedAtUnix: receivedAt,
+		ReceivedAtUnix: smsReceivedAt(event),
 	})
 }
 
@@ -319,7 +333,7 @@ func (r otpRecord) message() *mailboxv1.EmailInboxMessage {
 	if strings.TrimSpace(r.EmailAddress) == "" && strings.TrimSpace(r.Code) == "" {
 		return nil
 	}
-	signal := &mailboxv1.EmailSignal{Kind: mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP, Code: r.Code, Label: "verification_code", Profile: "gpt", Parser: "gpt-account-mail", Confidence: 70}
+	signal := &mailboxv1.EmailSignal{Kind: mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP, Label: "verification_code", Profile: "gpt", Parser: "gpt-account-mail", Confidence: 70}
 	return &mailboxv1.EmailInboxMessage{
 		MailboxEmail:   r.EmailAddress,
 		ReceivedAtUnix: r.ReceivedAtUnix,
@@ -332,8 +346,8 @@ func smsReceivedAt(event *smsv1.SmsCodeReceivedEvent) int64 {
 	if event.GetCode() != nil && event.GetCode().GetReceivedAt() != nil {
 		return event.GetCode().GetReceivedAt().AsTime().Unix()
 	}
-	if event.GetContext() != nil && event.GetContext().GetOccurredAt() != nil {
-		return event.GetContext().GetOccurredAt().AsTime().Unix()
+	if event.GetMetadata() != nil && event.GetMetadata().GetTime() != nil {
+		return event.GetMetadata().GetTime().AsTime().Unix()
 	}
 	return time.Now().Unix()
 }
@@ -368,8 +382,8 @@ func waReceivedAt(event *wav1.WaOtpReceivedEvent) int64 {
 	if event.GetReceivedAt() != nil {
 		return event.GetReceivedAt().AsTime().Unix()
 	}
-	if event.GetContext() != nil && event.GetContext().GetOccurredAt() != nil {
-		return event.GetContext().GetOccurredAt().AsTime().Unix()
+	if event.GetMetadata() != nil && event.GetMetadata().GetTime() != nil {
+		return event.GetMetadata().GetTime().AsTime().Unix()
 	}
 	return time.Now().Unix()
 }

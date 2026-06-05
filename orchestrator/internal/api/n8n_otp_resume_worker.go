@@ -27,10 +27,10 @@ type n8nChannelOTPResumeWorkerConfig[T proto.Message] struct {
 	RetryLabel     string
 	AckLabel       string
 	NewEvent       func() T
-	Event          func(T) channelOTPEvent
+	Event          func(context.Context, *Server, T) (channelOTPEvent, error)
 }
 
-func newN8NChannelOTPResumeWorkerConfig[T proto.Message](channel string, definition eventcatalog.Definition, newEvent func() T, event func(T) channelOTPEvent) n8nChannelOTPResumeWorkerConfig[T] {
+func newN8NChannelOTPResumeWorkerConfig[T proto.Message](channel string, definition eventcatalog.Definition, newEvent func() T, event func(context.Context, *Server, T) (channelOTPEvent, error)) n8nChannelOTPResumeWorkerConfig[T] {
 	label := channelOTPLogLabel(channel)
 	lowerLabel := strings.ToLower(label)
 	return n8nChannelOTPResumeWorkerConfig[T]{
@@ -119,7 +119,11 @@ func (w *n8nChannelOTPResumeWorker[T]) resume(ctx context.Context, event T) (int
 	if w == nil || w.server == nil || w.cfg.Event == nil {
 		return 0, nil
 	}
-	return w.server.resumePendingChannelOTP(ctx, w.client, w.cfg.Event(event))
+	otpEvent, err := w.cfg.Event(ctx, w.server, event)
+	if err != nil {
+		return 0, err
+	}
+	return w.server.resumePendingChannelOTP(ctx, w.client, otpEvent)
 }
 
 func normalizeN8NChannelOTPResumeWorkerConfig[T proto.Message](cfg n8nChannelOTPResumeWorkerConfig[T]) n8nChannelOTPResumeWorkerConfig[T] {

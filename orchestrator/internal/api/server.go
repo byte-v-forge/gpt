@@ -12,6 +12,7 @@ import (
 	"orchestrator/internal/jobprojection"
 	"orchestrator/internal/mailboxevents"
 	"orchestrator/internal/runtimesecrets"
+	"orchestrator/internal/smsotp"
 	"orchestrator/pb"
 )
 
@@ -27,6 +28,7 @@ type Config struct {
 	MailboxPollRequester *mailboxevents.Requester
 	OTPProjection        OTPProjection
 	ChannelOTPWaits      channelOTPWaitStore
+	SMSCodeResolver      smsotp.Resolver
 }
 
 type channelOTPWaitStore interface {
@@ -54,6 +56,7 @@ type Server struct {
 	mailboxPollRequester *mailboxevents.Requester
 	otpProjection        OTPProjection
 	channelOTPWaits      channelOTPWaitStore
+	smsCodeResolver      smsotp.Resolver
 }
 
 type accountProxyUsageRecorder interface {
@@ -77,6 +80,7 @@ func NewServer(cfg Config) *Server {
 		mailboxPollRequester: cfg.MailboxPollRequester,
 		otpProjection:        cfg.OTPProjection,
 		channelOTPWaits:      cfg.ChannelOTPWaits,
+		smsCodeResolver:      cfg.SMSCodeResolver,
 	}
 	return server
 }

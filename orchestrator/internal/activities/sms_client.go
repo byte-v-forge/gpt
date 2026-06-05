@@ -179,9 +179,11 @@ func smsOfferRefExact(ref *smsv1.SmsOfferRef) bool {
 	if ref == nil {
 		return false
 	}
+	target := ref.GetTarget()
 	return strings.TrimSpace(ref.GetProviderKey()) != "" &&
-		strings.TrimSpace(ref.GetUpstreamServiceKey()) != "" &&
-		strings.TrimSpace(ref.GetProviderCountryId()) != ""
+		strings.TrimSpace(ref.GetOfferId()) != "" &&
+		strings.TrimSpace(target.GetApplicationKey()) != "" &&
+		(strings.TrimSpace(target.GetCountryIso2()) != "" || strings.TrimSpace(target.GetCountryCallingCode()) != "")
 }
 
 func normalizeSMSOfferQuery(query smsOfferQuery) smsOfferQuery {

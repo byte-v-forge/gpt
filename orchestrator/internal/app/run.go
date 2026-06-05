@@ -53,6 +53,7 @@ func Run(options Options) {
 		MailboxPollRequester: deps.mailboxPollRequester,
 		OTPProjection:        deps.otpProjection,
 		ChannelOTPWaits:      deps.channelOTPWaits,
+		SMSCodeResolver:      deps.smsCodeResolver,
 	})
 
 	dashboardServer, err := dashboard.Start(rootCtx, dashboard.Config{
@@ -84,7 +85,7 @@ func Run(options Options) {
 	group, groupCtx := errgroup.WithContext(rootCtx)
 	group.Go(func() error { return jobqueue.RunOutboxWorker(groupCtx, deps.db, deps.platformBus) })
 	group.Go(func() error {
-		return startOTPProjectionConsumers(groupCtx, deps.platformBus, cfg, deps.otpProjection, deps.mailboxState)
+		return startOTPProjectionConsumers(groupCtx, deps.platformBus, cfg, deps.otpProjection, deps.mailboxState, deps.smsCodeResolver)
 	})
 	for _, worker := range api.N8NChannelOTPResumeWorkerSpecs() {
 		worker := worker

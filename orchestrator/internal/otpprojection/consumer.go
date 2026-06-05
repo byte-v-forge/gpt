@@ -10,6 +10,8 @@ import (
 	smsv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/sms/v1"
 	wav1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/wa/v1"
 	"google.golang.org/protobuf/proto"
+
+	"orchestrator/internal/smsotp"
 )
 
 type MailboxEmailProjector interface {
@@ -34,14 +36,14 @@ type projectionConsumer[T proto.Message] struct {
 	cfg projectionConfig[T]
 }
 
-func runSMSCodeConsumer(ctx context.Context, consumer eventbus.Consumer, store *Store) error {
+func runSMSCodeConsumer(ctx context.Context, consumer eventbus.Consumer, store *Store, smsResolver smsotp.Resolver) error {
 	return runProjectionConsumer(ctx, consumer, projectionConfig[*smsv1.SmsCodeReceivedEvent]{
 		Source:   SourceSMS,
 		Name:     SourceSMS + " otp projection events",
 		Expected: eventcatalog.SMSCodeReceived.ExpectedMessage(),
 		New:      func() *smsv1.SmsCodeReceivedEvent { return &smsv1.SmsCodeReceivedEvent{} },
 		Project: func(ctx context.Context, event *smsv1.SmsCodeReceivedEvent) error {
-			return store.RecordSMSCode(ctx, event)
+			return store.RecordSMSCode(ctx, event, smsResolver)
 		},
 	})
 }
@@ -76,13 +78,13 @@ func runWAOTPConsumer(ctx context.Context, consumer eventbus.Consumer, store *St
 	})
 }
 
-func ConsumerSpecs(store *Store, mailboxProjector MailboxEmailProjector) []ConsumerSpec {
+func ConsumerSpecs(store *Store, mailboxProjector MailboxEmailProjector, smsResolver smsotp.Resolver) []ConsumerSpec {
 	return []ConsumerSpec{
 		{
 			Label:   "SMS OTP",
 			Binding: eventcatalog.SMSCodeReceived.ConsumerBinding("gpt-otp-sms-code"),
 			Run: func(ctx context.Context, consumer eventbus.Consumer) error {
-				return runSMSCodeConsumer(ctx, consumer, store)
+				return runSMSCodeConsumer(ctx, consumer, store, smsResolver)
 			},
 		},
 		{

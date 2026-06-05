@@ -1,11 +1,12 @@
 package accountmail
 
 import (
-	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 	"regexp"
 	"strings"
 
+	commonv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/common/v1"
 	mailboxv1 "github.com/byte-v-forge/common-lib/gen/go/byte/v/forge/contracts/mailbox/v1"
+	"github.com/byte-v-forge/gpt/pkg/gptplugin"
 
 	"orchestrator/internal/channelotpwait"
 	"orchestrator/internal/gptaccount"
@@ -45,8 +46,6 @@ func IsOpenAIMessage(message *mailboxv1.EmailInboxMessage) bool {
 	text := normalizeMailText(strings.Join([]string{
 		message.GetSubject(),
 		message.GetBodyPreview(),
-		message.GetBodyText(),
-		message.GetHtmlBody(),
 	}, "\n"))
 	return strings.Contains(text, "openai") || strings.Contains(text, "chatgpt")
 }
@@ -134,8 +133,6 @@ func messageFromInbox(message *mailboxv1.EmailInboxMessage) Message {
 		FromAddress:  message.GetFromAddress(),
 		Subject:      message.GetSubject(),
 		BodyPreview:  message.GetBodyPreview(),
-		BodyText:     message.GetBodyText(),
-		HTMLBody:     message.GetHtmlBody(),
 		ReceivedAt:   message.GetReceivedAtUnix(),
 		Recipients:   append([]string{}, message.GetRecipients()...),
 	}
@@ -199,13 +196,13 @@ func EnrichMessage(message *mailboxv1.EmailInboxMessage) *mailboxv1.EmailInboxMe
 		return message
 	}
 	signal := &mailboxv1.EmailSignal{
-		Kind:       mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP,
-		Code:       code,
-		Label:      "verification_code",
-		Profile:    "gpt",
-		Parser:     "gpt-account-mail",
-		Confidence: 70,
-		Evidence:   evidence,
+		Kind:            mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP,
+		SecretRef:       existingOTPSecretRef(message),
+		Label:           "verification_code",
+		Profile:         "gpt",
+		Parser:          "gpt-account-mail",
+		Confidence:      70,
+		EvidencePreview: evidence,
 	}
 	message.Signals = []*mailboxv1.EmailSignal{signal}
 	message.PrimarySignal = signal
@@ -216,16 +213,23 @@ func OTPCode(message *mailboxv1.EmailInboxMessage) string {
 	if message == nil {
 		return ""
 	}
-	if signal := message.GetPrimarySignal(); signal.GetKind() == mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP && signal.GetCode() != "" {
-		return channelotpwait.NormalizeCode(signal.GetCode())
-	}
-	for _, signal := range message.GetSignals() {
-		if signal.GetKind() == mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP && signal.GetCode() != "" {
-			return channelotpwait.NormalizeCode(signal.GetCode())
-		}
-	}
 	code, _ := ExtractOTP(message)
 	return code
+}
+
+func existingOTPSecretRef(message *mailboxv1.EmailInboxMessage) *commonv1.SecretRef {
+	if message == nil {
+		return nil
+	}
+	if signal := message.GetPrimarySignal(); signal.GetKind() == mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP && signal.GetSecretRef().GetSecretId() != "" {
+		return signal.GetSecretRef()
+	}
+	for _, signal := range message.GetSignals() {
+		if signal.GetKind() == mailboxv1.EmailSignalKind_EMAIL_SIGNAL_KIND_OTP && signal.GetSecretRef().GetSecretId() != "" {
+			return signal.GetSecretRef()
+		}
+	}
+	return nil
 }
 
 func ExtractOTP(message *mailboxv1.EmailInboxMessage) (string, string) {
@@ -236,8 +240,6 @@ func ExtractOTP(message *mailboxv1.EmailInboxMessage) (string, string) {
 		message.GetSubject(),
 		message.GetFromAddress(),
 		message.GetBodyPreview(),
-		message.GetBodyText(),
-		message.GetHtmlBody(),
 	}, "\n")
 	if match := verificationCodePattern.FindStringSubmatch(text); len(match) >= 2 {
 		return channelotpwait.NormalizeCode(match[1]), strings.TrimSpace(match[0])

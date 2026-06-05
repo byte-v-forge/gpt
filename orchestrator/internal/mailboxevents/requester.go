@@ -48,7 +48,7 @@ func (r *Requester) RequestMailboxEmailPoll(ctx context.Context, email string, k
 		Reason:          strings.TrimSpace(reason),
 	}
 	eventID := eventbus.StableEventID("gpt-mailbox-email-poll-", email, kind.String(), fmt.Sprintf("%d", issuedAfterUnix), fmt.Sprintf("%d", deadlineUnix), request.GetReason())
-	eventCtx := eventbus.NewEventContext(eventbus.EventContextConfig{
+	eventCtx := eventbus.NewEventMetadata(eventbus.EventMetadataConfig{
 		EventID:       eventID,
 		EventName:     eventcatalog.MailboxEmailPollRequested.EventName,
 		EventVersion:  eventcatalog.MailboxEmailPollRequested.EventVersion,

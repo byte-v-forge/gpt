@@ -172,5 +172,10 @@ func n8nDynamicProxyLeaseRequest(accountID string, purpose string, countryCode s
 				"region":       region,
 			},
 		},
+		SelectionPolicy: &proxyruntimev1.ProxyDynamicIPSelectionPolicy{
+			CountryCode: countryCode,
+			Region:      region,
+			Purpose:     purpose,
+		},
 	}
 }

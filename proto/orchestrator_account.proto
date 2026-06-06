@@ -149,7 +149,7 @@ message AccountProxyUsage {
   bool accepted = 16;
   string error_message = 17;
   int64 created_at = 18;
-  byte.v.forge.contracts.proxyruntime.v1.EgressRoutePlan route = 19;
+  byte.v.forge.contracts.proxyruntime.v1.ProxyDynamicIPSelectionPlan dynamic_ip_selection = 19;
 }
 
 message ListAccountProxyUsagesResponse {
